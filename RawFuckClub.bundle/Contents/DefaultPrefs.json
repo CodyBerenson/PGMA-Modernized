@@ -1,0 +1,34 @@
+[
+  {
+    "id": "folders",
+    "label": "Folders where these items might be found (comma-separated list) or all folders use *",
+    "type": "text",
+    "default": "Raw Fuck Club"
+  },
+  {
+    "id": "regex",
+    "label": "Regular expression to match files by. Must contain named groups for clip number and clip name.",
+    "type": "text",
+    "default": "^(?P<clip_name>.+?)"
+  },
+  {
+    "id": "cover",
+    "label": "Cover Images to download",
+    "type": "enum",
+    "values": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "all available"
+    ],
+    "default": "5"
+  },
+  {
+    "id": "debug",
+    "label": "Ouput debugging info in logs",
+    "type": "bool",
+    "default": "false"
+  }
+]

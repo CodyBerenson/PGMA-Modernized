@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleExecutable</key>
+	<string>8TeenBoy</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.plexapp.agents.8teenboy</string>
+	<key>PlexAgentAttributionText</key>
+	<string>
+		&lt;a href=&quot;https://github.com/acvigue/plex-gay-metadata-agent&quot;&gt;CockPorn&lt;/a&gt; is a free adgent for 8TeenBoy.&lt;br/&gt;
+		A gay porn site featuring quality videos and live shows with legal teen boys.
+	</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>1.0</string>
+	<key>PlexFrameworkVersion</key>
+	<string>2</string>
+	<key>PlexPluginClass</key>
+	<string>Agent</string>
+	<key>PlexPluginMode</key>
+	<string>AlwaysOn</string>
+</dict>
+</plist>

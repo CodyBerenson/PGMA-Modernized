@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleExecutable</key>
+	<string>Sean Cody</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.plexapp.agents.seancody</string>
+	<key>PlexAgentAttributionText</key>
+	<string>
+		&lt;a href=&quot;https://github.com/iklier/plex-gay-metadata-agent&quot;&gt;CockPorn&lt;/a&gt; is a free agent for Sean Cody.&lt;br/&gt;
+		Check out sexy twinks and amateur jocks give blowjobs and swallow cum in anal sex videos with sexy gay men and even straight guys.
+	</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>1.0</string>
+	<key>PlexFrameworkVersion</key>
+	<string>2</string>
+	<key>PlexPluginClass</key>
+	<string>Agent</string>
+	<key>PlexPluginMode</key>
+	<string>AlwaysOn</string>
+</dict>
+</plist>
