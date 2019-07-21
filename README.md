@@ -1,4 +1,5 @@
 <h1>Plex Metadata Agents for Gay Adult Video</h1>
+<img src="https://raw.githubusercontent.com/acvigue/pgma/master/preview.png">
 
 <h3>How to install</h3>
 <ol>
