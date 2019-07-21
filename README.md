@@ -2,7 +2,7 @@
 
 <h3>How to install</h3>
 <ol>
-	<li>Clone this repository to your Plex server and copy the Cockporn.bundle folder as well as any of the studio agents to your Plex Media Server/Plug-ins folder</li>
+	<li>Clone this repository to your Plex server and copy the Cockporn.bundle folder as well as any of the studio agents to your plugin folder. <a href="https://support.plex.tv/hc/en-us/articles/201106098-How-do-I-find-the-Plug-Ins-folder">Can't find the folder?</a></li>
 	<li>Login to the web interface and open settings.</li>
 	<li>In Settings > Server > Agents select "Gay Adult" and check all required agents.</li>
 	<li>In Settings > Server > Agents move AEBN to last and uncheck Local Media Assets (Movies).</li>
