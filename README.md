@@ -1,22 +1,13 @@
-<h1>plex-gay-metadata-agent</h1>
-<h1>Overview</h1>
-A Plex agent for fetching gay adult video metadata. https://forums.plex.tv/discussion/32922/adult-agents-for-gay-titles
+<h1>Plex Metadata Agents for Gay Adult Video</h1>
 
-<h1>Versioning</h1>
-Calendar Versioning is used for this software. YYYY.0M.0D.micro Zero-padded month and day. Note that if there are multiple updates within the same day micro versions are used, these are patches.
-
-Example 2019.01.05.0 - meaning January 5th, 2019 with 0 patches for the software for that day.
-
-<h1>How to install</h1>
-1. Copy the Cockporn.bundle and any required site specific agents into the Plex Server plug-ins directory<br />
-	<b>Mac:</b> ~/Library/Application Support/Plex Media Server/Plug-ins/<br />
-	<b>QNAP:</b> /root/Library/Plex\ Media\ Server/Plug-ins/<br />
-	<b>Windows:</b> %LOCALAPPDATA%\Plex Media Server\Plug-ins\ <br />
-	<b>Raspberry Pi:</b> /var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-ins<br />
-2. Login to the web interface and open settings.<br />
-3. In Settings > Server > Agents select "Gay Adult" and check all required agents.<br />
-4. In Settings > Server > Agents move AEBN to second to last and Local Media Assets (Movies) to last.<br />
-6. Create a new library or change the agent of an existing library to the "Gay Adult" agent, then refresh all metadata.
+<h3>How to install</h3>
+<ol>
+	<li>Copy the Cockporn.bundle and any required site specific agents into the Plex Server plug-ins directory</li>
+	<li>Login to the web interface and open settings.</li>
+	<li>In Settings > Server > Agents select "Gay Adult" and check all required agents.</li>
+	<li>In Settings > Server > Agents move AEBN to second to last and Local Media Assets (Movies) to last.</li>
+	<li>Create a new library or change the agent of an existing library to the "Gay Adult" agent, then refresh all metadata.</li>
+</ol>
 
 <h1>Wiki</h1>
 More documentation can be found in the <a href="https://github.com/iklier/plex-gay-metadata-agent/wiki">wiki</a>.<br />
