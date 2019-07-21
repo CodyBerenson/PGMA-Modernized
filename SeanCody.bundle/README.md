@@ -1,4 +1,4 @@
-# SeanCody.bundle
+# SeanCody Metadata Agent - IN PROGRESS, UNSUPPORTED
 
 ## Description
 
