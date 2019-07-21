@@ -4,7 +4,7 @@ from difflib import SequenceMatcher
 
 PLUGIN_LOG_TITLE = '8TeenBoy'	# Log Title
 
-VERSION_NO = '2019.03.02.1'
+VERSION_NO = '2019.07.20.1'
 
 # Delay used when requesting HTML, may be good to have to prevent being
 # banned from the site
@@ -32,9 +32,8 @@ file_name_pattern = re.compile(Prefs['regex'])
 
 def Start():
 	HTTP.CacheTime = CACHE_1WEEK
-	HTTP.Headers['User-agent'] = 'Mozilla/4.0 (compatible; MSIE 8.0; ' \
-        'Windows NT 6.2; Trident/4.0; SLCC2; .NET CLR 2.0.50727; ' \
-        '.NET CLR 3.5.30729; .NET CLR 3.0.30729; Media Center PC 6.0)'
+	HTTP.Headers['User-agent'] = 'Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.2; Trident/4.0; SLCC2; .NET CLR 2.0.50727; .NET CLR 3.5.30729; .NET CLR 3.0.30729; Media Center PC 6.0)'
+	HTTP.Headers['Cookie'] = "entered=true"
 
 class EightTeenBoy(Agent.Movies):
 	name = '8TeenBoy'
@@ -178,6 +177,7 @@ class EightTeenBoy(Agent.Movies):
 		# Try to get and process the video cast
 		metadata.roles.clear()
 		rolethumbs = list();
+		actors = list();
 		cast_img_list = html.xpath('//div[@class="pure-u-1-3"]/div[@class="grid-item-wrapper"]/a/div/img')
 		for cast_img in cast_img_list:
 			thumb_url = cast_img.get('src')
@@ -191,8 +191,62 @@ class EightTeenBoy(Agent.Movies):
 			if (len(cname) > 0):
 				role = metadata.roles.new()
 				role.name = cname
+				actors.append(cname);
 				role.photo = rolethumbs[index]
 			index += 1
+
+		#fucking lardballs don't post the date, grab from GEVI
+		gevi_scene_url = ""
+		try:
+			#try first actor
+			actor = actors[0];
+			actor = actor.replace(" ", "+");
+			gevi_search = HTML.ElementFromURL("https://www.gayeroticvideoindex.com/search.php?type=s&where=b&query=" + actor + "&Search=Search&page=1", sleep=REQUEST_DELAY)
+
+			try:
+				index = 3
+				actor_link = gevi_search.xpath('//*[@class="cd"]/a')[0];
+				actor_link = "https://www.gayeroticvideoindex.com" + actor_link.get("href");
+				self.Log(actor_link);
+				gevi_actor_result = HTML.ElementFromURL(actor_link, sleep=REQUEST_DELAY)
+				actor_episodes = gevi_actor_result.xpath('//tr[@class="er"]/td[1]/a/text()')
+				indexx = 1
+				for episode in actor_episodes:
+					if episode == metadata.title:
+						release_date = gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[2]/text()')[0]
+						gevi_scene_url = "https://www.gayeroticvideoindex.com" + gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[1]/a')[0].get("href")
+						self.Log('UPDATE - Release Date - New: %s', release_date)
+						metadata.originally_available_at = Datetime.ParseDate(release_date).date()
+						metadata.year = metadata.originally_available_at.year
+					indexx += 1
+			except Exception as e:
+				self.Log("Exception getting release date: %s", e)
+				pass
+		except Exception as e:
+			#fuck this
+			self.Log("Exception getting release date: %s", e)
+			pass
+
+		#label bottom / top
+		try:
+			gevi_actors = list();
+			gevi_positions = list();
+			if gevi_scene_url is not "":
+				episode = HTML.ElementFromURL(gevi_scene_url)
+				actors = episode.xpath('//tbody/tr/td[1]/a/text()')
+				Log(actors)
+				for actor in actors:
+					self.Log(actor)
+					gevi_actors.append(actor);
+				positions = episode.xpath('//table[@class="d"]/tbody/tr/td[2]/text()')
+				for position in positions:
+					if position is not "action":
+						gevi_positions.append(position.strip());
+				Log(gevi_actors)
+				Log(gevi_positions)
+		except Exception as e:
+			self.Log("Exception getting Ab/At: %s", e)
+			pass
 
 		metadata.posters.validate_keys(valid_image_names)
 		metadata.collections.add("8TeenBoy")
