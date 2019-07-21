@@ -145,13 +145,12 @@ class EightTeenBoy(Agent.Movies):
 		# Member 	https://cdn.helixstudios.com/img/250w/media/stills/hx109_scene52_001.jpg
 
 		i = 0
-		video_image_list = html.xpath("//a[@class='jg-entry entry-visible']/img")
+		video_image_list = html.xpath("//a/img")
 		Log(video_image_list)
 		try:
 			coverPrefs = Prefs['cover']
 			for image in video_image_list:
-				if i <= (self.intTest(coverPrefs)-1) or coverPrefs == "all available":
-					i = i + 1
+				if i != 0:
 					thumb_url = image.get('src')
 					self.Log(thumb_url)
 					poster_url = thumb_url.replace('250h', '1920w')
@@ -160,6 +159,7 @@ class EightTeenBoy(Agent.Movies):
 						try:
 							metadata.posters[poster_url]=Proxy.Preview(HTTP.Request(thumb_url), sort_order = i)
 						except: pass
+				i = i + 1
 		except Exception as e:
 			self.Log('UPDATE - Error getting posters: %s', e)
 			pass
