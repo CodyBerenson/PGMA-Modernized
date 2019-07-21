@@ -1,0 +1,123 @@
+import ssl, urllib2
+
+HTTP_HEADERS = {
+	'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36'
+}
+
+RE_THUMB = Regex("image: '([^']+)'")
+
+####################################################################################################
+def NormalizeURL(url):
+
+	url = url.split('?')[0]
+
+	if url.endswith('-0'):
+		url = url.split('-0')[0]
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	data = GetData(url)
+	html = HTML.ElementFromString(data)
+
+	show = html.xpath('//nav[contains(@class, "breadcrumbs")]/a[last()]/text()')[0].strip()
+	title = html.xpath('//h2[@class="subtitle"]/text()')[0]
+	absolute_index = int(html.xpath('//meta[@property="og:url"]/@content')[0].split('/')[-1])
+	summary = html.xpath('//h2[@class="subtitle"]/following-sibling::div[not(@class)][1]//text()')[0].strip()
+
+	try:
+		originally_available_at = html.xpath('//p[@class="air-date"]/text()')[0]
+		originally_available_at = Datetime.ParseDate(originally_available_at).date()
+	except:
+		originally_available_at = None
+
+	try:
+		thumb = RE_THUMB.search(data).group(1)
+	except:
+		thumb = html.xpath('//meta[@property="og:image"]/@content')[0]
+
+	return EpisodeObject(
+		show = show,
+		title = title,
+		absolute_index = absolute_index,
+		summary = summary,
+		originally_available_at = originally_available_at,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayMedia, url=url, fmt='720'))],
+			video_resolution = '720',
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		),
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayMedia, url=url, fmt='480'))],
+			video_resolution = '480',
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayMedia(url, fmt, **kwargs):
+
+	url = URLService.NormalizeURL(url)
+
+	data = GetData(url)
+	html = HTML.ElementFromString(data)
+
+	fmt = fmt.strip('p')
+
+	resolutions = ['720', '480']
+	video_path = {
+		'720': '//a[contains(@href, "x720")]/@href',
+		'480': '//a[contains(@href, "x480")]/@href',
+		'sd' : '//a[contains(@href, ".mp4")]/@href'
+	}
+
+	index = resolutions.index(fmt)
+
+	for resolution_index in range(index, len(resolutions)):
+
+		current_resolution = resolutions[resolution_index]
+
+		try:
+			url = html.xpath(video_path[current_resolution])[-1]
+			break
+		except:
+			# if this didn't work fall back to next resolution
+			continue
+
+	if 'twit.mediafly.com' in url:
+		url = url.replace('twit.mediafly.com', 'twit.cachefly.net')
+
+	url = url.strip()
+
+	if ' ' in url:
+		url = url.split(' ')[0]
+
+	return IndirectResponse(VideoClipObject, key=url)
+
+####################################################################################################
+def GetData(url):
+
+	Log(' *** Fetching data for %s' % (url))
+	req = urllib2.Request(url, headers=HTTP_HEADERS)
+	ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+	data = urllib2.urlopen(req, context=ssl_context).read()
+
+	return data

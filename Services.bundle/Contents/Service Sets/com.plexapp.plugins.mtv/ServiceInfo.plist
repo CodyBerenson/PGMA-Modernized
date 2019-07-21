@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>MTV</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http:\/\/www\.(vh1|mtv|logotv|cmt)\.com\/((full-)?episodes|video\-clips|video\-playlists)\/\w{6,}(\/.+)?</string>
+				<string>^http:\/\/www\.(vh1|mtv|logotv|cmt)\.com\/videos?\/(play.jhtml)?\?v?id=\d{4,7}</string>
+				<string>^http:\/\/www\.(mtv|cmt)\.com\/artists\/.+\/videos\/.+\d{6,7}\/</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

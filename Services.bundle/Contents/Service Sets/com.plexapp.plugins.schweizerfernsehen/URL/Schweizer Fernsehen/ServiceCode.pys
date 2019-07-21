@@ -1,0 +1,113 @@
+
+API_ITEM = 'https://il.srgssr.ch/integrationlayer/1.0/ue/srf/video/play/%s.json'
+
+####################################################################################################
+def NormalizeURL(url):
+
+    return url
+
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    # Do we have an external link?
+    if url.startswith('http://www.srf.ch/sendungen/'):
+        html = HTML.ElementFromURL(url)
+        video_guid = html.xpath('//a[@data-inline="video"]')[0].get('data-urn')[-36:]
+
+        # We construct the detail url here
+        url = API_ITEM %video_guid
+
+    # Parse response from detail JSON and create a VideoClipObject
+    try:
+        source = JSON.ObjectFromURL(url)
+        show = source['Video']['AssetSet']['Show']
+        video = source['Video']['AssetSet']['Assets']['Video'][0]
+        video_title = source['Video']['AssetSet']['title']
+        video_thumb = ''
+
+        try:
+            video_thumb = video['Image']['ImageRepresentations']['ImageRepresentation'][0]['url']
+        except:
+            for image in show['Image']['ImageRepresentations']['ImageRepresentation']:
+                if (image['usage'] == 'WEBVISUAL'):
+                    video_thumb = image['url']
+
+        video_summary = ''
+        try:
+            video_summary = video['AssetMetadatas']['AssetMetadata'][0]['description']
+        except:
+            pass
+
+        return VideoClipObject(
+            title=video_title,
+            summary=video_summary,
+            thumb=Resource.ContentsOfURLWithFallback(video_thumb),
+            duration=source['Video']['duration'],
+            originally_available_at=Datetime.ParseDate(source['Video']['AssetSet']['createdDate'])
+        )
+
+    except Exception as e:
+        Log.Error(e)
+        raise Ex.MediaNotAvailable
+
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+        MediaObject(
+            video_codec=VideoCodec.H264,
+            video_resolution='720',
+            audio_codec=AudioCodec.AAC,
+            audio_channels=2,
+            container=Container.MP4,
+            optimized_for_streaming=True,
+            parts=[
+                PartObject(
+                    key=Callback(PlayVideo,
+                    url=url))
+            ]
+        )
+    ]
+
+
+####################################################################################################
+@indirect
+def PlayVideo(url):
+
+    # Do we have an external link?
+    if url.startswith('http://www.srf.ch/sendungen/'):
+        html = HTML.ElementFromURL(url)
+        video_guid = html.xpath('//a[@data-inline="video"]')[0].get('data-urn')[-36:]
+
+        # We construct the detail url here
+        url = API_ITEM %video_guid
+
+    # Load metadata for detail informations
+    try:
+        source = JSON.ObjectFromURL(url)
+        downloads = source['Video']['Downloads']['Download'][0]['url']
+    except:
+        raise Ex.MediaNotAvailable
+
+    # Do we have a GeoBlock here?
+    if source['Video']['staticGeoBlock'] == True:
+        raise Ex.MediaGeoBlocked
+
+    # Are any downloads available?
+    if len(downloads) == 0:
+        raise Ex.MediaNotAvailable
+
+    # Set initial a video url
+    video_url = downloads[0]['text']
+
+    # Let's search for the best quality
+    for download in downloads:
+        if download['@quality'] == 'HD':
+            video_url = download['text']
+
+    if not video_url:
+        raise Ex.MediaNotAvailable
+
+    return IndirectResponse(VideoClipObject, key=video_url)

@@ -2,6 +2,9 @@
 import re, os, platform, urllib
 from difflib import SequenceMatcher
 
+import certifi
+import requests
+
 PLUGIN_LOG_TITLE = '8TeenBoy'	# Log Title
 
 VERSION_NO = '2019.07.20.1'
@@ -45,6 +48,12 @@ class EightTeenBoy(Agent.Movies):
 	def Log(self, message, *args):
 		if Prefs['debug']:
 			Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+
+	def noNegative(self, value):
+		if(value < 0):
+			return 0
+		else:
+			return value
 
 	def intTest(self, s):
 		try:
@@ -181,8 +190,20 @@ class EightTeenBoy(Agent.Movies):
 		cast_img_list = html.xpath('//div[@class="pure-u-1-3"]/div[@class="grid-item-wrapper"]/a/div/img')
 		for cast_img in cast_img_list:
 			thumb_url = cast_img.get('src')
-			cast_img_url = thumb_url.replace('300h', '1920w')
-			rolethumbs.append(thumb_url);
+			headshot_url_hi_res = thumb_url.replace("200w","1920w")
+
+			#Ask facebox to query image for face bounding boxes
+			Log(headshot_url_hi_res);
+			result = requests.post('https://neural.vigue.me/facebox/check', json={"url": headshot_url_hi_res}, verify=certifi.where())
+			Log(result.json()["facesCount"])
+			if result.json()["facesCount"] == 1:
+				box = result.json()["faces"][0]["rect"]
+				cropped_headshot = "https://cdn.vigue.me/unsafe/" + str(self.noNegative(box["left"] - 100)) + "x" + str(self.noNegative(box["top"] - 100)) + ":" + str(self.noNegative((box["left"]+box["width"])+100)) + "x" + str(self.noNegative((box["top"]+box["height"])+100)) + "/" + headshot_url_hi_res
+			else:
+				cropped_headshot = headshot_url_hi_res
+			#Create new image url from Thumbor CDN with facial bounding box
+			self.Log("UPDATE - Cropped headshot: %s", cropped_headshot)
+			rolethumbs.append(cropped_headshot)
 		htmlcast = html.xpath('//div[@class="pure-u-1-3"]/div[@class="grid-item-wrapper"]/a/div[@class="thumbnail-bottom-text"]/div/text()')
 		self.Log('UPDATE - cast: "%s"', htmlcast)
 		index = 0

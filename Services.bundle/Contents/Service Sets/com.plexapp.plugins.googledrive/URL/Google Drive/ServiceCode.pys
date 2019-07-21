@@ -1,0 +1,85 @@
+RE_STATUS = Regex('"status","ok"')
+RE_DURATION = Regex('"length_seconds","(\d+)"')
+RE_TITLE = Regex("'title': '([^']+)'")
+RE_FMT_MAP = Regex('"fmt_stream_map","([^"]+)"')
+RE_COOKIE_VALUE = Regex('DRIVE_STREAM=([^;]+);')
+RE_DOMAIN = Regex(r'https?://([^\/]+)')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return '%s/view' % (url.split('/preview')[0].split('/edit')[0].split('/view')[0])
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		data = HTTP.Request(url, cacheTime=0).content
+	except Ex.HTTPError, e:
+		if e.code == 403:
+			raise Ex.MediaNotAuthorized
+		else:
+			raise Ex.MediaNotAvailable
+	except:
+		raise Ex.MediaNotAvailable
+
+	if not RE_STATUS.search(data) or not RE_DURATION.search(data):
+		raise Ex.MediaNotAvailable
+
+	title = RE_TITLE.search(data).group(1)
+	duration = RE_DURATION.search(data).group(1)
+
+	return VideoClipObject(
+		title = title,
+		duration = int(duration)*1000
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, res=resolution))
+			],
+			video_resolution = resolution,
+			bitrate = bitrate,
+			audio_channels = 2,
+			optimized_for_streaming = False
+		) for resolution, bitrate in [('1080', 3000), ('720', 1500), ('360', 750)]
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res, **kwargs):
+
+	try:
+		data = HTTP.Request(url, cacheTime=0)
+	except Ex.HTTPError, e:
+		if e.code == 403:
+			raise Ex.MediaNotAuthorized
+		else:
+			raise Ex.MediaNotAvailable
+	except:
+		raise Ex.MediaNotAvailable
+
+	if not RE_STATUS.search(data.content):
+		raise Ex.MediaNotAvailable
+
+	cookie_value = RE_COOKIE_VALUE.search(data.headers['set-cookie']).group(1)
+	domain = RE_DOMAIN.search(url).group(1)
+	http_cookies = 'DRIVE_STREAM=%s; path=/; domain=.%s;' % (cookie_value, domain)
+
+	fmts = RE_FMT_MAP.search(data.content).group(1).decode('unicode_escape').split(',')
+
+	for fmt in fmts:
+		if fmt.startswith('37|') and res == '1080':
+			return IndirectResponse(VideoClipObject, key=fmt.split('|')[1], http_cookies=http_cookies)
+
+	for fmt in fmts:
+		if fmt.startswith('22|') and res in ('1080', '720'):
+			return IndirectResponse(VideoClipObject, key=fmt.split('|')[1], http_cookies=http_cookies)
+
+	for fmt in fmts:
+		if fmt.startswith('18|'):
+			return IndirectResponse(VideoClipObject, key=fmt.split('|')[1], http_cookies=http_cookies)

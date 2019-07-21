@@ -1,0 +1,126 @@
+RE_VIDEO_ID = Regex('http://.+\?vid=([0-9]+)')
+RE_RTMP_PARAMS = Regex('(?P<player>rtmp(e)?.+?/ondemand/)(?P<playpath>.+)')
+
+BASE_URL = 'http://www.canalplus.fr'
+XML_URL = "http://service.canal-plus.com/video/rest/getVideosLiees/cplus/%s"
+
+QUALITIES = ['BAS_DEBIT', 'HAUT_DEBIT', 'HD']
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	data = GetXML(url)
+
+	if not data:
+		raise Ex.MediaNotAvailable
+
+	title = data.xpath('//TITRE')[0].text
+	summary = data.xpath('//DESCRIPTION')[0].text
+
+	try:
+		date = data.xpath('//DATE')[0].text
+		date = Datetime.ParseDate(date)
+	except:
+		date = None
+
+	thumbs = [data.xpath('//IMAGES/GRAND')[0].text, data.xpath('//IMAGES/PETIT')[0].text]
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		originally_available_at = date,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumbs)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			video_resolution = 720,
+			parts= [PartObject(key=Callback(PlayVideo, url=url, quality='HD'))]
+		),
+		MediaObject(
+			video_resolution = 480,
+			parts= [PartObject(key=Callback(PlayVideo, url=url, quality='HAUT_DEBIT'))]
+		),
+		MediaObject(
+			video_resolution = 360,
+			parts= [PartObject(key=Callback(PlayVideo, url=url, quality='BAS_DEBIT'))]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, quality, **kwargs):
+
+	index = QUALITIES.index(quality)
+	data = GetXML(url)
+	video_url = None
+
+	while index > -1:
+		try:
+			video_url = data.xpath('./MEDIA/VIDEOS/%s' % QUALITIES[index])[0].text
+
+			if video_url is not None and video_url != '':
+				break
+			else:
+				index = index -1
+		except:
+			index = index -1
+
+	if not video_url:
+		raise Ex.MediaNotAvailable
+
+	if video_url.startswith('rtmp'):
+		rtmp_params = RE_RTMP_PARAMS.search(video_url).groupdict()
+		player = rtmp_params['player']
+		playpath = rtmp_params['playpath']
+
+		if playpath[-4:] == '.mp4':
+			playpath = 'MP4:' + playpath
+
+			return IndirectResponse(VideoClipObject, key=RTMPVideoURL(url=player, clip=playpath))
+	else:
+		return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def GetXML(url):
+
+	id = RE_VIDEO_ID.search(url)
+
+	if id:
+		xml = XML.ElementFromURL(XML_URL % id.group(1))
+		xml = xml.xpath('//VIDEO/ID[text()="%s"]/parent::VIDEO' % id.group(1))
+
+		if len(xml) < 1:
+			return None
+
+		return xml[0]
+
+	else:
+		return None
+
+####################################################################################################
+def TestURLs():
+
+	test_urls = []
+	data = HTML.ElementFromURL(BASE_URL)
+
+	for video in data.xpath('//ul[@class="thumbs new_thumbs"]')[1]:
+		url = video.xpath('.//a')[0].get('href')
+
+		if not url.startswith('http://'):
+			url = BASE_URL + url
+
+		test_urls.append(url)
+
+		if len(test_urls) > 2:
+			break
+
+	return test_urls

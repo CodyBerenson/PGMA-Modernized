@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Bing</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.bing.com/videos/watch/video/top-9-most-unusual-camera-angles/289j4k140</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://www\.bing\.com/videos/watch/video/[^/]+/.+</string>
+				<string>^http://video\.[^.]+\.msn\.com/watch/video/[^/]+/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

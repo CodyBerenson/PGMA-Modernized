@@ -1,0 +1,82 @@
+RE_VIDEO_ID = Regex('\/(?P<video_id>\d{12,})\/')
+API_URL = 'https://www.nytimes.com/svc/video/api/v2/video/%s'
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.98 Safari/537.36'}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	video_id = RE_VIDEO_ID.search(url)
+
+	if not video_id:
+		raise Ex.MediaNotAvailable
+
+	json_obj = JSON.ObjectFromURL(API_URL % (video_id.group('video_id')), headers=HTTP_HEADERS, cacheTime=CACHE_1WEEK)
+	thumb = ''
+
+	for image in json_obj['images']:
+
+		if image['type'] in ('jumbo', 'superJumbo'):
+			thumb = 'http://www.nytimes.com/%s' % (image['url'])
+			break
+
+	return VideoClipObject(
+		title = json_obj['headline'],
+		summary = json_obj['summary'],
+		duration = json_obj['duration'],
+		originally_available_at = Datetime.ParseDate(json_obj['first_published_date'].split('T')[0]).date(),
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, res=resolution))
+			],
+			video_resolution = resolution,
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		) for resolution in [1080, 720, 480, 360]
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res=1080, **kwargs):
+
+	video_id = RE_VIDEO_ID.search(url)
+
+	if not video_id:
+		raise Ex.MediaNotAvailable
+
+	json_obj = JSON.ObjectFromURL(API_URL % (video_id.group('video_id')), headers=HTTP_HEADERS, cacheTime=CACHE_1WEEK)
+	available_videos = {}
+	resolutions = (1080, 720, 480, 360)
+
+	for video in json_obj['renditions']:
+
+		if video['video_codec'].lower() == 'h264' and '.mp4' in video['url'] and video['height'] in resolutions and str(video['height']) not in available_videos.keys():
+
+			available_videos[str(video['height'])] = video['url']
+
+	if res == 1080 and '1080' in available_videos:
+		video_url = available_videos['1080']
+	elif res in (1080, 720) and '720' in available_videos:
+		video_url = available_videos['720']
+	elif res in (1080, 720, 480) and '480' in available_videos:
+		video_url = available_videos['480']
+	elif res in (1080, 720, 480, 360) and '360' in available_videos:
+		video_url = available_videos['360']
+	else:
+		raise Ex.MediaNotAvailable
+
+	return IndirectResponse(VideoClipObject, key=video_url)

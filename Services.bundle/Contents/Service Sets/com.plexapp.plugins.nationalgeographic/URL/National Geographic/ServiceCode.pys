@@ -1,0 +1,67 @@
+BASE = 'http://video.nationalgeographic.com'
+SMIL = 'http://link.theplatform.com/s/ngs/media/guid/2423130747/'
+SMIL_EXT = '?mbr=true&format=SMIL'
+NAMESPACES = {'a': 'http://www.w3.org/2005/SMIL21/Language'}
+####################################################################################################
+def NormalizeURL(url):
+
+  if '?' in url:
+    return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+  try:
+    data = HTML.ElementFromURL(url, cacheTime=CACHE_1HOUR)
+  except:
+    raise Ex.MediaNotAvailable
+
+  title = data.xpath('//meta[@property="og:title"]/@content')[0]
+  summary = data.xpath('//meta[@property="og:description"]/@content')[0]
+  thumb = data.xpath('//meta[@property="og:image"]/@content')[0]
+  try: duration = int(GetSMIL(url).xpath('//a:video/@dur', namespaces=NAMESPACES)[0].split('ms')[0])
+  except: duration = 0
+
+  return VideoClipObject(
+    title = title,
+    summary = summary,
+    duration = duration,
+    thumb = thumb
+  )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+  return [
+    MediaObject(
+      parts = [
+        PartObject(key=HTTPLiveStreamURL(Callback(PlayVideo, url=url)))
+      ],
+      audio_channels = 2
+    )
+  ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url,**kwargs):
+
+  smil = GetSMIL(url)
+  videos = smil.xpath('//a:video/@src', namespaces=NAMESPACES)
+
+  if len(videos) < 1:
+    raise Ex.MediaNotAvailable
+
+  return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(videos[0]))
+####################################################################################################
+def GetSMIL(url):
+
+  try: html = HTML.ElementFromURL(url)
+  except: raise Ex.MediaExpired
+  guid = html.xpath('//div[@id="videoPlayer"]/@data-guid')
+  platform_url = '%s%s%s' %(SMIL, guid[0], SMIL_EXT)
+  try:
+    smil = XML.ElementFromURL(platform_url)
+  except:
+    raise Ex.MediaNotAvailable
+  return smil
+

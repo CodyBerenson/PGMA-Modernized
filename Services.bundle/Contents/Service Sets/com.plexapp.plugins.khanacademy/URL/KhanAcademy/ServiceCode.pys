@@ -1,0 +1,73 @@
+####################################################################################################
+def MetadataObjectForURL(url):
+
+  external_source = GetExternalSource(url)
+  return URLService.MetadataObjectForURL(external_source)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+  return [
+    MediaObject(
+      container = Container.MP4,
+      video_codec = VideoCodec.H264,
+      audio_codec = AudioCodec.AAC,
+      video_resolution = "1080",
+      optimized_for_streaming = True,
+      audio_channels = 2,
+      parts = [PartObject(key=Callback(PlayVideo, url=url, res="1080"))]
+    ),
+    MediaObject(
+      container = Container.MP4,
+      video_codec = VideoCodec.H264,
+      audio_codec = AudioCodec.AAC,
+      video_resolution = "720",
+      optimized_for_streaming = True,
+      audio_channels = 2,
+      parts = [PartObject(key=Callback(PlayVideo, url=url, res="720"))]
+    ),
+    MediaObject(
+      container = Container.MP4,
+      video_codec = VideoCodec.H264,
+      audio_codec = AudioCodec.AAC,
+      video_resolution = "480",
+      optimized_for_streaming = True,
+      audio_channels = 2,
+      parts = [PartObject(key=Callback(PlayVideo, url=url, res="360"))]
+    )
+  ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res, **kwargs):
+
+  # Find the external source and the available media objects.
+  external_source = GetExternalSource(url)
+  media = URLService.MediaObjectsForURL(external_source)
+
+  resolutions = ["1080", "720", "360"]
+  index = resolutions.index(res)
+
+  for resolution_index in range(index, len(resolutions)):
+    current_resolution = resolutions[resolution_index]
+
+    for video in media:
+
+      if video.container != Container.MP4 or video.video_codec != VideoCodec.H264:
+        continue
+
+      if str(video.video_resolution) == current_resolution:
+        return Redirect(video.parts[0].key)
+
+  return Redirect(media[-1].parts[0].key)
+
+####################################################################################################
+def GetExternalSource(url):
+
+  html = HTML.ElementFromURL(url)
+  yt_url = html.xpath('//meta[@property="og:video"]/@content')
+
+  if len(yt_url) < 1:
+    raise Ex.MediaNotAvailable
+
+  return yt_url[0]

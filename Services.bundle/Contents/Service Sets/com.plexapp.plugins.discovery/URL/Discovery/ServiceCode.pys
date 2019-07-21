@@ -1,0 +1,153 @@
+USER_AGENT = 'Mozilla/5.0 (iPad; CPU OS 7_0 like Mac OS X) AppleWebKit/537.51.1 (KHTML, like Gecko) Version/7.0 Mobile/11A465 Safari/9537.53'
+
+####################################################################################################
+def NormalizeURL(url):
+
+    return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    try:
+        pageElement = HTML.ElementFromURL(url)
+    except:
+        raise Ex.MediaNotAvailable
+
+    if 'apl.tv' in url:    
+        title = pageElement.xpath('//meta[@property="og:title"]')[0].get('content')
+
+        try:
+            summary = pageElement.xpath('//meta[@name="description"]')[0].get('content')
+        except:
+            summary = None
+
+        try:
+            thumb = pageElement.xpath('//meta[@property="og:image"]')[0].get('content')
+        except:
+            thumb = None
+
+        return EpisodeObject(
+            title = title,
+            summary = summary,
+            thumb = thumb
+        )
+
+    else:   
+        title = pageElement.xpath("//meta[@property='og:title']/@content")[0].strip()
+
+        try:
+            show = pageElement.xpath("//head/@title")[0].split("|")[1].strip()
+        except:
+            show = None
+
+        try:
+            summary = pageElement.xpath("//meta[@property='og:description']/@content")[0].strip()
+        except:
+            summary = None
+
+        try:
+            thumb = pageElement.xpath("//meta[@property='og:image']/@content")[0].strip()
+        except:
+            thumb = None
+
+        return EpisodeObject(
+            title = title,
+            show = show,
+            summary = summary,
+            thumb = thumb
+        )
+
+####################################################################################################
+@deferred
+def MediaObjectsForURL(url):
+
+    if 'apl.tv' in url:
+
+        try:
+            pageElement = HTML.ElementFromURL(url, cacheTime = CACHE_1HOUR)
+            videoUStreamURL = pageElement.xpath("//meta[@name='twitter:player']/@content")[0]
+            videoID = videoUStreamURL.split("/")[-1]
+        except:
+            raise Ex.MediaNotAvailable
+
+        try:
+            hlsurl = 'http://iphone-streaming.ustream.tv/ustreamVideo/%s/streams/live/playlist.m3u8' % videoID
+            headers = HTTP.Request(url = hlsurl).headers
+        except:
+            raise Ex.LiveMediaNotStarted
+
+        return [
+            MediaObject(
+                audio_channels = 2,
+                video_resolution = 480,
+                optimized_for_streaming = True,
+                parts = [
+                    PartObject(key=HTTPLiveStreamURL(url=hlsurl))
+                ]
+            )
+        ]
+
+    elif 'go.com' in url:
+
+        html = HTML.ElementFromURL(url)
+            
+        try:
+            json_string = html.xpath("//*[contains(@class,'video-info')]/@data-json")[0]
+            json = JSON.ObjectFromString(json_string)
+        except:
+            raise Ex.MediaNotAvailable
+
+        if not 'stream' in json:
+            raise Ex.MediaNotAvailable
+
+        return [
+            MediaObject(
+                audio_channels = 2,
+                video_resolution = '720',
+                parts = [
+                    PartObject(
+                        key = HTTPLiveStreamURL(url=json['stream']['streamUrl'])
+                    )
+                ]
+            )
+        ]
+
+    else:
+    
+        headers = {}
+        headers['User-Agent'] = USER_AGENT
+    
+        try:
+            pageContent = HTTP.Request(url, headers=headers).content
+        except:
+            raise Ex.MediaNotAvailable
+    
+        video_url = None
+        try:
+            video_url = Regex('.*"src" *: *"(http.*\.mp4)".*').search(pageContent).groups()[0]
+        except:
+            try:
+                video_url = Regex('content *= *"(http.*\.mp4)"').search(pageContent).groups()[0]
+                video_url = video_url.replace('110k', '3500k')
+            except:
+                pass    
+    
+        if video_url:
+            return [
+                MediaObject(
+                    container = Container.MP4,
+                    video_codec = VideoCodec.H264,
+                    audio_codec = AudioCodec.AAC,
+                    audio_channels = 2,
+                    video_resolution = '720',
+                    optimized_for_streaming = True,
+                    parts = [
+                        PartObject(
+                            key = video_url
+                        )
+                    ]
+                )
+            ]
+        else:
+            raise Ex.MediaNotAvailable
+

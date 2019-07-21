@@ -1,0 +1,61 @@
+RSS_URL = '%s/feed/?withoutcomments=1'
+RSS_NS = {'content': 'http://purl.org/rss/1.0/modules/content/'}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	xml = XML.ElementFromURL(RSS_URL % url.rstrip('/'))
+
+	title = xml.xpath('//item/title/text()')[0]
+	content = xml.xpath('//item/content:encoded/text()', namespaces=RSS_NS)[0]
+
+	html = HTML.ElementFromString(content)
+	thumb = html.xpath('//img[contains(@src, "/uploads/")]/@src')[0]
+
+	return PhotoAlbumObject(
+		key = Callback(GetPhotos, url=url),
+		title = String.DecodeHTMLEntities(title),
+		thumb = thumb
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = Callback(GetPhotos, url)
+		)
+	]
+
+####################################################################################################
+def GetPhotos(url):
+
+	oc = ObjectContainer()
+
+	xml = XML.ElementFromURL(RSS_URL % url.rstrip('/'))
+
+	title = xml.xpath('//item/title/text()')[0]
+	content = xml.xpath('//item/content:encoded/text()', namespaces=RSS_NS)[0]
+
+	html = HTML.ElementFromString(content)
+
+	for photo in html.xpath('//img[contains(@src, "/uploads/")]/@src'):
+
+		if not photo.startswith('http://'):
+			photo = 'http://annakimphotography.com%s' % (photo)
+
+		if '/blog/' in photo:
+			photo = photo.replace('/blog/', '/')
+
+		oc.add(PhotoObject(
+			key = photo,
+			title = String.DecodeHTMLEntities(title),
+			thumb = photo
+		))
+
+	return oc

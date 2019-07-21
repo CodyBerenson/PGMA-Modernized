@@ -1,0 +1,67 @@
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.85 Safari/537.36'}
+HTTP_HEADERS_IPAD = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 8_1 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) Version/8.0 Mobile/12B410 Safari/600.1.4'}
+RE_M3U8_URL = Regex('file:\s*"(.+\.m3u8[^"]+)')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		html = HTML.ElementFromURL(url, headers=HTTP_HEADERS, follow_redirects=False)
+	except Ex.RedirectError, e:
+		raise Ex.MediaNotAvailable
+
+	title = html.xpath('//h1[@itemprop="title"]/text()')[0]
+	summary = html.xpath('//meta[@property="og:description"]/@content')[0]
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0]
+
+	duration = html.xpath('//span[@itemprop="duration"]/text()')[0]
+	duration = Datetime.MillisecondsFromString(duration)
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(thumb),
+		duration = duration
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(
+					key = HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+				)
+			],
+			video_resolution = '720',
+			audio_channels = 2
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	try:
+		html = HTML.ElementFromURL(url, headers=HTTP_HEADERS_IPAD, follow_redirects=False)
+	except Ex.RedirectError, e:
+		raise Ex.MediaNotAvailable
+
+	iframe = html.xpath('//iframe[contains(@src, "/embed/player")]/@src')
+
+	if len(iframe) < 1:
+		raise Ex.MediaNotAvailable
+
+	data = HTTP.Request('http://www.snagfilms.com%s' % (iframe[0]), headers=HTTP_HEADERS_IPAD).content
+	m3u8_url = RE_M3U8_URL.search(data)
+
+	if not m3u8_url:
+		raise Ex.MediaNotAvailable
+
+	return IndirectResponse(VideoClipObject, key=m3u8_url.group(1))

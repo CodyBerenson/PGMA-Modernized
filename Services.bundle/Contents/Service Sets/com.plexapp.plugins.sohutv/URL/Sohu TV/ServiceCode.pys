@@ -1,0 +1,276 @@
+import re
+import urlparse
+
+INC_JS_URL = 'http://js.tv.itc.cn/site/pad/inc.js'
+VIDEO_INFO_URL = 'http://pad.tv.sohu.com/playinfo?vid=%s&playlistid=%s&sig=%s&key=%s'
+MY_VIDEO_INFO_URL = 'http://my.tv.sohu.com/play/m3u8version.do?vid=%s&playlistid=%s&sig=%s&key=%s'
+LIVE_INFO_URL = 'http://live.tv.sohu.com/live/player_json.jhtml?lid=%s&type=1'
+LIVE_THUMB_URL = 'http://tvimg.tv.itc.cn/thumb/200x/%s.jpg'
+SOHU_TV_FORMATS = [
+	{'resolution': '320',  'bitrate': 200,  'm3u8': 'norVid'  },
+	{'resolution': '480',  'bitrate': 400,  'm3u8': 'highVid' },
+	{'resolution': '720',  'bitrate': 800,  'm3u8': 'superVid'},
+	{'resolution': '1080', 'bitrate': 1600, 'm3u8': 'oriVid'  }
+]
+LIVE_FORMAT = 1
+
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 6_0_1 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A523 Safari/8536.25'}
+
+RE_VIDEO_ID = Regex('var\s+vid\s*=\s*(?P<video_id>\d+)\s*;')
+RE_PLAYLIST_ID = Regex('var\s+playlistId\s*=\s*(?P<playlist_id>\d+)\s*;')
+RE_VIDEO_JS_URL = Regex('(?P<video_js_url>http://js\.tv\.itc\.cn/site/pad/video\d+\.js)')
+RE_ENC_KEYS = Regex('_shift_en\(\s*\[\s*(?P<enc_keys>(?:\d+\s*,\s*)*\d+)\s*\]\s*\)')
+RE_LIVE_ID = Regex('var\s+tvId\s*=\s*(?P<live_id>\d+)\s*;')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	if isinstance(url, basestring):
+		url = urlparse.urlparse(url)
+
+	path = url.path
+
+	if 'live' in url.netloc:
+		host = 'live.tv.sohu.com'
+	elif len(path) > 4 and path[3] == '/':
+		host = 'my.tv.sohu.com'
+	else:
+		host = 'tv.sohu.com'
+
+	return url.scheme + '://' + host + path
+
+####################################################################################################
+def GetContent(url, cacheTime=CACHE_1HOUR, **kwargs):
+
+	try:
+		content = HTTP.Request(url, headers=HTTP_HEADERS, cacheTime=cacheTime, **kwargs).content
+	except Exception as e:
+		Log.Warn("GetContent: could not get '%s': %s", url, e)
+		raise Ex.MediaNotAvailable
+
+	return content
+
+####################################################################################################
+def Search(text, regex, group_name):
+
+	matchobj = regex.search(text)
+
+	if not matchobj:
+		Log.Warn("Search: could not find '%s'", group_name)
+		raise Ex.MediaNotAvailable
+
+	return matchobj.group(group_name)
+
+####################################################################################################
+# Based on String.prototype._shift_en() from video js
+def ShiftEn(text, enc_keys):
+	t = len(enc_keys)
+	n = [0]
+
+	def encode(matchobj):
+		i = ord(matchobj.group(0))
+		# for A-Z (65-90)
+		s = 65
+		o = 26
+		# for a-z (97-122)
+		if i >= 97:
+			s = 97
+		# for 0-9 (48-57)
+		elif i < 65:
+			s = 48
+			o = 10
+		u = i - s # 0-25 for a-z/A-Z, 0-9 for 0-9
+		encoded = chr((u + enc_keys[n[0] % t]) % o + s)
+		n[0] = n[0] + 1 # can't do n[0] += 1 because of RestrictedPython
+		return encoded
+
+	return re.sub('[0-9a-zA-Z]', encode, str(text))
+
+####################################################################################################
+def GetVideoInfo(url):
+
+	Log.Debug("GetVideoInfo: getting info for '%s'", url)
+
+	# get video ID and playlist ID from iPad page
+
+	page = GetContent(re.sub('//(?:my\.)?tv', '//pad.tv', url))
+	video_id = Search(page, RE_VIDEO_ID, 'video_id')
+	playlist_id = Search(page, RE_PLAYLIST_ID, 'playlist_id')
+
+	Log.Debug("GetVideoInfo: found video ID '%s', playlist ID '%s'", video_id, playlist_id)
+
+	# get encoding keys from video js
+
+	inc_js_src = GetContent(INC_JS_URL, cacheTime=0)
+	video_js_url = Search(inc_js_src, RE_VIDEO_JS_URL, 'video_js_url')
+
+	Log.Debug("GetVideoInfo: found video js URL '%s'", video_js_url)
+
+	video_js_src = GetContent(video_js_url, cacheTime=CACHE_1MONTH)
+	enc_keys = Search(video_js_src, RE_ENC_KEYS, 'enc_keys')
+	enc_keys = [int(n) for n in enc_keys.split(',')]
+
+	Log.Debug("GetVideoInfo: found encoding keys %s", enc_keys)
+
+	# get video info
+
+	# JavaScript: (new Date).getTime() returns milliseconds since epoch
+	# Python: Datetime.TimestampFromDatetime(Datetime.Now()) returns seconds since epoch (as a float?)
+	sig = ShiftEn(int(Datetime.TimestampFromDatetime(Datetime.Now()) * 1000), enc_keys)
+	key = ShiftEn(video_id, enc_keys)
+
+	video_info_url = MY_VIDEO_INFO_URL if '//my.tv' in url else VIDEO_INFO_URL
+	video_info_url = video_info_url % (video_id, playlist_id, sig, key)
+
+	Log.Debug("GetVideoInfo: getting info from '%s'", video_info_url)
+
+	# work around double-decoding bug in JSON.ObjectFromURL()
+	info = JSON.ObjectFromString(GetContent(video_info_url, encoding='gbk'))
+
+	# if Sohu smells something fishy, they return an empty JSON object
+	if 'videoName' not in info:
+		Log.Warn("GetVideoInfo: unexpected video info %s", info)
+		raise Ex.MediaNotAvailable
+
+	return info
+
+####################################################################################################
+def GetLiveInfo(url):
+
+	Log.Debug("GetLiveInfo: getting info for '%s'", url)
+
+	# get live ID from page
+
+	live_id = Search(GetContent(url), RE_LIVE_ID, 'live_id')
+
+	Log.Debug("GetLiveInfo: found live ID '%s'", live_id)
+
+	# get live info
+
+	live_info_url = LIVE_INFO_URL % live_id
+
+	Log.Debug("GetLiveInfo: getting info from '%s'", live_info_url)
+
+	# work around double-decoding bug in JSON.ObjectFromURL()
+	info = JSON.ObjectFromString(GetContent(live_info_url, encoding='gbk'))
+
+	# if Sohu smells something fishy, they return an empty JSON object
+	if 'lid' not in info:
+		Log.Warn("GetLiveInfo: unexpected live info %s", info)
+		raise Ex.MediaNotAvailable
+
+	return info
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	if '//live.tv' in url:
+		info = GetLiveInfo(url)
+
+		obj = VideoClipObject(
+			title = info['data']['tvName'],
+			thumb = Resource.ContentsOfURLWithFallback(LIVE_THUMB_URL % info['lid'])
+		)
+
+	else:
+		info = GetVideoInfo(url)
+
+		obj = VideoClipObject(
+			title = info['videoName'],
+			summary = info['videoDesc'],
+			thumb = Resource.ContentsOfURLWithFallback(info['coverImg']),
+			duration = int(float(info['duration']) * 1000)
+		)
+
+	return obj
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	if '//live.tv' in url:
+		fmt = SOHU_TV_FORMATS[LIVE_FORMAT]
+
+		objs = [
+			MediaObject(
+				parts = [PartObject(key = HTTPLiveStreamURL(Callback(PlayLive, url=url)))],
+				video_resolution = fmt['resolution'],
+				bitrate = fmt['bitrate'],
+				audio_channels = 2,
+				optimized_for_streaming = True
+			)
+		]
+
+	else:
+		objs = [
+			MediaObject(
+				parts = [PartObject(key = HTTPLiveStreamURL(Callback(PlayVideo, url=url, target_resolution=fmt['resolution'])))],
+				video_resolution = fmt['resolution'],
+				bitrate = fmt['bitrate'],
+				audio_channels = 2,
+				optimized_for_streaming = True
+			) for fmt in reversed(SOHU_TV_FORMATS)
+		]
+
+	return objs
+
+####################################################################################################
+def GetFormat(info, target_resolution):
+
+	Log.Debug("GetFormat: looking for '%s'", target_resolution)
+
+	index = None
+	fmt = None
+
+	for i, j in enumerate(SOHU_TV_FORMATS):
+		if j['resolution'] == target_resolution:
+			index = i
+			break
+
+	if index is None:
+		Log.Warn("GetFormat: could not find index for '%s'", target_resolution)
+		return fmt
+
+	# search order: target resolution, lower resolutions (descending), higher resolutions (ascending)
+	indices = list(range(len(SOHU_TV_FORMATS)))
+	indices[:index + 1] = list(reversed(indices[:index + 1]))
+
+	for i in indices:
+		j = SOHU_TV_FORMATS[i]
+		if j['m3u8'] in info and info[j['m3u8']]:
+			fmt = j
+			break
+
+	Log.Debug("GetFormat: returning %s", fmt)
+
+	return fmt
+
+####################################################################################################
+@indirect
+def PlayVideo(url, target_resolution, **kwargs):
+
+	Log.Debug("PlayVideo: url='%s', target_resolution='%s'", url, target_resolution)
+
+	info = GetVideoInfo(url)
+
+	fmt = GetFormat(info, target_resolution)
+	if not fmt:
+		Log.Warn("PlayVideo: could not find a suitable format for '%s'", url)
+		raise Ex.MediaNotAvailable
+
+	video_url = info[fmt['m3u8']]
+
+	Log.Debug("PlayVideo: returning '%s'", video_url)
+
+	return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+@indirect
+def PlayLive(url, **kwargs):
+
+	Log.Debug("PlayLive: url='%s'", url)
+
+	video_url = GetLiveInfo(url)['data']['hls']
+
+	Log.Debug("PlayLive: returning '%s'", video_url)
+
+	return IndirectResponse(VideoClipObject, key=video_url)

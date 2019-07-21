@@ -1,0 +1,232 @@
+import re
+
+# EXAMPLE URLs for service: 
+# 1) Front end browser URL: http://www.cbc.ca/listen/shows/because-news/segment/10456353
+#
+# 2) https://api-gw.radio-canada.ca/audio/v1/clips/10456353?inline=show
+#	Specific audio clip by ID; Adding ?inline=show to the URL also includes info on the show that the track belongs to
+#
+# 3) https://api-gw.radio-canada.ca/audio/v1/shows/25
+#	Details for show ID 25
+#
+# 4) https://api-gw.radio-canada.ca/audio/v1/shows/25/clips
+#	List of clips for show ID 25
+#
+# 5) http://www.cbc.ca/listen/categories/news/clips/3?format=json
+#	Third page of News category results
+#
+# 6) http://tpfeed.cbc.ca/f/ExhSPC/cbc-live-radio
+#	Index of all live-streaming stations
+# 
+# 7) http://tpfeed.cbc.ca/f/ExhSPC/cbc-live-radio/673903171524
+# 	Specific live-stream station (CBC Radio One: Prince George in this case)
+#
+# 8) http://www.cbc.ca/programguide/live.do?output=xml&networkKey=cbc_radio_one&locationKey=winnipeg
+#	http://www.cbc.ca/programguide/next.do?output=xml&networkKey=cbc_radio_2&locationKey=edmonton
+#	XML output with current or next program name
+
+
+BASE_URL = 'https://api-gw.radio-canada.ca/audio/v1/clips/'
+CACHE_TIME = CACHE_1HOUR
+AudioStreamObject.language_code = Locale.Language.English
+
+####################################################################################################
+def NormalizeURL(url):
+
+	Log.Debug('Parsing CBC Radio URL: ' + url)
+
+	if re.search('^http(s?):\/\/(www\.)?cbc\.ca\/listen(\/)?(.+)?', url):
+		try:
+			new_url = url.rsplit('/', 1)[1]
+			new_url = BASE_URL + new_url
+			url = new_url
+		except:
+			Log.Debug('Could not convert cbc.ca/listen URL into an API URL. Given URL: ' + url)
+			raise Ex.MediaNotAvailable
+
+	if url.startswith('http://'):
+		# Note: Forcing HTTPS might fail for some due to SNI validations,
+		# it apppears this will remain until Plex's framework upgrades it's python version
+		Log.Debug('CBC Radio API requires HTTPS; Converting.')
+		url.replace('http://', 'https://')
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+	Log.Debug('Getting metadata for CBC Radio URL: ' + url)
+
+	# url = StripHTTPS(url)
+
+	audio_type = GetAudioType(url)
+	
+	try:
+		if (audio_type == 'live'):
+			page = JSON.ObjectFromURL(url, cacheTime=CACHE_TIME)
+		else:
+			page = JSON.ObjectFromURL(url + '?inline=show', cacheTime=CACHE_TIME)
+	except:
+		raise Ex.MediaNotAvailable
+	
+	title = page['title']
+
+	to = TrackObject(
+	)
+
+	if (audio_type == 'ondemand'):
+		# TODO: This is lazy; should get the thumbnail for the episode somehow instead of for the show
+		to.thumb = Resource.ContentsOfURLWithFallback(url=page['show']['thumbnail'])
+		to.originally_available_at = Datetime.ParseDate(page['releasedAtPretty'])
+		to.duration = int(page['duration']) * 1000
+		to.summary = page['description']
+		to.title = title
+
+	elif (audio_type == 'live'):
+		to.title = page['cbc$name'] + ' ' + page['cbc$network']
+		to.artist = page['cbc$name']
+		to.album = page['cbc$network']
+
+		if page['thumbnails']:
+			to.thumb = Resource.ContentsOfURLWithFallback(url=page['thumbnails'])
+
+		metadata_url = GetLiveMetadataURL(page['content'])
+
+		if (metadata_url):
+			to.title = GetLiveProgramName(metadata_url)
+
+	return to
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	Log.Debug('MediaObects URL: ' + url)
+
+	# url = StripHTTPS(url)
+
+	return [
+		MediaObject(
+			protocol = Protocol.HLS,
+			optimized_for_streaming = True,
+			container = 'mpegts',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			parts = [
+				PartObject(key=Callback(PlayMedia, url=url, ext='ts', type='hls'))
+			]
+		),
+		MediaObject(
+			container = Container.MP3,
+			audio_codec = AudioCodec.MP3,
+			audio_channels = 2,
+			parts = [
+				PartObject(key=Callback(PlayMedia, url=url, ext='mp3', type='mp3'))
+			]
+		),
+	]
+
+####################################################################################################
+@indirect
+def PlayMedia(url, type='mp3', ext='mp3', **kwargs):
+	Log.Debug('Getting media item URL for CBC Radio URL: ' + url)
+	
+	# url = StripHTTPS(url)
+
+	audio_type = GetAudioType(url)
+	
+	try:
+		if (audio_type == 'live'):
+			page = JSON.ObjectFromURL(url, cacheTime=CACHE_TIME)
+		else:
+			page = JSON.ObjectFromURL(url + '?inline=show', cacheTime=CACHE_TIME)
+	except:
+		raise Ex.MediaNotAvailable
+
+	if audio_type == 'live':
+		audio_url = GetLiveStreamURLs(page['content'])
+
+		if not type or not audio_url[type]:
+			return False
+		else:
+			audio_url = audio_url[type]
+
+	else:
+		audio_url = page['url']
+
+
+	if not audio_url:
+		raise Ex.MediaNotAvailable
+
+	Log.Debug('Returning CBC Radio media item at: ' + audio_url)
+	return IndirectResponse(TrackObject, audio_url)
+
+####################################################################################################
+# Determine if the URL is for a live stream or an ondemand show
+#
+# http://tpfeed.cbc.ca/f/ExhSPC/cbc-live-radio/673903171524
+def GetAudioType (url):
+	if (re.match('^http(s?):\/\/tpfeed.cbc.ca/f/ExhSPC/cbc-live-radio(.+)?', url)):
+		return 'live'
+	else:
+		return 'ondemand'
+
+####################################################################################################
+# Takes the stream['content'] array of media content from a live stream JSON entry, and 
+# returns the url of the containing MP3 stream
+def GetLiveStreamURLs (item):
+	urls = {}
+
+	for i in item:
+		if 'MP3' in i['assetTypes']:
+			urls['mp3'] = i['streamingUrl']
+			Log.Debug('Found MP3 Stream: ' + i['streamingUrl'])
+
+		if 'HLS' in i['assetTypes']:
+			urls['hls'] = i['streamingUrl']
+			Log.Debug('Found HLS Stream: ' + i['streamingUrl'])
+
+		if 'HDS' in i['assetTypes']:
+			urls['hds'] = i['streamingUrl']
+			Log.Debug('Found HDS Stream: ' + i['streamingUrl'])
+
+	if urls:
+		return urls
+
+	return False
+
+####################################################################################################
+# Takes the stream['content'] array of media content from a live stream JSON entry, and 
+# returns the url of the containing Metadata URL
+def GetLiveMetadataURL (item):
+    for i in item:
+        if 'Metadata' in i['assetTypes']:
+            return i['streamingUrl']
+
+    return False
+
+####################################################################################################
+# Gets the name of the currently-playing program of a live radio station
+# URL example: http://www.cbc.ca/programguide/live.do?output=xml&networkKey=cbc_radio_one&locationKey=inuvik
+def GetLiveProgramName(url):
+	# url = StripHTTPS(url)
+
+	# Don't cache metadata URL, since the currently-playing program
+	# will constantly change
+	metadata = XML.ElementFromURL(url=url, cacheTime=0)
+	
+	program_name = metadata.xpath('//name/text()')
+
+	if (len(program_name) > 0):
+		Log.Debug('Current program: ' + program_name[0])
+		return program_name[0]
+
+	return False
+
+####################################################################################################
+# Depending on the global variable, strip the HTTPS and use HTTP connections only.
+# This functionality is assuming that if the URL Service is passed an HTTP URL, 
+# the following requests should be HTTP
+def StripHTTPS (url):
+	if not ENABLE_HTTPS:
+		return url.replace('https://', 'http://')
+
+	return url

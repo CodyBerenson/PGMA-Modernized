@@ -1,0 +1,157 @@
+HTTP_HEADERS = {'User-Agent':'Mozilla/5.0 (iPad; CPU OS 6_0_1 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A523 Safari/8536.25'}
+RE_JSON = Regex('var experienceJSON = ({.+});')
+RE_VIDEO_ID = Regex('(videoId|videoPlayer|bctid)=(?P<id>\d+)', Regex.IGNORECASE)
+
+####################################################################################################
+def NormalizeURL(url):
+
+	if not 'playerKey=' in url or 'federated_f9' in url:
+		url = FixURL(url)
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJSON(url)
+	media = json_obj['data']['programmedContent']['videoPlayer']['mediaDTO']
+
+	title = media['displayName']
+	summary = media['shortDescription']
+	duration = media['length']
+	date = Datetime.FromTimestamp(float(media['publishedDate'])/1000)
+	thumb = media['videoStillURL'].split('?')[0]
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = duration,
+		originally_available_at = date,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	media_objects = []
+	json_obj = GetJSON(url)
+
+	if 'IOSRenditions' in json_obj['data']['programmedContent']['videoPlayer']['mediaDTO'] and len(json_obj['data']['programmedContent']['videoPlayer']['mediaDTO']['IOSRenditions']) > 0:
+
+		for rendition in json_obj['data']['programmedContent']['videoPlayer']['mediaDTO']['IOSRenditions']:
+
+			if rendition['audioOnly']:
+				continue
+
+			resolution = rendition['frameHeight']
+			url = rendition['defaultURL']
+
+			if resolution < 360 or not '.m3u8' in url:
+				continue
+
+			bitrate = int(float(rendition['encodingRate'])/1000)
+			width = rendition['frameWidth']
+
+			media_objects.append(
+				MediaObject(
+					parts = [
+						PartObject(key=HTTPLiveStreamURL(url))
+					],
+					video_resolution = resolution,
+					audio_channels = 2,
+					bitrate = bitrate,
+					optimized_for_streaming = True
+				)
+			)
+
+	if len(media_objects) < 1 and 'renditions' in json_obj['data']['programmedContent']['videoPlayer']['mediaDTO'] and len(json_obj['data']['programmedContent']['videoPlayer']['mediaDTO']['renditions']) > 0:
+
+		for rendition in json_obj['data']['programmedContent']['videoPlayer']['mediaDTO']['renditions']:
+
+			if rendition['audioOnly']:
+				continue
+
+			resolution = rendition['frameHeight']
+			url = rendition['defaultURL']
+
+			if resolution < 360 or not url.endswith('.mp4'):
+				continue
+
+			bitrate = int(float(rendition['encodingRate'])/1000)
+			width = rendition['frameWidth']
+
+			media_objects.append(
+				MediaObject(
+					parts = [
+						PartObject(key=url)
+					],
+					container = Container.MP4,
+					video_codec = VideoCodec.H264,
+					video_resolution = resolution,
+					audio_codec = AudioCodec.AAC,
+					audio_channels = 2,
+					bitrate = bitrate,
+					optimized_for_streaming = True
+				)
+			)
+
+	if len(media_objects) < 1 and 'FLVFullLengthURL' in json_obj['data']['programmedContent']['videoPlayer']['mediaDTO'] and json_obj['data']['programmedContent']['videoPlayer']['mediaDTO']['FLVFullLengthURL']:
+
+		url = json_obj['data']['programmedContent']['videoPlayer']['mediaDTO']['FLVFullLengthURL']
+
+		if not '.f4m' in url:
+
+			bitrate = int(float(json_obj['data']['programmedContent']['videoPlayer']['mediaDTO']['encodingRate'])/1000)
+
+			media_objects.append(
+				MediaObject(
+					parts = [PartObject(key=url)],
+					container = Container.MP4,
+					video_codec = VideoCodec.H264,
+					video_resolution = 360,
+					audio_codec = AudioCodec.AAC,
+					audio_channels = 2,
+					bitrate = bitrate,
+					optimized_for_streaming = True
+				)
+			)
+
+	media_objects.sort(key=lambda obj: obj.video_resolution, reverse=True)
+
+	if len(media_objects) < 1:
+		raise Ex.MediaNotAvailable
+
+	return media_objects
+
+####################################################################################################
+def GetJSON(url):
+
+	headers = HTTP_HEADERS
+	referer = None
+
+	if '&refURL=' in url:
+		(url, referer) = url.split('&refURL=')
+
+	if referer:
+		headers['Referer'] = String.Unquote(referer)
+
+	data = HTTP.Request(url, headers=headers).content
+	json = RE_JSON.search(data)
+
+	if json:
+		json_obj = JSON.ObjectFromString(json.group(1))
+		if json_obj['success'] == True:
+			return json_obj
+		else:
+			raise Ex.MediaNotAvailable
+	else:
+		raise Ex.MediaNotAvailable
+
+####################################################################################################
+def FixURL(url):
+
+	json_obj = GetJSON(url.replace('federated_f9', 'htmlFederated'))
+	player_key = json_obj['data']['playerKey']
+	video_player = RE_VIDEO_ID.search(url).group('id')
+
+	return 'http://c.brightcove.com/services/viewer/htmlFederated?playerKey=%s&dynamicStreaming=true&%%40videoPlayer=%s' % (player_key, video_player)

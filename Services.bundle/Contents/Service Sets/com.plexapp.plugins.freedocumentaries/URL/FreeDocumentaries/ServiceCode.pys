@@ -1,0 +1,60 @@
+FLV_URL = 'http://freedocumentaries.org/Google_URI.php?docid=%s&type=flv'
+RE_DOCID = Regex('docid=(.+)&type=flv')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	if 'int.php' in url:
+		url = url.replace('int.php', 'teatro.php')
+
+	return url.split('&')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	if len(HTML.ElementFromURL(url).xpath('//*[contains(@data|@src|@value, "youtube.com")]')) > 0:
+		Log('YouTube embed found!!')
+		return None
+
+	data = HTML.ElementFromURL(url.replace('teatro.php', 'int.php'))
+
+	title = data.xpath('//div[@class="inside"]/div[@class="title"]')[0].text.strip()
+	summary = data.xpath('//div[@class="title"]/following-sibling::div')[7].text.strip()
+
+	producerList = []
+	producers = data.xpath('//a[contains(@href, "index_prod.php?prodName=")]')
+
+	for producer in producers:
+		producerList.append(producer.text)
+
+	return MovieObject(
+		title = title,
+		summary = summary,
+		producers = producers
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url))],
+			container = 'flv',
+			video_resolution = 'sd',
+			video_codec = 'flv1',
+			audio_codec = 'mp3'
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, fmt=None, **kwargs):
+
+	data = HTTP.Request(url).content
+	docid = RE_DOCID.search(data)
+
+	if docid:
+		video_url = HTTP.Request(FLV_URL % docid.group(1), cacheTime=0).content
+		return IndirectResponse(VideoClipObject, key=video_url)
+	else:
+		return None

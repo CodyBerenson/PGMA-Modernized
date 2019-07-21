@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Facebook</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>https://www.facebook.com/video/video.php?v=10150388618491489</string>
+				<string>https://www.facebook.com/video/video.php?v=1100102466332</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^https:\/\/www\.facebook\.com\/video\/video\.php\?v=\d+</string>
+				<string>^https:\/\/www\.facebook\.com\/[^\/]+\/videos\/\d+</string>
+				<string>^https:\/\/www\.facebook\.com\/[^\/]+\/videos\/vb\.\d+\/\d+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

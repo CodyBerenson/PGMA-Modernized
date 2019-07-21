@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>moviefone</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^(?!.*/video/)http://www.moviefone.com/movie/.+</string>
+			</array>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.moviefone.com/movie/safe-house/52486/main</string>
+				<string>http://www.moviefone.com/movie/men-in-black-3/10037625/main</string>
+				<string>http://www.moviefone.com/movie/rock-of-ages/1423458/main</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

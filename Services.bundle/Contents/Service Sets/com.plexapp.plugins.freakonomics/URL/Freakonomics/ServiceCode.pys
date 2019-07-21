@@ -1,0 +1,78 @@
+XSPF_URL = 'http://www.wnyc.org/audio/xspf/%s/'
+XSPF_NS = {'a': 'http://xspf.org/ns/0/'}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	data = HTML.ElementFromURL(url)
+	artist = data.xpath('//span[@class="author-name"]/a')
+
+	if len(artist) < 1:
+		return None
+
+	artist = artist[0].text
+	title = data.xpath('//h1[@class="h1title"]')[0].text
+
+	try:
+		date = data.xpath('//p[@class="postmeta"]//text()')[-1].split(' | ')[0].strip()
+		date = Datetime.ParseDate(date).date()
+	except:
+		date = None
+
+	return TrackObject(
+		title = title,
+		artist = artist,
+		originally_available_at = date,
+		thumb = Resource.ContentsOfURLWithFallback(url='')
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayAudio, url=url, ext='mp3'))],
+			container = Container.MP3,
+			audio_codec = AudioCodec.MP3
+		)
+	]
+
+####################################################################################################
+def PlayAudio(url, **kwargs):
+
+	data = HTML.ElementFromURL(url)
+	media_url = data.xpath('//a[@title="Play in new window"]')
+
+	if len(media_url) > 0:
+		media_url = media_url[0].get('href')
+		return Redirect(media_url)
+	else:
+		player_url = data.xpath('//iframe[contains(@src, "xspf")]')
+
+		if len(player_url) > 0:
+			player_url = player_url[0].get('src')
+			player_url = String.Unquote(player_url)
+			xspf = player_url.split('/audio/xspf/')[1].split('/')[0]
+			media_url = XML.ElementFromURL(XSPF_URL % xspf).xpath('//a:track/a:location', namespaces=XSPF_NS)[0].text
+			return Redirect(media_url)
+		else:
+			return None
+
+####################################################################################################
+def TestURLs():
+
+	test_urls = []
+	data = HTML.ElementFromURL('http://www.freakonomics.com/radio/freakonomics-radio-podcast-archive/')
+
+	for podcast in data.xpath('//table[@class="radioarchive"]//a'):
+		test_urls.append(podcast.get('href'))
+
+		if len(test_urls) > 2:
+			break
+
+	return test_urls

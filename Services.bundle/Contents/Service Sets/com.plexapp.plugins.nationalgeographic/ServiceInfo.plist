@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>National Geographic</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://video.nationalgeographic.com/video/player/news/animals-news/zambia-chimpanzee-death-reaction-vin.html</string>
+				<string>http://video.nationalgeographic.com/video/player/movies/wildest-weather/wildest-weather-trailer.html</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^(?!.*/search/)http://video.nationalgeographic.com/video/(player/)?.+</string>
+				<string>^(?!.*/search/)http://channel.nationalgeographic.com/(channel/)?(.+/)?videos/.+</string>
+			</array>
+		</dict>
+		<key>National Geographic Photography</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://photography.nationalgeographic.com/photography/photo-of-the-day/iliamna-volcano-clouds-melford/?utm_source=feedburner&amp;utm_medium=feed&amp;utm_campaign=Feed%3A+ng%2Fphotography%2Fphoto-of-the-day+%28National+Geographic+Photo+of+the+Day%29</string>
+				<string>http://photography.nationalgeographic.com/photography/photo-of-the-day/pier-jump-silhouette-australia/?utm_source=feedburner&amp;utm_medium=feed&amp;utm_campaign=Feed%3A+ng%2Fphotography%2Fphoto-of-the-day+%28National+Geographic+Photo+of+the+Day%29</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://photography.nationalgeographic.com/photography/</string>
+			</array>
+		</dict>
+		<key>National Geographic Canada</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://natgeotv.com/ca/.+?/videos/.+</string>
+				<string>^http://natgeotv.com/ca/webisodes/web-shows/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

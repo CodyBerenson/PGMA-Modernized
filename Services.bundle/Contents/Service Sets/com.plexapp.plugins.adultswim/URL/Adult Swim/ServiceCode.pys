@@ -1,0 +1,159 @@
+DETAIL_URL = "http://video.adultswim.com/adultswimdynamic/asfix-svc/episodeSearch/getEpisodesByIDs?ids=%s&filterByAuthType=true&networkName=AS"
+PLAYLIST_URL = "http://asfix.adultswim.com/asfix-svc/episodeservices/getVideoPlaylist?networkName=AS&id=%s"
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	details = GetDetails(url)
+
+	episode = details.xpath('//episode')[0]
+	title = episode.get('title')
+	show = episode.get('collectionTitle')
+
+	try:
+		epIndex = episode.get('subEpisodeNumber')
+		epIndex = int(epIndex)
+	except:
+		epIndex = None
+
+	try:
+		season = episode.get('epiSeasonNumber')
+		season = int(season)
+	except:
+		season = None
+
+	summary = episode.xpath('./description')[0].text
+	thumb = episode.get('thumbnailUrl')
+	content_rating = episode.get('rating')
+
+	try:
+		duration = episode.get('duration')
+		duration = int(float(duration) * 1000)
+	except:
+		duration = None
+
+	try:
+		date = episode.get('originalPremiereDate')
+		date = Datetime.ParseDate(date)
+	except:
+		date = None
+
+	if episode.get('episodeType') in ['EPI', 'TVE']:
+		return EpisodeObject(
+			title = title,
+			show = show,
+			index = epIndex,
+			season = season,
+			summary = summary,
+			thumb = thumb,
+			content_rating = content_rating,
+			originally_available_at = date,
+			duration = duration
+		)
+	else:
+		return VideoClipObject(
+			title = title,
+			summary = summary,
+			thumb = thumb,
+			content_rating = content_rating,
+			originally_available_at = date,
+			duration = duration
+		)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			optimized_for_streaming = True,
+			video_resolution = 'sd',
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, index=0)),
+				PartObject(key=Callback(PlayVideo, url=url, index=1)),
+				PartObject(key=Callback(PlayVideo, url=url, index=2)),
+				PartObject(key=Callback(PlayVideo, url=url, index=3))
+			]
+		)
+	]
+
+####################################################################################################
+def PlayVideo(url, index=0, **kwargs):
+
+	details = GetDetails(url)
+	stream_ids = details.xpath('//item[@name="segIds"]/value')[0].text.split('#')
+
+	if index not in range(len(stream_ids)):
+		show = details.xpath('//episode')[0].get('collectionTitle').replace(':', '')
+		bump_page = HTML.ElementFromURL('http://www.bumpworthy.com/bumps/all?categories[]=bumps&sort=dateadded&sortdir=Desc&keywords=%s&searchin[]=name&searchin[]=music&searchin[]=desc&searchin[]=tags' % String.Quote(show, usePlus=True))
+
+		if len(bump_page.xpath('//div[@id="bw-results"]//a[contains(@href, "bumpworthy.com/bumps/")]')) > 0:
+			while index > 0:
+				try:
+					video = bump_page.xpath('//div[@id="bw-results"]//a[contains(@href, "bumpworthy.com/bumps/")]')[index].get('href')
+					break
+				except:
+					index = index - 1
+		else:
+			bump_page = HTML.ElementFromURL('http://www.bumpworthy.com/bumps/all?f=0')
+			video = bump_page.xpath('//div[@id="bw-results"]//a[contains(@href, "bumpworthy.com/bumps/")]/@href')[index]
+			video_url = '%s.d.mp4' % video.replace('/www.', '/static.')
+
+			return Redirect(video_url)
+	else:
+		playlist = XML.ElementFromURL(PLAYLIST_URL % stream_ids[index])
+		stream_url = playlist.xpath('//ref[contains(@href, "hi.mp4") or contains(@href, "hi.3gp")]/@href')
+
+		if len(stream_url) < 1:
+			raise Ex.MediaExpired
+
+		return Redirect(stream_url[0])
+
+####################################################################################################
+def GetDetails(url):
+
+	try:
+		data = HTML.ElementFromURL(url)
+	except:
+		raise Ex.MediaNotAvailable
+
+	title = data.xpath('//title')[0].text
+	video_src = data.xpath('//link[@rel="video_src"]')
+
+	if len(video_src) < 1:
+		if 'Gold Episodes' in title:
+			raise Ex.MediaNotAuthorized
+		else:
+			raise Ex.MediaNotAvailable
+
+	id = video_src[0].get('href').split('id=')[1]
+
+	try:
+		details = XML.ElementFromURL(DETAIL_URL % id)
+	except Ex.HTTPError, e:
+		raise Ex.MediaNotAvailable
+	except:
+		raise Ex.MediaNotAvailable
+
+	if details.xpath('//episodes[@totalItems]')[0].get('totalItems') == '0':
+		raise Ex.MediaNotAvailable
+
+	return details
+
+####################################################################################################
+def TestURLs():
+
+	test_urls = []
+	ep_list = XML.ElementFromURL('http://video.adultswim.com/adultswimdynamic/asfix-svc/episodeSearch/getAllEpisodes?limit=3&sortByDate=DESC&filterByEpisodeType=EPI&networkName=AS')
+
+	for episode in ep_list.xpath('//episodeLink'):
+		test_urls.append(episode.get('episodeUrl'))
+
+	return test_urls

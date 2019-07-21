@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Howcast</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.howcast.com/videos/351024-How-to-Buy-Wallpaper</string>
+				<string>http://www.howcast.com/videos/404156-Quick-Tips-How-to-Right-Click-on-a-Mac</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://www.howcast.com/videos/[0-9]+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

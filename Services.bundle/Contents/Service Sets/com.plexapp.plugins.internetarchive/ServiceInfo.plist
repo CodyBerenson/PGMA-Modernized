@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>URL</key>
+	<dict>
+		<key>Internet Archive</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.archive.org/details/delf2012-03-18.cmc64.flac16</string>
+				<string>http://www.archive.org/details/AtlanticBeachBumsBluesBandPt_1</string>
+				<string>http://archive.org/details/HealthForTheAmericasPlanningForGoodEating</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^https?://(www\.)?archive.org/(details|downloads)/.+</string>
+			</array>
+		</dict>
+		
+	</dict>
+</dict>
+</plist>

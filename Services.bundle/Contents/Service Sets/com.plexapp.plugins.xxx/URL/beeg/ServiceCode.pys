@@ -1,0 +1,150 @@
+API_URL = 'http://api.beeg.com/api/v%s/%s/video/%s'
+
+THUMB_URL_720 = 'http://img.beeg.com/1280x720/%s.jpg'
+THUMB_URL_360 = 'http://img.beeg.com/640x360/%s.jpg'
+THUMB_URL_ORIG = 'http://img.beeg.com/236x177/%s.jpg'
+
+RE_API_VERSION = Regex('\/api\/v(\d+)\/')
+RE_SALT = Regex('beeg_salt="([^"]+)"')
+RE_KEY = Regex('/key=(.*?)%2Cend=')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0].rstrip('/')
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJson(url)
+
+	title = json_obj['title']
+	summary = json_obj['desc'].strip('-')
+	originally_available_at = Datetime.ParseDate(json_obj['date']).date()
+	duration = int(json_obj['duration']) * 1000 if 'duration' in json_obj and json_obj['duration'] != '' else None
+	tags = [tag for tag in json_obj['tags'].split(', ')] if json_obj['tags'] and len(json_obj['tags']) > 0 else []
+
+	video_id = url.split('/')[-1]
+
+	thumb_1 = THUMB_URL_720 % (video_id)
+	thumb_2 = THUMB_URL_360 % (video_id)
+	thumb_3 = THUMB_URL_ORIG % (video_id)
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		originally_available_at = originally_available_at,
+		duration = duration,
+		tags = tags,
+		thumb = Resource.ContentsOfURLWithFallback([thumb_1, thumb_2, thumb_3]),
+		content_rating = 'X'
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	if Client.Product == 'Plex Web':
+
+		return [
+			MediaObject(
+				video_resolution = video_resolution,
+				optimized_for_streaming = False,
+				parts = [
+					PartObject(
+						key = Callback(PlayVideo, url=url, res=video_resolution)
+					)
+				]
+			) for video_resolution in ['720', '480']
+		]
+
+	else:
+
+		return [
+			MediaObject(
+				container = Container.MP4,
+				video_codec = VideoCodec.H264,
+				video_resolution = video_resolution,
+				audio_codec = AudioCodec.AAC,
+				audio_channels = 2,
+				optimized_for_streaming = True,
+				parts = [
+					PartObject(
+						key = Callback(PlayVideo, url=url, res=video_resolution)
+					)
+				]
+			) for video_resolution in ['720', '480']
+		]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res='720', **kwargs):
+
+	json_obj = GetJson(url)
+
+	if res == '720' and '720p' in json_obj and json_obj['720p']:
+		video_url = json_obj['720p']
+	elif '480p' in json_obj:
+		video_url = json_obj['480p']
+	else:
+		raise Ex.MediaNotAvailable
+
+	video_url = DecryptVideoUrl(url, video_url)
+
+	return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def GetJson(url):
+
+	html = HTML.ElementFromURL(url)
+	script_url = html.xpath('//script[contains(@src, "/cpl/")]/@src')[0]
+	script_version = script_url.split('/')[-1].split('.')[0]
+
+	script_contents = HTTP.Request('http://%s' % (script_url.split('//')[-1])).content
+	api_version = RE_API_VERSION.search(script_contents).group(1)
+
+	video_id = url.split('/')[-1]
+
+	api_url = API_URL % (api_version, script_version, video_id)
+
+	try:
+		return JSON.ObjectFromURL(api_url)
+	except:
+		raise Ex.MediaNotAvailable
+
+####################################################################################################
+def DecryptVideoUrl(url, video_url):
+
+	html = HTML.ElementFromURL(url)
+	script_url = html.xpath('//script[contains(@src, "/cpl/")]/@src')[0]
+	script_version = script_url.split('/')[-1].split('.')[0]
+
+	script_contents = HTTP.Request('http://%s' % (script_url.split('//')[-1])).content
+	salt = RE_SALT.search(script_contents).group(1)
+	key = unicode(String.Unquote(RE_KEY.search(video_url).group(1)))
+
+	o = ''.join([
+		unichr(ord(key[n]) - ord(salt[n % len(salt)]) % 21)
+		for n in range(len(key))
+	])
+	decrypted_key = ''.join(split(o, 3)[::-1])
+
+	video_url = video_url.replace(RE_KEY.search(video_url).group(1), String.Quote(decrypted_key))
+	video_url = video_url.replace('/{DATA_MARKERS}', '')
+	video_url = 'http://%s' % (video_url.split('//', 1)[-1])
+
+	return video_url
+
+####################################################################################################
+def split(o, e):
+
+	def cut(s, x):
+		n.append(s[:x])
+		return s[x:]
+	n = []
+	r = len(o) % e
+	if r > 0:
+		o = cut(o, r)
+	while len(o) > e:
+		o = cut(o, e)
+	n.append(o)
+	return n

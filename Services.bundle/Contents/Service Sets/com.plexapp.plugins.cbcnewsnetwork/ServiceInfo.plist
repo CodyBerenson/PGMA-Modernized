@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>WatchCBC</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http(s?):\/\/api-cbc\.cloud\.clearleap.com\/cloffice\/client\/web\/browse\/.+</string>
+				<string>^http(s)?:\/\/watch\.cbc\.ca\/.+</string>
+			</array>
+		</dict>
+		<key>CBC</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http(s?):\/\/www\.cbc\.ca\/player\/play\/.+</string>
+			</array>
+		</dict>
+		<key>CBCRadio</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http(s?):\/\/(www\.)?cbc\.ca\/listen\/.+</string>
+				<string>^http(s?):\/\/api\-gw\.radio\-canada\.ca\/audio\/v1\/.+</string>
+				<string>^http(s?):\/\/tpfeed.cbc.ca/f/ExhSPC/cbc-live-radio(.+)?</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

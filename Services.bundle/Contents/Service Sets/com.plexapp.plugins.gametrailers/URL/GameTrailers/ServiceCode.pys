@@ -1,0 +1,96 @@
+RE_JSON = Regex('embedVars = (\{.+\}).+<\/script>', Regex.DOTALL)
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJson(url)
+
+	title = json_obj['contentName']
+	duration = int(json_obj['videoLengthInSeconds']) * 1000
+	thumb = json_obj['thumbUri']
+
+	return VideoClipObject(
+		title = title,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			bitrate = 2240,
+			video_codec = VideoCodec.H264,
+			video_resolution = 720,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True,
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, bitrate=2240))
+			]
+		),
+		MediaObject(
+			container = Container.MP4,
+			bitrate = 864,
+			video_codec = VideoCodec.H264,
+			video_resolution = 480,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True,
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, bitrate=864))
+			]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, bitrate=2240, **kwargs):
+
+	json_obj = GetJson(url)
+	available_bitrates = []
+
+	for video in json_obj['media']:
+
+		if video['mediaPurpose'] == 'play':
+			available_bitrates.append(video['bitRate'])
+
+	closest = min((abs(int(bitrate) - int(i)), i) for i in available_bitrates)[1]
+
+	for video in json_obj['media']:
+
+		if closest == video['bitRate']:
+			return IndirectResponse(VideoClipObject, key=video['uri'])
+
+####################################################################################################
+def GetJson(url):
+
+	try:
+		html = HTML.ElementFromURL(url, follow_redirects=False)
+	except Ex.RedirectError, e:
+		raise Ex.MediaNotAvailable
+	except Ex.HTTPError, e:
+		raise Ex.MediaNotAvailable
+	except:
+		raise Ex.MediaNotAvailable
+
+	iframe = html.xpath('//iframe[contains(@src, "/embed/")]/@src')
+
+	if len(iframe) < 1:
+		raise Ex.MediaNotAvailable
+
+	url = 'http://%s' % (iframe[0].split('?')[0].split('//')[-1])
+	data = HTTP.Request(url).content
+	json = RE_JSON.search(data)
+
+	if not json:
+		raise Ex.MediaNotAvailable
+
+	return JSON.ObjectFromString(json.group(1))

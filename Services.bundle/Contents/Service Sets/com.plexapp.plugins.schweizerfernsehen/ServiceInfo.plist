@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Schweizer Fernsehen</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>https://il.srgssr.ch/integrationlayer/1.0/ue/srf/video/play/a4340031-4c46-4e71-8263-fa9cc3e56f00.json</string>
+				<string>http://www.srf.ch/sendungen/einstein/drohnenland-schweiz</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<!-- Used for internal redirects -->
+				<string>^https://il.srgssr.ch/integrationlayer/1.0/ue/srf/video/play/.+</string>
+				<!-- Used for external redirects per direct URL -->
+				<string>^http://www.srf.ch/sendungen/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

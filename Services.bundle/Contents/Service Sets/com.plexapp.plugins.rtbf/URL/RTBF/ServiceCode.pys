@@ -1,0 +1,102 @@
+RE_VID_ID = Regex('http://www.rtbf.be/.+\?id=([0-9]+)')
+API_URL ='http://www.rtbf.be/api/media/videoToken?method=getVideoDetail&args%5B%5D='
+IMAGE_BASE = 'http://ds.static.rtbf.be'
+
+####################################################################################################
+def NormalizeURL(url):
+
+  return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+  details = GetDetails(url)
+
+  title = details['title']
+  if details['subtitle']:
+    title = title + ' - ' + details['subtitle']
+
+  if details['description']:
+    summary = details['description']
+  else:
+    summary = None
+
+  try:
+    duration = int(float(details['duration'])*1000)
+  except:
+    duration = None
+
+  thumb = IMAGE_BASE + details['thumbnail']['large']
+
+  try:
+    date = Datetime.FromTimestamp(details['created'])
+  except:
+    date = None
+
+  try:
+    rating = float(details['rating'])
+  except:
+    rating = None
+
+  return VideoClipObject(
+    title=title,
+    summary=summary,
+    duration=duration,
+    originally_available_at=date,
+    rating=rating,
+    thumb=thumb
+  )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+  return [
+    MediaObject(
+      container = Container.MP4,
+      video_codec = VideoCodec.H264,
+      video_resolution = '576',
+      audio_codec = AudioCodec.AAC,
+      audio_channels = 2,
+      optimized_for_streaming = True,
+      parts = [PartObject(key=Callback(PlayVideo, url=url))]
+    )
+  ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+  details = GetDetails(url)
+  mp4_url = details['url']
+
+  return IndirectResponse(VideoClipObject, key=mp4_url)
+
+####################################################################################################
+def GetDetails(url):
+
+  if '?id=' in url:
+    vid_id = RE_VID_ID.search(url).group(1)
+  else:
+    data = HTML.ElementFromURL(url)
+    vid_id = data.xpath('//div[@class="player rtbfPlayer rtbfVideo autostart"]')[0].get('rel')
+
+  json_obj = JSON.ObjectFromURL(API_URL + vid_id)
+
+  if 'data' in json_obj and json_obj['data'] is not None:
+    return json_obj['data']
+
+  raise Ex.MediaNotAvailable
+
+####################################################################################################
+def TestURLs():
+
+  test_urls = []
+  data = HTML.ElementFromURL('http://www.rtbf.be/video/')
+
+  for video in data.xpath('//div[@class="span2 thumblock clearfix"]'):
+    test_urls.append(video.xpath('./a')[0].get('href'))
+
+    if len(test_urls) > 2:
+      break
+
+  return test_urls

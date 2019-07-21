@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>The Berrics</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://theberrics.com/news/jason-lee-and-friends-go-for-a-cruise.html</string>
+				<string>http://theberrics.com/news/i-am-los-angeles-chase.html</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://theberrics.com/[^/]+/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

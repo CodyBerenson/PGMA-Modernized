@@ -1,0 +1,76 @@
+RE_CLEANUP_M3U8 = Regex('#.+?RESOLUTION=(?!1280x\d+).+?(\n)?.+?\.m3u8.*?\n')
+RE_FIX_RELATIVE = Regex('("|^)(?!https?:\/\/)([^"\n]+\.m3u8[^"\n]*)', Regex.MULTILINE)
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('#')[0].split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJSON(url)
+
+	return VideoClipObject(
+		title = json_obj['title'],
+		summary = json_obj['description'],
+		originally_available_at = Datetime.ParseDate(json_obj['datePublished']).date(),
+		duration = json_obj['duration'] * 1000,
+		thumb = Resource.ContentsOfURLWithFallback(url=json_obj['image']['path'])
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=HTTPLiveStreamURL(Callback(PlayVideo, url=url)))
+			],
+			video_resolution = 720,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+def PlayVideo(url, **kwargs):
+
+	json_obj = GetJSON(url)
+	m3u8_master_url = json_obj['m3u8']
+	m3u8_master_base_url = ''
+
+	if m3u8_master_url.startswith('/'):
+		m3u8_master_url = 'https://www.cnet.com' + m3u8_master_url
+
+	try:
+		m3u8_master = HTTP.Request(m3u8_master_url, follow_redirects=False).content
+	except Ex.RedirectError, e:
+		if 'Location' in e.headers:
+			m3u8_master = HTTP.Request(e.headers['Location']).content
+			m3u8_master_base_url = e.headers['Location'].rsplit('/', 1)[0]
+		else:
+			raise Ex.MediaNotAvailable
+
+	m3u8_master = RE_CLEANUP_M3U8.sub('', m3u8_master)
+	m3u8_master = RE_FIX_RELATIVE.sub('%s%s/%s' % ('\\1', m3u8_master_base_url, '\\2'), m3u8_master)
+
+	return m3u8_master
+
+####################################################################################################
+def GetJSON(url):
+
+	html = HTML.ElementFromURL(url)
+	json = html.xpath('//div[@data-video-player-options]/@data-video-player-options')
+
+	if len(json) < 1:
+		raise Ex.MediaNotAvailable
+
+	json_obj = JSON.ObjectFromString(json[0])
+
+	if 'playlist' in json_obj and json_obj['playlist'] is not None and len(json_obj['playlist']) > 0:
+		json_obj = json_obj['playlist'][0]
+	else:
+		raise Ex.MediaNotAvailable
+
+	return json_obj

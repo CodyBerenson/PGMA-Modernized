@@ -1,0 +1,136 @@
+VIDEO_INFO = 'http://teamcoco.com/api/5/apps/cvp/%s.xml'
+RE_BANDWIDTH = Regex('BANDWIDTH=(\d+)')
+FULL_EP_RES = [720]
+VIDEO_RES = [1080, 720, 480]
+
+RE_THUMB = Regex('"preview":"([^"]+)')
+RE_MEDIA_ID = Regex('"turnerMediaId":"([^"]+)')
+RE_TOKEN = Regex('"turnerMediaAuthToken":"([^"]+)')
+
+FULL_EP_INFO_URL = 'http://medium.ngtv.io/media/%s/desktop'
+FULL_EP_TOKEN_URL = 'http://token.ngtv.io/token/token_spe?format=json&path=/tbs/%s/*&accessTokenType=jws&accessToken=%s'
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	page = HTTP.Request(url).content
+	html = HTML.ElementFromString(page)
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	summary = html.xpath('//meta[@property="og:description"]/@content')[0]
+
+	thumb = RE_THUMB.search(page)
+
+	if thumb:
+		thumb = thumb.group(1)
+	else:
+		thumb = ''
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	if '/full-episode-' in url:
+
+		return [
+			MediaObject(
+				parts = [
+					PartObject(key=HTTPLiveStreamURL(Callback(PlayEpisode, url=url, res=res)))
+				],
+				video_resolution = res,
+				audio_channels = 2,
+				optimized_for_streaming = True
+			) for res in FULL_EP_RES
+		]
+
+	else:
+
+		return [
+			MediaObject(
+				parts = [
+					PartObject(key=Callback(PlayVideo, url=url, res=res))
+				],
+				container = Container.MP4,
+				video_codec = VideoCodec.H264,
+				video_resolution = res,
+				audio_codec = AudioCodec.AAC,
+				audio_channels = 2,
+				optimized_for_streaming = True
+			) for res in VIDEO_RES
+		]
+
+####################################################################################################
+@indirect
+def PlayEpisode(url, res, **kwargs):
+
+	if not '/full-episode-' in url:
+		raise Ex.MediaNotAvailable
+
+	page = HTTP.Request(url).content
+
+	media_id = RE_MEDIA_ID.search(page)
+	token = RE_TOKEN.search(page)
+
+	if not media_id or not token:
+		raise Ex.MediaNotAvailable
+
+	json_media_obj = JSON.ObjectFromURL(FULL_EP_INFO_URL % (media_id.group(1)))['media']['desktop']['bulkaes']
+	video_url = json_media_obj['url']
+	asset_id = json_media_obj['assetId']
+
+	json_token_obj = JSON.ObjectFromURL(FULL_EP_TOKEN_URL % (asset_id, token.group(1)))
+	video_url_token = json_token_obj['auth']['token']
+
+	full_ep_video_url = '%s?hdnts=%s' % (video_url, video_url_token)
+
+	return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(full_ep_video_url))
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res=1080, **kwargs):
+
+	video_id = GetVideoId(url)
+
+	if not video_id:
+		Log.Exception("Could not retrieve video_id in PlayVideo")
+		raise Ex.MediaExpired
+
+	xml = XML.ElementFromURL(VIDEO_INFO % (video_id), cacheTime=CACHE_1HOUR)
+
+	if len(xml.xpath('//files/file')) < 1:
+		raise Ex.MediaNotAvailable
+
+	hd_1080 = video_url = xml.xpath('//file[@bitrate="uhd"]/text()')
+	hd_720 = video_url = xml.xpath('//file[@bitrate="hd"]/text()')
+	sd_360 = video_url = xml.xpath('//file[@bitrate="embed"]/text()')
+
+	if res == 1080 and len(hd_1080) > 0:
+		video_url = hd_1080[0]
+	elif res in [1080, 720] and len(hd_720) > 0:
+		video_url = hd_720[0]
+	elif len(sd_360) > 0:
+		video_url = sd_360[0]
+	else:
+		raise Ex.MediaNotAvailable
+
+	return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def GetVideoId(url):
+
+	video_id = HTML.ElementFromURL(url, cacheTime=CACHE_1HOUR).xpath('//meta[@property="og:url"]/@content')
+
+	if len(video_id) > 0:
+		return video_id[0].split('/')[-1]
+	else:
+		return None

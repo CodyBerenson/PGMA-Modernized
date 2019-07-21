@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>iTunes Movie Trailers</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://trailers.apple.com/trailers/wb/greenlantern/</string>
+				<string>http://trailers.apple.com/trailers/universal/jasonbourne/</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^https?:\/\/(movie)?trailers\.apple\.com\/trailers\/[^\/]+\/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

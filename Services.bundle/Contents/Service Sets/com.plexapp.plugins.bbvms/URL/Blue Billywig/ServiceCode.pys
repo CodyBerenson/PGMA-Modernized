@@ -1,0 +1,119 @@
+XML_URL = 'http://%s.bbvms.com/mediaclip/%s.xml'
+MEDIA_URL = 'http://mm.%s.bbvms.com%s'
+
+####################################################################################################
+def NormalizeURL(url):
+
+	host = url.split('/')[2]
+	if 'ah.nl' in host:
+		url = url.replace('/#/', '/')
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	xml_url = CreateXmlURL(url)
+	xml = XML.ElementFromURL(xml_url)
+
+	title = xml.xpath('/media-clip/@title')[0]
+
+	try:
+		summary = xml.xpath('/media-clip/description/text()')[0].strip()
+	except:
+		summary = None
+
+	published = xml.xpath('/media-clip/date/@published')[0]
+	originally_available_at = Datetime.ParseDate(published).date()
+
+	duration = xml.xpath('/media-clip/@length')[0]
+	duration = int(float(duration) * 1000)
+
+	thumb = xml.xpath('/media-clip/thumbnails/thumbnail/@src')[0]
+	thumb = MEDIA_URL % (GetBbvmsHost(url), thumb)
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		originally_available_at = originally_available_at,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url, res='720'))],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = '720',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		),
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url, res='sd'))],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = 'sd',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res, **kwargs):
+
+	xml_url = CreateXmlURL(url)
+	xml = XML.ElementFromURL(xml_url)
+
+	hd = xml.xpath('/media-clip/assets/asset[@media-type="MP4_HD"]/@src')
+
+	if len(hd) > 0 and res == '720':
+		video_url = hd[0]
+	else:
+		video_url = xml.xpath('/media-clip/assets/asset[@media-type="MP4_MAIN"]/@src')[0]
+
+	video_url = MEDIA_URL % (GetBbvmsHost(url), video_url)
+
+	return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def CreateXmlURL(url):
+
+	bbvms_host = GetBbvmsHost(url)
+	bbvms_id = None
+
+	# Find the bbvms_id
+	if bbvms_host == 'allerhande':
+		html = HTML.ElementFromURL(url)
+		bbvms_id = html.xpath('//div[@id="video-container"]/@data-id')[0]
+	elif bbvms_host == 'gelderlander':
+		id = Regex('#(1\.\d+)').search(url).group(1)
+		json_obj = JSON.ObjectFromURL('http://www.gelderlander.nl/render/%s' % id)
+		bbvms_id = json_obj['url'].split('/')[-1].strip('.js')
+	elif bbvms_host == 'elsevier':
+		bbvms_id = Regex('#!clip/(\d+)').search(url).group(1)
+
+	if bbvms_host and bbvms_id:
+		return XML_URL % (bbvms_host, bbvms_id)
+
+	return None
+
+####################################################################################################
+def GetBbvmsHost(url):
+
+	host = url.split('/')[2]
+
+	if 'ah.nl' in host:
+		return 'allerhande'
+	elif 'gelderlander.nl' in host:
+		return 'gelderlander'
+	elif 'video.elsevier.nl' in host:
+		return 'elsevier'
+
+	return None

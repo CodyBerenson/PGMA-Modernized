@@ -1,0 +1,63 @@
+RE_DURATION = Regex('(?P<min>\d+) minutes (?P<sec>\d+) seconds')
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	html = HTML.ElementFromURL(url)
+
+	# Check to see if we have a video
+	video_url = html.xpath('//video/source[contains(@src, ".mp4")]/@src')
+
+	if len(video_url) < 1:
+		raise Ex.MediaNotAvailable
+
+	try: title = html.xpath('//div[@class="page-footing"]/h2/text()')[0]
+	except: title = html.xpath('//title/text()')[0]
+
+	summary = html.xpath('//meta[@name="description"]/@content')[0]
+	thumb = html.xpath('//video/@poster')[0]
+
+	try:
+		duration_text = html.xpath('//span[contains(text(), "Total Time")]/parent::p/text()')[0]
+		duration_dict = RE_DURATION.search(duration_text).groupdict()
+		duration = Datetime.MillisecondsFromString('%s:%s' % (duration_dict['min'], duration_dict['sec']))
+	except:
+		duration = None
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(
+					key = Callback(PlayVideo, url=url)
+				)
+			],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = 'sd',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	html = HTML.ElementFromURL(url)
+	video_url = html.xpath('//video/source[contains(@src, ".mp4")]/@src')
+
+	if len(video_url) < 1:
+		raise Ex.MediaNotAvailable
+
+	return IndirectResponse(VideoClipObject, key=video_url[0])

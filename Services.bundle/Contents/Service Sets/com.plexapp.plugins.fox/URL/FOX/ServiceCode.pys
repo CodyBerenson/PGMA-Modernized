@@ -1,0 +1,66 @@
+USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Safari/604.1.38'
+API_URL = 'https://api.fox.com/fbc-content/v1_4/video/%s'
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJSON(url)
+
+	show = json_obj['seriesName']
+	title = json_obj['name']
+	summary = json_obj['description']
+	thumb = json_obj['images']['still']['FHD']
+	duration = json_obj['durationInSeconds'] * 1000
+	season = int(json_obj['seasonNumber']) if json_obj['seasonNumber'] is not None else None
+	index = int(json_obj['episodeNumber']) if json_obj['episodeNumber'] is not None else None
+	originally_available_at = Datetime.ParseDate(json_obj['originalAirDate'])
+
+	return EpisodeObject(
+		show = show,
+		title = title,
+		summary = summary,
+		thumb = thumb,
+		duration = duration,
+		season = season,
+		index = index,
+		originally_available_at = originally_available_at
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			audio_channels = 2,
+			video_resolution = '1080',
+			optimized_for_streaming = True,
+			parts = [
+				PartObject(
+					key = HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+				)
+			]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	json_obj = GetJSON(url)
+
+	tpf_url = json_obj['videoRelease']['url']
+	json_obj = JSON.ObjectFromURL(tpf_url, headers={"User-Agent": USER_AGENT})
+	video_url = json_obj['playURL']
+
+	return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(url=video_url))
+
+####################################################################################################
+def GetJSON(url):
+
+	video_id = url.rstrip('/').split('/')[-1]
+	json_obj = JSON.ObjectFromURL(API_URL % (video_id), cacheTime=CACHE_1HOUR, headers={"User-Agent": USER_AGENT, "apikey": "abdcbed02c124d393b39e818a4312055"})
+
+	if json_obj['requiresAuth']:
+		raise Ex.MediaNotAvailable
+
+	return json_obj

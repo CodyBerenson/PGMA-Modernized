@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>RottenTomatoes</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.rottentomatoes.com/m/skyfall/trailers/11163570/</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://www.rottentomatoes.com/m/[^/]+/trailers?/</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

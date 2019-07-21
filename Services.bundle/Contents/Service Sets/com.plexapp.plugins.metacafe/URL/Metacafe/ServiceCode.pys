@@ -1,0 +1,97 @@
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('#')[0].split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		html = HTML.ElementFromURL(url, follow_redirects=False)
+	except Ex.RedirectError, e:
+		if 'Location' in e.headers:
+			if 'video-removed' in e.headers['Location']:
+				raise Ex.MediaExpired
+			elif 'family_filter' in e.headers['Location']:
+				raise Ex.MediaNotAvailable
+			else:
+				raise Ex.MediaNotAvailable
+		else:
+			raise Ex.MediaNotAvailable
+	except:
+		raise Ex.MediaNotAvailable
+
+	title = html.xpath('//meta[@property="og:title"]/@content')
+	summary = html.xpath('//meta[@property="og:description"]/@content')
+	thumb = html.xpath('//meta[@property="og:image"]/@content')
+	duration = html.xpath('//meta[@property="video:duration"]/@content')
+
+	if len(title) < 1 or len(summary) < 1 or len(thumb) < 1 or len(duration) < 1:
+		raise Ex.MediaNotAvailable
+
+	return VideoClipObject(
+		title = title[0],
+		summary = summary[0],
+		thumb = Resource.ContentsOfURLWithFallback(thumb[0]),
+		duration = int(duration[0]) * 1000
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = '720',
+			audio_codec = AudioCodec.AAC,
+			optimized_for_streaming = True,
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url))
+			]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	try:
+		html = HTML.ElementFromURL(url, follow_redirects=False)
+	except Ex.RedirectError, e:
+		if 'Location' in e.headers:
+			if 'video-removed' in e.headers['Location']:
+				raise Ex.MediaExpired
+			elif 'family_filter' in e.headers['Location']:
+				raise Ex.MediaNotAvailable
+			else:
+				raise Ex.MediaNotAvailable
+		else:
+			raise Ex.MediaNotAvailable
+	except:
+		raise Ex.MediaNotAvailable
+
+	flash_vars = html.xpath('//object/param[@id="flashVars"]/@value')
+
+	if len(flash_vars) < 1:
+		raise Ex.MediaNotAvailable
+
+	json = flash_vars[0].split('mediaData=')[-1].split('&')[0]
+	json = String.Unquote(json)
+	json_obj = JSON.ObjectFromString(json)
+
+	if not 'MP4' in json_obj:
+		raise Ex.MediaNotAvailable
+
+	video_url = json_obj['MP4']['mediaURL']
+
+	try:
+		headers = HTTP.Request(video_url, follow_redirects=False).headers
+	except Ex.HTTPError, e:
+		if e.code == 404:
+			raise Ex.MediaNotAvailable
+	except Ex.RedirectError, e:
+		if 'Location' in e.headers:
+			video_url = e.headers['Location']
+
+	return IndirectResponse(VideoClipObject, key=video_url)

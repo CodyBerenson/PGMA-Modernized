@@ -1,0 +1,66 @@
+import re
+PLAYLIST = 'http://www.teamhww.nl/wp-content/themes/teamHWW/playlist.php?id=%s'
+XSPF_NS = {'xspf':'http://xspf.org/ns/0/'}
+
+####################################################################################################
+def TestURLs():
+  test_urls = []
+
+  for url in HTML.ElementFromURL('http://www.teamhww.nl/category/videos/').xpath('//section[@id="PostRoll"]/article[position() < 4]/a/h1/parent::a'):
+    test_urls.append( url.get('href') )
+
+  return test_urls
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+  page = HTML.ElementFromURL(url)
+
+  title = page.xpath('//section[@id="MainContent"]//h1//text()')[0]
+  summary = '\n\n'.join( page.xpath('//section[@id="MainContent"]//small/following-sibling::p[not(@class)]//text()') )
+  thumb = page.xpath('//img[@id="videocover"]')[0].get('src')
+  if not thumb.startswith('http'):
+    thumb = 'http://www.teamhww.nl%s' % thumb
+
+  try:
+    date = page.xpath('//section[@id="MainContent"]//small')[0].text
+    date = re.search('([0-9]{2}/[0-9]{2}/[0-9]{4})', date).group(1)
+    originally_available_at = Datetime.ParseDate(date).date()
+  except:
+    originally_available_at = None
+
+  return VideoClipObject(
+    title = title,
+    summary = summary,
+    originally_available_at = originally_available_at,
+    thumb = thumb
+  )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+  return [
+    MediaObject(
+      video_codec = VideoCodec.H264,
+      audio_codec = AudioCodec.AAC,
+      container = Container.MP4,
+      video_resolution = 'sd',
+      audio_channels = 2,
+      optimized_for_streaming = True,
+      bitrate = 1600,
+      parts = [PartObject(key=Callback(PlayVideo, url=url))]
+    )
+  ]
+
+####################################################################################################
+def PlayVideo(url, **kwargs):
+
+  page = HTTP.Request(url).content
+  id = re.search("showVideo\('([^']+)','([^']+)'", page)
+
+  playlist = HTTP.Request(PLAYLIST % id.group(2)).content
+  playlist = re.sub('&(?!amp;)', '&amp;', playlist)
+  playlist = XML.ElementFromString(playlist)
+
+  url = playlist.xpath('//xspf:track/xspf:identifier[text()="' + id.group(1) + '"]/../xspf:location', namespaces=XSPF_NS)[0].text
+  return Redirect(url)

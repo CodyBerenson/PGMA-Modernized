@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Dailymotion</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>https://www.dailymotion.com/video/x6ymb_hamster-dance_animals</string>
+				<string>https://www.dailymotion.com/video/x27y2r_wow-dance-2_videogames</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^(?!.*/json/)https?://(www\.)?dailymotion.com/((embed/)?video/|swf/(video/)?|.+#video(Id)?=).+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

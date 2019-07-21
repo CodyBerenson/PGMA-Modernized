@@ -1,0 +1,129 @@
+HTTP_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 7_0 like Mac OS X) AppleWebKit/537.51.1 (KHTML, like Gecko) Version/7.0 Mobile/11A465 Safari/9537.53'
+}
+
+RE_MEDIA_SRC = Regex('<(?:audio|video).+src="([^"]+\.mp(3|4))"')
+
+####################################################################################################
+def NormalizeURL(url):
+
+    return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    try:
+        html = HTML.ElementFromURL(url, headers=HTTP_HEADERS, follow_redirects=False)
+    except Ex.RedirectError, e:
+        raise Ex.MediaExpired
+    except:
+        raise Ex.MediaNotAvailable
+
+    if len(html.xpath('//div[@id="video_container"]//*[contains(text(), "Sorry, this media is only available to UK users")]')) > 0:
+        raise Ex.MediaGeoblocked
+
+    title = html.xpath('//div[@id="video_container"]/h1/text()')[0]
+    summary = html.xpath('//div[@id="mediainfo_container"]/text()')[0]
+    thumb = html.xpath('//meta[@property="og:image"]/@content')[0]
+
+    return VideoClipObject(
+        title = title,
+        summary = summary,
+        thumb = thumb
+    )
+
+####################################################################################################
+@deferred
+def MediaObjectsForURL(url):
+
+    try:
+        page = HTTP.Request(url, headers=HTTP_HEADERS, follow_redirects=False).content
+    except Ex.RedirectError, e:
+        raise Ex.MediaExpired
+    except:
+        raise Ex.MediaNotAvailable
+
+    media_src = RE_MEDIA_SRC.search(page)
+
+    if not media_src:
+        raise Ex.MediaNotAvailable
+
+    if media_src.group(2) == '4':
+
+        return [
+            MediaObject(
+                container = Container.MP4,
+                video_codec = VideoCodec.H264,
+                video_resolution = '432',
+                audio_codec = AudioCodec.AAC,
+                audio_channels = 2,
+                optimized_for_streaming = True,
+                parts = [
+                    PartObject(key=Callback(PlayMedia, url=url))
+                ]
+            )
+        ]
+
+    elif media_src.group(2) == '3':
+
+        return [
+            MediaObject(
+                container = Container.MP3,
+                audio_codec = AudioCodec.MP3,
+                audio_channels = 2,
+                optimized_for_streaming = True,
+                parts = [
+                    PartObject(key=Callback(PlayMedia, url=url))
+                ]
+            )
+        ]
+
+####################################################################################################
+@indirect
+def PlayMedia(url, **kwargs):
+
+    try:
+        page = HTTP.Request(url, headers=HTTP_HEADERS, follow_redirects=False).content
+    except Ex.RedirectError, e:
+        raise Ex.MediaExpired
+    except:
+        raise Ex.MediaNotAvailable
+
+    media_src = RE_MEDIA_SRC.search(page)
+
+    if not media_src:
+        raise Ex.MediaNotAvailable
+
+    if media_src.group(2) == '4':
+        return IndirectResponse(VideoClipObject, key=media_src.group(1))
+    elif media_src.group(2) == '3':
+        return IndirectResponse(TrackObject, key=media_src.group(1))
+
+####################################################################################################
+PlayVideo = PlayMedia
+
+####################################################################################################
+def TestURLs():
+
+    test_urls = []
+
+    # Request a page which should contain a collection of videos
+    page = HTML.ElementFromURL("http://www.absoluteradio.co.uk/video/tags/artist,interview/")
+    results = page.xpath("//div[@id='main_content']//p[@class='clip_result']")
+    for item in results:
+
+        url = item.xpath(".//a")[0].get('href')
+        if url.startswith("http://") == False:
+            url = "http://www.absoluteradio.co.uk" + url
+
+        # Ensure that we don't grab any audio sessions...
+        description = item.xpath(".//span[@class='result_desc']/text()")[0].strip()
+        if description.find("Audio") != -1:
+            continue
+
+        test_urls.append(url.replace(' ', '+'))
+
+        if len(test_urls) > 2:
+            break
+
+    return test_urls

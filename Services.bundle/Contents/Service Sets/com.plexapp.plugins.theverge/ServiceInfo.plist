@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>The Verge</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://(www\.)?theverge.com/\d{4}/\d{1,2}/\d{1,2}/\d+/.+</string>
+			</array>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.theverge.com/2013/10/16/4846292/wearables-iphone-cutbacks-and-raiders-of-the-lost-ark-90sotv</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

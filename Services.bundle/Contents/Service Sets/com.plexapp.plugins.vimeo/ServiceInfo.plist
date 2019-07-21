@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Vimeo</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>https://vimeo.com/23864381</string>
+				<string>https://vimeo.com/channels/staffpicks/24002628</string>
+				<string>https://player.vimeo.com/video/42601218</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^https?:\/\/(www\.)?vimeo\.com\/.*\d{6,}</string>
+				<string>^(https?:)?\/\/player\.vimeo\.com\/video\/\d{6,}</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

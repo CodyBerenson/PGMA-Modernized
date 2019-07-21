@@ -1,0 +1,121 @@
+RSS_URL = 'http://rss.videostrip.com/%s/items:1/titlesearch:true/keywords:%s#%s'
+RSS_NS = {'media': 'http://search.yahoo.com/mrss/'}
+JS_URL = 'http://load01.videostrip.com/serve_cad.php?cnti_key=%s&play_key=%s&startmode=autostart&playerwidth=640&playerheight=480'
+
+RE_IDS = Regex('cnti_key=(\d+)&play_key=(\d+)')
+RE_NOT_ALPHANUM = Regex('\W+\-')
+RE_WHITESPACE = Regex('\s+')
+RE_IPAD_URL = Regex('"ipadUrl": "(?P<url>[^"]+)"')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	rss_url = CreateRssURL(url)
+	item = XML.ElementFromURL(rss_url).xpath('//item')
+
+	if len(item) < 1:
+		return None
+
+	title = item[0].xpath('./media:content/media:title/text()', namespaces=RSS_NS)[0]
+
+	try:
+		summary = item[0].xpath('./description/text()')[0]
+		summary = HTML.ElementFromString('<div>%s</div>' % summary).xpath('//p[1]/text	()')[0]
+	except:
+		summary = None
+
+	pubDate = item[0].xpath('./pubDate/text()')[0]
+	originally_available_at = Datetime.ParseDate(pubDate).date()
+
+	duration = item[0].xpath('./media:content/@duration', namespaces=RSS_NS)[0]
+	duration = int(float(duration) * 1000)
+
+	thumb = item[0].xpath('./media:content/media:thumbnail/@url', namespaces=RSS_NS)[0]
+	thumb = thumb.replace('100x75', '320x180').replace('/png/', '/jpg/')
+
+	host = url.split('/')[2]
+	if 'ad.nl' in host:
+		source_title = 'AD'
+	elif 'parool.nl' in host:
+		source_title = 'Parool'
+	elif 'trouw.nl' in host:
+		source_title = 'Trouw'
+	elif 'volkskrant.nl' in host:
+		source_title = 'Volkskrant'
+	else:
+		source_title = 'Videostrip'
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		originally_available_at = originally_available_at,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb),
+		source_title = source_title
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url))],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = 'sd',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	rss_url = CreateRssURL(url)
+	cnti_key = rss_url.split('#')[1]
+	play_key = rss_url.split('/')[3]
+
+	js = HTTP.Request(JS_URL % (cnti_key, play_key)).content
+	video_url = RE_IPAD_URL.search(js).group('url')
+
+	return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def CreateRssURL(url):
+
+	page = HTTP.Request(url).content
+	html = HTML.ElementFromString(page)
+	script_src = html.xpath('//script[contains(@src, "cnti_key")]/@src')
+
+	if len(script_src) < 1:
+		ids = RE_IDS.search(page)
+	else:		
+		ids = RE_IDS.search(script_src[0])
+
+	if not ids:
+		raise Ex.MediaNotAvailable
+
+	(cnti_key, play_key) = ids.group(1, 2)
+
+	host = url.split('/')[2]
+	if 'ad.nl' in host:
+		title = html.xpath('//title/text()')[0].strip().rsplit(' - AD.nl')[0]
+	elif 'parool.nl' in host:
+		title = html.xpath('//title/text()')[0].strip().rsplit(' - ', 2)[0]
+	elif 'trouw.nl' in host:
+		title = html.xpath('//title/text()')[0].strip().rsplit(' - Video')[0]
+	elif 'volkskrant.nl' in host:
+		title = html.xpath('//title/text()')[0].strip().rsplit(' - ', 2)[0]
+
+	title = String.StripDiacritics(title)
+	title = RE_NOT_ALPHANUM.sub(' ', title).strip().lower()
+	keywords = RE_WHITESPACE.sub(',', title)
+
+	return RSS_URL % (play_key, keywords, cnti_key)

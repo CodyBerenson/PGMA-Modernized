@@ -1,0 +1,56 @@
+RE_EMBED_CODE = Regex("embedCode=(?P<embed>[^&]*)&")
+BASE_URL = 'http://www.newsy.com/'
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    page = HTML.ElementFromURL(url)
+
+    title = page.xpath('//meta[@property="og:title"]/@content')[0]
+    description = page.xpath('//meta[@property="og:description"]/@content')[0]
+    tags = page.xpath('//meta[@name="keywords"]/@content')[0].split(',')
+    tags = [ tag.strip() for tag in tags ]
+
+    thumb = page.xpath('//meta[@property="og:image"]/@content')[0]
+    if thumb.startswith("/"):
+        thumb = BASE_URL + thumb
+
+    return VideoClipObject(
+        title = title,
+        summary = description,
+        thumb = Resource.ContentsOfURLWithFallback(thumb),
+        tags = tags
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+        MediaObject(
+            video_resolution = 720,
+            audio_channels = 2,
+            parts = [
+                PartObject(
+                    key = HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+                )
+            ]
+        )
+    ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+    page = HTML.ElementFromURL(url)
+
+    # Determine the embed_code of the associated video
+    try:
+        video_src = page.xpath('//meta[@name="twitter:player"]/@content')[0]
+        embed_code = RE_EMBED_CODE.search(video_src).group('embed')
+    except:
+        raise Ex.MediaNotAvailable
+
+    return IndirectResponse(
+    	VideoClipObject,
+    	key = HTTPLiveStreamURL(String.Decode('aHR0cDovL3BsYXllci5vb3lhbGEuY29tL3BsYXllci9pcGFkLyVzLm0zdTg@anM9MQ__') % embed_code)
+    )

@@ -1,0 +1,62 @@
+XSPF_URL = 'https://tweakers.net/video/s1playlist/%s/playlist.xspf'
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('#')[0].split('?')[0].replace('/player/', '/')
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	video_id = url.split('/video/')[-1].split('/')[0]
+	json_obj = JSON.ObjectFromURL(XSPF_URL % (video_id), encoding='iso-8859-1')['items'][0]
+
+	title = json_obj['title']
+	summary = json_obj['description']
+	duration = json_obj['duration']
+	thumb = json_obj['poster']
+
+	return VideoClipObject(
+		title = title,
+		summary = String.StripTags(summary),
+		duration = int(duration),
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = res,
+			audio_codec = AudioCodec.AAC,
+			optimized_for_streaming = True,
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, res=res))
+			]
+		) for res in (1080, 720, 360)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res=1080, **kwargs):
+
+	video_id = url.split('/video/')[-1].split('/')[0]
+	json_obj = JSON.ObjectFromURL(XSPF_URL % (video_id), encoding='iso-8859-1')['items'][0]
+	available_versions = []
+
+	for version in json_obj['locations']['progressive']:
+		available_versions.append(version['height'])
+
+	if len(available_versions) < 1:
+		raise Ex.MediaNotAvailable
+
+	closest = min((abs(res - int(i)), i) for i in available_versions)[1]
+
+	for version in json_obj['locations']['progressive']:
+		if version['height'] == closest:
+			video_url = version['sources'][0]['src']
+
+	return IndirectResponse(VideoClipObject, key=video_url)

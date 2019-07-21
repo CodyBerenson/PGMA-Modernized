@@ -1,0 +1,114 @@
+META_URL = 'http://media.mtvnservices.com/pmt/e1/access/index.html?uri=%s&configtype=edge'
+URI = 'mgid:arc:episode:southparkstudios.com:%s'
+
+RE_B = Regex('(&__b__=)\d+')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = JSON.ObjectFromURL(META_URL % (GetURI(url)), cacheTime=CACHE_1HOUR, headers={'Referer': url})['feed']
+
+	# Check for geoblocks or errors
+	if not 'items' in json_obj:
+
+		if 'errorSlateURL' in json_obj and 'video_loc_' in json_obj['errorSlateURL']:
+			Log('Media Geoblocked')
+			raise Ex.MediaGeoblocked
+		else:
+			Log('Media Not Available')
+			raise Ex.MediaNotAvailable
+
+	duration = 0
+
+	for item in json_obj['items']:
+		duration += item['duration']
+
+	return VideoClipObject(
+		title = json_obj['title'],
+		summary = json_obj['description'],
+		duration = int(duration * 1000),
+		thumb = Resource.ContentsOfURLWithFallback(url=json_obj['image']['url'].split('?')[0]),
+		originally_available_at = Datetime.ParseDate(json_obj['items'][0]['pubDate'])
+	)
+
+####################################################################################################
+@deferred
+def MediaObjectsForURL(url):
+
+	json_obj = JSON.ObjectFromURL(META_URL % (GetURI(url)), cacheTime=CACHE_1HOUR, headers={'Referer': url})['feed']
+	part_objects = []
+
+	# Check for geoblocks or errors
+	if not 'items' in json_obj:
+
+		if 'errorSlateURL' in json_obj and 'video_loc_' in json_obj['errorSlateURL']:
+			Log('Media Geoblocked')
+			raise Ex.MediaGeoblocked
+		else:
+			Log('Media Not Available')
+			raise Ex.MediaNotAvailable
+
+	for item in json_obj['items']:
+
+		if item['duration'] < 8:
+			continue
+
+		media_url = item['group']['content'].replace('{device}', 'iPad') + '&format=json'
+		if media_url.startswith('//'):
+			media_url = 'https:' + media_url
+
+		json_obj = JSON.ObjectFromURL(media_url, cacheTime=CACHE_1HOUR)
+
+		if not 'rendition' in json_obj['package']['video']['item'][0]:
+			continue
+
+		try:
+			part_hls_url = RE_B.sub(r'\g<1>5000', json_obj['package']['video']['item'][0]['rendition'][0]['src'])
+			part_duration = json_obj['package']['video']['item'][0]['rendition'][0]['duration']
+
+			part_objects.append(
+				PartObject(
+					key = HTTPLiveStreamURL(part_hls_url),
+					duration = int(part_duration)*1000
+				)
+			)
+		except:
+			continue
+
+	if len(part_objects) < 1:
+		raise Ex.MediaNotAvailable
+
+	return [
+		MediaObject(
+			parts = part_objects,
+			video_resolution = 720,
+			audio_channels = 2
+		)
+	]
+
+####################################################################################################
+def GetURI(url):
+
+	try:
+		html = HTML.ElementFromURL(url, cacheTime=CACHE_1HOUR)
+	except Ex.HTTPError, e:
+		if e.code == 404:
+			Log('HTTP 404 Not Found for URL: %s' % url)
+			raise Ex.MediaNotAvailable
+		else:
+			raise Ex.MediaNotAvailable
+	except:
+		raise Ex.MediaNotAvailable
+
+	mgid = html.xpath('//body[@data-now-playing]/@data-now-playing')
+
+	if len(mgid) < 1:
+		Log('mgid xpath failed')
+		raise Ex.MediaNotAvailable
+
+	return URI % (mgid[0])

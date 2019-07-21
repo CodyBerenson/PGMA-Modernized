@@ -1,0 +1,69 @@
+RE_EMBED_SWF = Regex('embedSWF\("([^"]+)')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	xml = GetXML(url)
+
+	title = xml.xpath('//meta/property[@name="title"]/@value')[0]
+	summary = xml.xpath('//meta/property[@name="description"]/@value')[0]
+	duration = int(float(xml.xpath('//media/property[@name="duration"]/@value')[0])*1000)
+	thumb = xml.xpath('//keyframe/@url')[0]
+
+	if thumb.startswith('/'):
+		host = url.split('/')[2]
+		thumb = 'http://%s%s' % (host, thumb)
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = duration,
+		thumb = thumb
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url))],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = 'sd',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	xml = GetXML(url)
+	video_url = xml.xpath('//media/property[@name="media"]/@value')[0]
+
+	if video_url.startswith('/'):
+		host = url.split('/')[2]
+		video_url = 'http://%s%s' % (host, video_url)
+
+	return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def GetXML(url):
+
+	data = HTTP.Request(url).content
+	swf_url = RE_EMBED_SWF.search(data)
+
+	if not swf_url:
+		raise Ex.MediaNotAvailable
+
+	xml_url = swf_url.group(1).replace('.swf', '.xml')
+	xml = XML.ElementFromURL(xml_url)
+
+	return xml

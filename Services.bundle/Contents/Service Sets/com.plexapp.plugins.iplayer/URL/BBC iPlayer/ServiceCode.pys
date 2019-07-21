@@ -1,0 +1,210 @@
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.115 Safari/537.36'}
+
+RE_PID = Regex('iplayer/episode/([^/$]{8})')
+RE_VPID = Regex('\"versions\":\[\{\"id\" *: *\"(.+?)\"')
+
+####################################################################################################
+def NormalizeURL(url):
+
+    return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    pid = RE_PID.findall(url)[0]
+    programme = JSON.ObjectFromURL('https://www.bbc.co.uk/programmes/%s.json' % (pid), headers=HTTP_HEADERS)['programme']
+
+    if 'image' in programme and 'pid' in programme['image'] and programme['image']['pid']:
+        thumb = 'https://ichef.bbci.co.uk/programmeimages/%s/%s_640_360.jpg' % (programme['image']['pid'], pid)
+    else:
+        thumb = 'https://node2.bbcimg.co.uk/iplayer/images/episode/%s_640_360.jpg' % (pid)
+
+    if 'long_synopsis' in programme and programme['long_synopsis']:
+        summary = programme['long_synopsis']
+    elif 'medium_synopsis' in programme and programme['medium_synopsis']:
+        summary = programme['medium_synopsis']
+    elif 'short_synopsis' in programme and programme['short_synopsis']:
+        summary = programme['short_synopsis']
+    else:
+        summary = ''
+
+    if 'first_broadcast_date' in programme and programme['first_broadcast_date']:
+        originally_available_at = Datetime.ParseDate(programme['first_broadcast_date']).date()
+    else:
+        originally_available_at = None
+
+    duration = programme['versions'][0]['duration'] if programme['versions'][0]['duration'] else 0
+
+    for version in programme['versions']:
+        if version['types'][0] == 'iPlayer version':
+            duration = version['duration'] if version['duration'] else duration
+            break
+
+    if 'parent' in programme:
+        parent_programme = programme['parent']['programme']
+
+        if parent_programme['type'] in ('series', 'episode'):
+            # Create an EpisodeObject...
+            show_title = parent_programme['parent']['programme']['title'] if 'parent' in parent_programme else parent_programme['title']
+            episode_title = programme['display_title']['subtitle']
+
+            try: season = parent_programme['position']
+            except: season = None
+
+            try: episode = programme['position']
+            except: episode = None
+
+            return EpisodeObject(
+                show = show_title,
+                title = episode_title,
+                season = season,
+                index = episode,
+                summary = summary,
+                originally_available_at = originally_available_at,
+                duration = duration * 1000,
+                thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+            )
+
+        elif programme['parent']['programme']['type'] == 'brand':
+            # Create a VideoClipObject...
+            title = programme['display_title']['title']
+
+            return VideoClipObject(
+                title = title,
+                summary = summary,
+                originally_available_at = originally_available_at,
+                duration = duration * 1000,
+                thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+            )
+
+    elif 'categories' in programme:
+        if programme['categories'] and len(programme['categories']) > 0:
+
+            for category in programme['categories']:
+                # If this is a film...
+                if category['title'] == 'Films':
+                    # Create a MovieObject...
+                    title = programme['display_title']['title']
+
+                    return MovieObject(
+                        title = title,
+                        summary = summary,
+                        originally_available_at = originally_available_at,
+                        duration = duration * 1000,
+                        thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+                    )
+
+                else:
+                    # Create a VideoClipObject...
+                    title = programme['display_title']['title']
+
+                    return VideoClipObject(
+                        title = title,
+                        summary = summary,
+                        originally_available_at = originally_available_at,
+                        duration = duration * 1000,
+                        thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+                    )
+
+        else:
+            title = programme['title']
+
+            return VideoClipObject(
+                title = title,
+                summary = summary,
+                originally_available_at = originally_available_at,
+                duration = duration * 1000,
+                thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+            )
+
+####################################################################################################
+@deferred
+def MediaObjectsForURL(url):
+
+    try:
+        content = HTTP.Request(url).content
+        vpid = RE_VPID.search(content).groups()[0]
+    except:
+        raise Ex.MediaNotAvailable
+
+    media_selector_url = 'http://open.live.bbc.co.uk/mediaselector/5/select/version/2.0/format/json/mediaset/iptv-all/vpid/%s' % (vpid)
+
+    return [
+        MediaObject(
+            protocol = 'hls',
+            container = 'mpegts',
+            video_codec = VideoCodec.H264,
+            video_resolution = '720',
+            audio_codec = AudioCodec.AAC,
+            video_frame_rate = 25,
+            audio_channels = 2,
+            optimized_for_streaming = True,
+            parts = [
+                PartObject(
+                    key = Callback(PlayVideo, post_url=media_selector_url, media_selector_url=media_selector_url, ext='m3u8')
+                )
+            ]
+        )
+    ]
+    
+    return mo
+
+####################################################################################################
+@indirect
+def PlayVideo(media_selector_url='', **kwargs):
+
+    if media_selector_url == '':
+        raise Ex.MediaNotAvailable
+
+    try:
+        stream_details = HTTP.Request(media_selector_url, cacheTime=0).content
+        stream_details = JSON.ObjectFromString(stream_details)
+    except:
+        raise Ex.MediaGeoblocked
+
+    hls_url = GetMaxBitrateURL(stream_details)
+        
+    return IndirectResponse(
+        VideoClipObject, key=HTTPLiveStreamURL(url=hls_url)
+    )
+
+####################################################################################################
+def GetMaxBitrateURL(stream_details):
+
+    max_bitrate_found = 0
+    priority = 1000000 # Some huge number to get it started
+    url = None
+
+    if 'media' not in stream_details:
+        return url
+
+    for media in stream_details['media']:
+        if media['kind'] == 'video':
+            if int(media['bitrate']) > max_bitrate_found:
+                for connection in media['connection']:
+                    if (int(connection['priority']) < priority) and ('transferFormat' in connection and 'hls' in connection['transferFormat']):
+                        url = connection['href']
+                        if "akamaized" in url:
+        			        continue
+                        max_bitrate_found = int(media['bitrate'])
+                        priority = int(connection['priority'])
+
+    return url
+
+####################################################################################################
+def TestURLs():
+
+    test_urls = []
+    data = HTML.ElementFromURL('https://www.bbc.co.uk/iplayer')
+
+    for item in data.xpath('//div[contains(@class, "most-popular")]//li/a'):
+        video_url = item.get('href')
+        if video_url.startswith('/'):
+            video_url = 'https://www.bbc.co.uk' + video_url
+
+            test_urls.append(video_url)
+
+        if len(test_urls) > 3:
+            break
+
+    return test_urls

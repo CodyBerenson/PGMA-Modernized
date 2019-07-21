@@ -1,0 +1,31 @@
+[
+	{
+		"id": "onlyfree",
+		"type": "bool",
+		"label": "Visa endast program som är gratis",
+		"default": "true",
+		"secure": "true"
+	},
+	{
+		"id": "premium",
+		"type": "bool",
+		"label": "Logga in",
+		"default": "false",
+		"secure": "true"
+	},
+	{
+		"id": "email",
+		"type": "text",
+		"label": "Användarnamn",
+		"default": "",
+		"secure": "true"
+	},
+	{
+		"id": "password",
+		"type": "text",
+		"option": "hidden",
+		"label": "Lösenord",
+		"default": "",
+		"secure": "true"
+	}
+]

@@ -1,0 +1,119 @@
+JSON_VIDEO_DATA = 'http://player.ooyala.com/sas/player_api/v1/authorization/embed_code/ppbnY65tdYh_HxFfIkVstq2Iq_oQ/%s?domain=player.ooyala.com&supportedFormats=mp4'
+RE_VIDEO_ID = Regex('VideoContext\.addVideos.+?"provider_video_id":"([^"]+)"')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		html = HTML.ElementFromURL(url)
+	except Ex.BadStatusLine, e:
+		Log("Could not fetch %s" % (url))
+	except Ex.HTTPError, e:
+		Log("Could not fetch %s, code %d" % (url, e.code))
+
+	yt_iframe = html.xpath('//iframe[contains(@src, "youtube.com/embed/")]/@src')
+	if len(yt_iframe) == 1:
+		return URLService.MetadataObjectForURL(yt_iframe[0])
+
+	ooyala = html.xpath('//script[contains(text(), "provider_video_id")]')
+	if len(ooyala) < 1:
+		raise Ex.MediaNotAvailable
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+
+	summary = None
+	try:
+		summary = ''.join(html.xpath('//div[contains(@class, "article-body")]/p[position()=1]//text()'))
+	except:
+		pass
+
+	if not summary:
+		try:
+			summary = ''.join(html.xpath('//div[contains(@class, "description")]/p[position()=2]//text()'))
+		except:
+			pass
+
+	if not summary:
+		summary = html.xpath('//meta[@property="og:description"]/@content')[0]
+
+	try:
+		date = Datetime.ParseDate(h.xpath('//span[@class="publish-date"]/time/text()')[0])
+	except:
+		date = None
+
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0]
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		originally_available_at = date,
+		thumb = thumb
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(
+					key = Callback(PlayVideo, url=url, bitrate=str(bitrate))
+				)
+			],
+			bitrate = bitrate,
+			container = Container.MP4,
+			video_resolution = resolution,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		) for bitrate, resolution in [(4000, '1080'), (1700, '720'), (1000, '540'), (600, '360')]
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, bitrate=4000, **kwargs):
+
+	data = HTTP.Request(url).content
+	html = HTML.ElementFromString(data)
+
+	video_id = html.xpath('//meta[@property="og:video"]/@content')
+
+	if len(video_id) < 1:
+
+		video_id = RE_VIDEO_ID.search(data)
+
+		if not video_id:
+			raise Ex.MediaNotAvailable
+		else:
+			video_id = video_id.group(1)
+
+	else:
+		video_id = video_id[0].split('embedCode=')[-1].split('&')[0]
+
+	streams = JSON.ObjectFromURL(JSON_VIDEO_DATA % video_id)['authorization_data'][video_id]['streams']
+	available_bitrates = []
+
+	for video in streams:
+		available_bitrates.append(video['video_bitrate'])
+
+	closest = min((abs(int(bitrate) - int(i)), i) for i in available_bitrates)[1]
+
+	for video in streams:
+		if closest == video['video_bitrate']:
+			format = video['url']['format']
+			video_url = video['url']['data']
+			break
+
+	if format and video_url:
+		if format == 'encoded':
+			video_url = String.Base64Decode(video_url)
+
+		return IndirectResponse(VideoClipObject, key=video_url)
+	else:
+		raise Ex.MediaNotAvailable

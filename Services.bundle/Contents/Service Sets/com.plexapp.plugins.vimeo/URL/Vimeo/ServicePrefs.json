@@ -1,0 +1,18 @@
+[
+  {
+    "id":"email",
+    "type":"text",
+    "label":"Email",
+    "default":"",
+    "secure":"true"
+  },
+
+  {
+    "id":"password",
+    "type":"text",
+    "option":"hidden",
+    "label":"Password",
+    "default":"",
+    "secure":"true"
+  }
+]

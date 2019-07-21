@@ -1,0 +1,121 @@
+NAMESPACES = {"a":"http://www.w3.org/2001/SMIL20/Language", "tp":"http://xml.theplatform.com/mps/metadata/content/custom"}
+SMIL_URL = "http://release.theplatform.com/content.select?format=SMIL&pid=%s&Embedded=True&Tracking=True"
+
+#########################################################################################
+def NormalizeURL(url):
+	return url
+
+#########################################################################################
+def MetadataObjectForURL(url):
+	smil = GetSMIL(url)
+	details = GetSRC(smil)
+
+	title = details.get('title')
+	summary = details.get('abstract')
+
+	try:
+		duration = int(details.get('dur').strip('ms'))
+	except:
+		duration = 0
+
+	try:
+		show_title = details.get('tp:Show', namespaces=NAMESPACES)
+		season = int(details.get('tp:Season', namespaces=NAMESPACES))
+		episode = int(details.get('tp:Episode', namespaces=NAMESPACES))
+
+		return EpisodeObject(
+			title = title,
+			summary = summary,
+			duration = duration,
+			show = show_title,
+			season = season, 
+			index = episode
+		)
+	except:
+		return VideoClipObject(
+			title = title,
+			summary = summary,
+			duration = duration
+		)
+
+#########################################################################################   
+def MediaObjectsForURL(url):
+	return [
+		MediaObject(
+			video_resolution = "480",
+			audio_channels = 2,
+			parts = [PartObject(key=Callback(PlayVideo, url=url))]
+		)
+	]
+
+#########################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+	smil = GetSMIL(url)
+
+	source = GetSRC(smil).get('src')
+
+	try:
+		clip = source.split("<break>")[1]
+		player = source.split("<break>")[0]
+	except:
+		clip = source.split("/video/")
+		player = source.split("/video/")[0]
+		clip = "/video/" + clip[-1]
+
+	if clip.endswith(".mp4"):
+		clip = "MP4:" + clip
+	else:
+		clip = clip.replace(".flv", "")
+
+	return IndirectResponse(VideoClipObject, key=RTMPVideoURL(url=player, clip=clip))
+
+#########################################################################################
+def GetSMIL(url):
+	pID = url.split('?releasePID=')[1]
+	smil = XML.ElementFromURL(SMIL_URL % pID)
+	return smil
+
+#########################################################################################
+def GetSRC(smil):
+	src_list = smil.xpath('//a:ref', namespaces=NAMESPACES)
+	if src_list[0].get('src') == "Unavailable.flv":
+		if src_list[0].get('abstract') == "You are not in a geographic region that has access to this content.":
+			# content is geo blocked
+			raise Ex.MediaGeoblocked
+		else:
+			# just a general failure of the media not being available
+			raise Ex.MediaNotAvailable
+
+	if len(src_list) == 1:
+		return src_list[0]
+	else:
+		for ref in src_list:
+			if "pfadx///video" in ref.get('src'):
+				pass
+			elif ref.get('src').startswith('rtmp'):
+				return ref
+			else:
+				return ref
+	return None
+
+#########################################################################################
+def TestURLs():
+	test_urls = []
+	entries = JSON.ObjectFromURL("http://feeds.theplatform.com/ps/JSON/PortalService/2.2/getCategoryList?PID=EJZUqE_dB8XeUUgiJBDE37WER48uEQCY&startIndex=1&endIndex=500&query=hasReleases&query=CustomText|PlayerTag|z/Slice%20Player%20-%20New%20Video%20Center&field=airdate&field=fullTitle&field=author&field=description&field=PID&field=thumbnailURL&field=title&contentCustomField=title&&contentCustomField=PID&field=ID&field=parent")
+
+	for entry in entries['items']:
+		id = entry['ID']
+		data = JSON.ObjectFromURL('http://feeds.theplatform.com/ps/JSON/PortalService/2.2/getReleaseList?PID=EJZUqE_dB8XeUUgiJBDE37WER48uEQCY&startIndex=1&endIndex=1&query=categoryIDs|%s&sortField=airdate&sortDescending=true&field=airdate&field=author&field=description&field=length&field=PID&field=thumbnailURL&field=title&contentCustomField=title&contentCustomField=Episode&contentCustomField=Season' % id)
+
+		for item in data['items']:
+			PID = item['PID']
+			test_urls.append('http://www.slice.ca/video/?releasePID=%s' % PID)
+
+			if len(test_urls) > 2:
+				break
+
+		if len(test_urls) > 2:
+			break
+
+	return test_urls

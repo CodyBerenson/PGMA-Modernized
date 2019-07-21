@@ -1,0 +1,101 @@
+RE_VIDEO_URL = Regex('file:[^"]*"(.+\.mp4[^"]*)"')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		data = HTTP.Request(url).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	html = HTML.ElementFromString(data)
+
+	# Check for Ora TV embed if no video is found in the page
+	if not RE_VIDEO_URL.search(data):
+
+		ora_iframe = html.xpath('//iframe[contains(@src, "www.ora.tv/embed")]/@src')
+
+		if len(ora_iframe) < 1:
+			raise Ex.MediaNotAvailable
+		else:
+			return URLService.MetadataObjectForURL(ora_iframe[0])
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	summary = html.xpath('//meta[@name="description"]/@content')[0].strip()
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0]
+
+	published = html.xpath('//time[contains(@class, "date_article-header")]/text()')[0].strip()
+	if 'Published time: ' in published:
+		published = published.split(': ', 1)[-1]
+
+	originally_available_at = Datetime.ParseDate(published)
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(thumb),
+		originally_available_at = originally_available_at
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(
+					key = Callback(PlayVideo, url=url, bitrate=bitrate)
+				)
+			],
+			container = Container.MP4,
+			bitrate = bitrate,
+			video_codec = VideoCodec.H264,
+			video_resolution = video_resolution,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		) for video_resolution, bitrate in [
+			(1080, 5000),
+			(720, 3000),
+			(576, 1500),
+			(576, 1200),
+			(360, 900),
+			(360, 600)
+		]
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, bitrate, **kwargs):
+
+	try:
+		data = HTTP.Request(url).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	video_url = RE_VIDEO_URL.search(data)
+	html = HTML.ElementFromString(data)
+
+	if not video_url:
+
+		ora_iframe = html.xpath('//iframe[contains(@src, "www.ora.tv/embed")]/@src')
+
+		if len(ora_iframe) < 1:
+			raise Ex.MediaNotAvailable
+		else:
+			media = URLService.MediaObjectsForURL(ora_iframe[0])
+
+			for video in media:
+
+				if video.bitrate == bitrate:
+					return Redirect(video.parts[0].key)
+
+			return Redirect(media[-1].parts[0].key)
+
+	else:
+		return IndirectResponse(VideoClipObject, key=video_url.group(1))

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>LocoTV</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.locotv.com.au/aussie-invader-5r-simulation-1492/</string>
+				<string>http://www.locotv.com.au/movie-trailer-19-1526/</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://www.locotv.com.au/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

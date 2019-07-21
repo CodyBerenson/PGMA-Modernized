@@ -1,0 +1,79 @@
+QUALITIES = ['high', 'low']
+
+####################################################################################################
+def NormalizeURL(url):
+
+  return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+  data = HTML.ElementFromURL(url)
+
+  try:
+    data = HTML.ElementFromURL(url)
+  except:
+    raise Ex.MediaNotAvailable
+
+  title = data.xpath('//meta[@itemprop="name"]/@content')[0]
+  summary = data.xpath('//meta[@itemprop="description"]/@content')[0]
+
+  duration = data.xpath('//meta[@itemprop="duration"]/@content')[0]
+  duration = duration.replace('PT', '').replace('H', ':').replace('M', ':').replace('S', '')
+  duration = Datetime.MillisecondsFromString(duration)
+
+  thumb = data.xpath('//link[@itemprop="thumbnailUrl"]/@href')[0]
+  art = data.xpath('//link[@itemprop="image"]/@href')[0]
+
+  return VideoClipObject(
+    title = title,
+    summary = summary,
+    duration = duration,
+    thumb = Resource.ContentsOfURLWithFallback(url = thumb),
+    art = Resource.ContentsOfURLWithFallback(url = art)
+  )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+  return [
+    MediaObject(
+      parts = [PartObject(key = Callback( PlayVideo, url = url, quality = 'high' ))],
+      container = Container.MP4,
+      video_codec = VideoCodec.H264,
+      audio_codec = AudioCodec.AAC,
+      video_resolution = 1080,
+      optimized_for_streaming = True
+    ),
+    MediaObject(
+      parts = [PartObject(key = Callback( PlayVideo, url = url, quality = 'low' ))],
+      container = Container.MP4,
+      video_codec = VideoCodec.H264,
+      audio_codec = AudioCodec.AAC,
+      video_resolution = 360,
+      optimized_for_streaming = True
+    )
+  ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, quality, **kwargs):
+
+  try:
+    data = HTML.ElementFromURL(url)
+  except:
+    raise Ex.MediaNotAvailable
+
+  video_url = None
+
+  video_url = data.xpath('//link[@itemprop="contentURL"]/@href')
+
+  if len(video_url) < 1:
+    raise Ex.MediaNotAvailable
+
+  if quality == 'high':
+    video_url = video_url[0].replace('low.mp4', 'high.mp4')
+  else:
+    video_url = video_url[0]
+
+  return IndirectResponse(VideoClipObject, key=video_url)

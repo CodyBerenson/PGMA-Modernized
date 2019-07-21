@@ -1,0 +1,94 @@
+XML_URL = 'http://msapi.howcast.com/howtos/%s.xml'
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	xml = GetXml(url)
+
+	if not xml:
+		html = HTML.ElementFromURL(url, cacheTime=CACHE_1MONTH)
+
+		if len(html.xpath('//iframe[contains(@src, "youtube.com")]')) > 0:
+			url = html.xpath('//iframe[contains(@src, "youtube.com")]')[0].get('src')
+			return URLService.MetadataObjectForURL(url)
+		else:
+			return None
+
+	title = xml.xpath('/howto/title')[0].text
+	summary = xml.xpath('/howto/description')[0].text
+
+	created_at = xml.xpath('/howto/created-at')[0].text
+	originally_available_at = Datetime.ParseDate(created_at).date()
+
+	tags = []
+	for tag in xml.xpath('/howto/tags/tag/text()'):
+		tags.append(tag)
+
+	duration = int(xml.xpath('/howto/video-duration')[0].text)*1000
+	thumb = xml.xpath('/howto/thumbnail//format/label[text()="xxxlarge"]/parent::format/public-url')[0].text
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		originally_available_at = originally_available_at,
+		tags = tags,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url))],
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			container = 'mp4',
+			video_resolution = 'sd',
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	xml = GetXml(url)
+
+	if not xml:
+		html = HTML.ElementFromURL(url, cacheTime=CACHE_1MONTH)
+
+		if len(html.xpath('//iframe[contains(@src, "youtube.com")]')) > 0:
+			url = html.xpath('//iframe[contains(@src, "youtube.com")]')[0].get('src')
+			media = URLService.MediaObjectsForURL(url)
+
+			for video in media:
+				if video.container != Container.MP4 or video.video_codec != VideoCodec.H264:
+					continue
+				if str(video.video_resolution) == 'sd':
+					return Redirect(video.parts[0].key)
+
+			return Redirect(media[-1].parts[0].key)
+		else:
+			return None
+
+	video_url = xml.xpath('/howto/video//format/label[text()="standard_hd"]/parent::format/public-url')[0].text
+
+	return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def GetXml(url):
+
+	id = url.split('/')[-1].split('-')[0]
+
+	try:
+		return XML.ElementFromURL(XML_URL % id, cacheTime=CACHE_1MONTH)
+	except:
+		return None

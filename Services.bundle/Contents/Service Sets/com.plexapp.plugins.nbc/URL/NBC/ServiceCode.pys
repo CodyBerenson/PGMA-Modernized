@@ -1,0 +1,123 @@
+VIDGUID_URL = 'https://api.nbc.com/v3.14/videos?filter[guid]=%s&include=image'
+NAMESPACES = {"a": "http://www.w3.org/2005/SMIL21/Language"}
+
+SMIL_EXT = '&policy=43674&formats=m3u,mpeg4&format=SMIL&embedded=true'
+
+RE_VIDEO_GUID_URL = Regex('\/video\/.+\/(\d{7})')
+RE_VIDEO_GUID_BODY = Regex('"guid":"(.+?)"')
+
+HTTP_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/603.3.8 (KHTML, like Gecko) Version/10.1.2 Safari/603.3.8"}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json = GetMediaData(url)
+	episode = json['data'][0]
+
+	show = None
+
+	for item in episode['attributes']['categories']: 
+		if item.startswith('Series'):
+			show = item.split('Series/')[1]
+			break
+
+	try: index = int(episode['attributes']['episodeNumber'])
+	except: index = None
+
+	try: season = int(episode['attributes']['seasonNumber'])
+	except: season = None
+
+	duration = int(episode['attributes']['runTime']) * 1000
+	date = Datetime.ParseDate(episode['attributes']['airdate'])
+	title = episode['attributes']['title']
+	summary = episode['attributes']['description']
+
+	try: thumb = 'https://www.nbc.com' + json['included'][0]['attributes']['path']
+	except: thumb = ''
+
+	if show and season and index:
+
+		return EpisodeObject(
+			show = show,
+			season = int(season),
+			index = int(index),
+			title = title,
+			summary = summary,
+			duration = duration,
+			thumb = Resource.ContentsOfURLWithFallback(thumb),
+			originally_available_at = date
+		)
+
+	else:
+
+		return VideoClipObject(
+			title = title,
+			summary = summary,
+			duration = duration,
+			thumb = Resource.ContentsOfURLWithFallback(thumb),
+			originally_available_at = date
+		)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(
+					key=HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+				)
+			],
+			audio_channels = 2,
+			video_resolution = 720,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	json = GetMediaData(url)
+	episode = json['data'][0]
+
+	smil_url = episode['attributes']['mediaUrl'] + SMIL_EXT
+
+	try: 
+		smil = XML.ElementFromURL(smil_url, headers=HTTP_HEADERS)
+	except: 
+		raise Ex.MediaNotAvailable
+
+	videos =  smil.xpath('//a:video/@src', namespaces=NAMESPACES)
+
+	if len(videos) < 1:
+		raise Ex.MediaNotAvailable
+
+	return IndirectResponse(VideoClipObject,
+		key = HTTPLiveStreamURL(videos[0])
+	)
+
+####################################################################################################
+def GetMediaData(url):
+
+	video_guid = RE_VIDEO_GUID_URL.search(url)
+
+	if not video_guid:
+
+		page = HTTP.Request(url, headers=HTTP_HEADERS, cacheTime=CACHE_1HOUR).content
+		video_guid = RE_VIDEO_GUID_BODY.search(page)
+
+	if not video_guid:
+		raise Ex.MediaNotAvailable
+
+	video_api = VIDGUID_URL % (video_guid.group(1))
+
+	try: 
+		return JSON.ObjectFromURL(video_api, headers=HTTP_HEADERS, cacheTime=CACHE_1HOUR)
+	except: 
+		raise Ex.MediaNotAvailable

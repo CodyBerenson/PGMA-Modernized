@@ -1,0 +1,99 @@
+RE_JSON = Regex('(\{.+\})', Regex.DOTALL)
+
+####################################################################################################
+def NormalizeURL(url):
+
+    return url.split('?')[0].split('#')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    json_obj = GetJSON(url)
+
+    title = json_obj['contentName']
+    thumb = json_obj['thumbUri']
+    duration = int(json_obj['videoLengthInSeconds']) * 1000
+    tags = json_obj['tags'].split(',')
+    content_rating = json_obj['audienceRating']
+
+    return VideoClipObject(
+        title = title,
+        thumb = thumb,
+        duration = duration,
+        tags = tags,
+        content_rating = content_rating
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+        MediaObject(
+            container = Container.MP4,
+            video_codec = VideoCodec.H264,
+            video_resolution = resolution,
+            audio_codec = AudioCodec.AAC,
+            audio_channels = 2,
+            parts = [
+                PartObject(key=Callback(PlayVideo, url=url, resolution=resolution))
+            ]
+        ) for resolution in ['1080', '720', '480']
+    ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, resolution, **kwargs):
+
+    json_obj = GetJSON(url)
+
+    if 'media' not in json_obj:
+        raise Ex.MediaNotAvailable
+
+    video_1080 = None
+    video_720 = None
+    video_480 = None
+
+    for video in json_obj['media']:
+
+        if video['mediaPurpose'] != 'play':
+            continue
+
+        if video['height'] == 1080:
+            video_1080 = video['uri']
+        elif video['height'] == 720:
+            video_720 = video['uri']
+        elif video['height'] == 480:
+            video_480 = video['uri']
+
+    if resolution == '1080' and video_1080:
+        video_url = video_1080
+    elif resolution == '720' and video_720:
+        video_url = video_720
+    elif video_480:
+        video_url = video_480
+    else:
+        raise Ex.MediaNotAvailable
+
+    return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def GetJSON(url):
+
+    html = HTML.ElementFromURL(url)
+    embed_url = html.xpath('//meta[@name="embed_video_url"]/@content|//iframe[contains(@src, "/embed/")]/@src')
+
+    if len(embed_url) < 1:
+        raise Ex.MediaNotAvailable
+
+    html = HTML.ElementFromURL('http://www.break.com/embed/%s' % (embed_url[0].split('/embed/')[-1]))
+    script = html.xpath('//script[contains(., "embedVars")]/text()')
+
+    if len(script) < 1:
+        raise Ex.MediaNotAvailable
+
+    json_data = RE_JSON.search(script[0])
+
+    if not json_data:
+        raise Ex.MediaNotAvailable
+
+    return JSON.ObjectFromString(json_data.group(1))

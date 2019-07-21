@@ -1,0 +1,84 @@
+def NormalizeURL(url):
+
+	return '%s/trailers' % url.rsplit('/', 1)[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	html = HTML.ElementFromURL(url)
+
+	# Use AOL On URL Service if we find such a video
+	aol_on_video = html.xpath('//script[contains(@src, "pshared.5min.com")]/@src')
+	if len(aol_on_video) == 1:
+		return URLService.MetadataObjectForURL(aol_on_video[0])
+
+	url = url.replace('/trailers', '/synopsis')
+	html = HTML.ElementFromURL(url)
+
+	title = html.xpath('//h1//text()')[0].strip()
+	summary = html.xpath('//div[@class="movie-synopsis"]/text()')
+	summary = '\n'.join(summary)
+	thumb = 'http://%s' % html.xpath('//meta[@property="og:image"]/@content')[0].split('http://')[-1]
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url, fmt='HD 1080p'))],
+			video_resolution = '1080',
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		),
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url, fmt='HD 720p'))],
+			video_resolution = '720',
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		),
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url, fmt='HD 480p'))],
+			video_resolution = '480',
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, fmt, **kwargs):
+
+	video_url = None
+	html = HTML.ElementFromURL(url)
+
+	if fmt == 'HD 1080p' and len(html.xpath('//span[@class="butoneshd hd1080"]/a/@href')) > 0:
+		video_url = html.xpath('//span[@class="butoneshd hd1080"]/a/@href')[0]
+
+	if not video_url and fmt in ('HD 720p', 'HD 1080p') and len(html.xpath('//span[@class="butoneshd hd720"]/a/@href')) > 0:
+		video_url = html.xpath('//span[@class="butoneshd hd720"]/a/@href')[0]
+
+	if not video_url and fmt in ('HD 480p', 'HD 720p', 'HD 1080p') and len(html.xpath('//span[@class="butoneshd hd480"]/a/@href')) > 0:
+		video_url = html.xpath('//span[@class="butoneshd hd480"]/a/@href')[0]
+
+	if not video_url and len(html.xpath('//span[contains(@class, "butoneshd")]/a/@href')) > 0:
+		video_url = html.xpath('//span[contains(@class, "butoneshd")]/a/@href')[0]
+
+	if video_url:
+		return IndirectResponse(VideoClipObject, key=video_url)
+	else:
+		raise Ex.MediaNotAvailable

@@ -1,0 +1,62 @@
+MP4_URL = 'http://www.viddler.com/file/%s/mp4'
+FLV_URL = 'http://www.viddler.com/file/d/%s.flv'
+
+####################################################################################################
+def NormalizeURL(url):
+
+	if url[0:2] == '//':
+		url = 'http:%s' % url
+
+	if '/player/' in url:
+		url = url.replace('/player/', '/v/')
+	elif '/embed/' in url:
+		url = url.replace('/embed/', '/v/')
+
+	return url.split('?', 1)[0].rstrip('/')
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		html = HTML.ElementFromURL(url)
+	except:
+		return None
+
+	title = html.xpath('//meta[@property="og:title"]')[0].get('content')
+	summary = html.xpath('//meta[@name="description"]')[0].get('content')
+	thumb = html.xpath('//meta[@property="og:image"]')[0].get('content')
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = thumb
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url))],
+			container = 'mp4',
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			video_resolution = 'sd',
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	video_id = url.rsplit('/',1)[1]
+
+	try:
+		video_url = MP4_URL % video_id
+		HTTP.Request(video_url).headers
+		return IndirectResponse(VideoClipObject, key=video_url)
+	except:
+		video_url = FLV_URL % video_id
+		return IndirectResponse(VideoClipObject, key=video_url)

@@ -1,0 +1,80 @@
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 6_0_1 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A523 Safari/8536.25'}
+VIDEO_URL = 'http://voddownload.ndtv.com.edgesuite.net/mp4/%s/%s'
+RE_DURATION = Regex("__duration='(?P<duration>[^']+)")
+RE_THUMB = Regex("__fullimage='(?P<thumb>[^']+)")
+RE_FOLDERNAME = Regex("__foldername='(?P<foldername>[^']+)")
+RE_FILENAME = Regex("__filename='(?P<filename>[^']+)")
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('\n')[0].split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		data = HTTP.Request(url, headers=HTTP_HEADERS).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	html = HTML.ElementFromString(data)
+
+	if len(html.xpath('//p[text()="No Videos Found"]|//*[contains(text(), "temporarily unavailable")]')) > 0:
+		raise Ex.MediaNotAvailable
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	summary = html.xpath('//meta[@property="og:description"]/@content')[0]
+
+	try:
+		duration = RE_DURATION.search(data).group('duration')
+		duration = int(duration) * 1000
+	except:
+		duration = None
+
+	try: thumb = RE_THUMB.search(data).group('thumb')
+	except: thumb = ''
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url))],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = 'sd',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	try:
+		data = HTTP.Request(url, headers=HTTP_HEADERS).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	html = HTML.ElementFromString(data)
+
+	if len(html.xpath('//p[text()="No Videos Found"]|//*[contains(text(), "temporarily unavailable")]')) > 0:
+		raise Ex.MediaNotAvailable
+
+	try:
+		foldername = RE_FOLDERNAME.search(data).group('foldername')
+		filename = RE_FILENAME.search(data).group('filename')
+	except:
+		raise Ex.MediaNotAvailable
+
+	return IndirectResponse(VideoClipObject, key=VIDEO_URL % (foldername, filename))

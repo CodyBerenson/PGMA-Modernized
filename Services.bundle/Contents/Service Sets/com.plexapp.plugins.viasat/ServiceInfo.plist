@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Viasat Play</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.tv3play.se/play/299117/?autostart=true</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^https?:\/\/www\.tv3play\.(se|no|dk|ee|lt|lv)\/(play|(program|programmer|sisu|programos|parraides)\/.*)\/[0-9]+</string>
+				<string>^https?:\/\/www\.tvplay\.lv\/parraides\/.*\/[0-9]+</string>
+				<string>^https?:\/\/www\.tv6play\.(se|no)\/(play|(program|programmer)\/.*)\/[0-9]+</string>
+				<string>^https?:\/\/www\.tv(8|10)play\.se\/(play|program\/.*)\/[0-9]+</string>
+				<string>^https?:\/\/www\.juicyplay\.(se|dk)\/(play|program\/.*)\/[0-9]+</string>
+				<string>^https?:\/\/www\.viasat4play\.no\/(play|programmer\/.*)\/[0-9]+</string>
+				<string>^https?:\/\/www\.viagame\.com\/(play|program|channels)\/.*\/[0-9]+</string>
+				<string>^https?:\/\/play\.novatv\.bg\/programi\/.*\/[0-9]+</string>
+				<string>^https?:\/\/www\.viafree\..+\/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

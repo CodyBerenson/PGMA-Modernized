@@ -1,0 +1,78 @@
+RE_JSON = Regex('\{"video": *(\{.+?\})\}', Regex.DOTALL)
+NAMESPACES = {'a': 'http://www.w3.org/2005/SMIL21/Language'}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.replace('.embed.', '.')
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJSON(url)
+
+	title = json_obj['title']
+	summary = json_obj['description']
+	duration = json_obj['length'] * 1000
+	thumb = '%s_480x360.jpg' % (json_obj['thumbnailUrl'].rsplit('_', 1)[0])
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(
+					key = Callback(PlayVideo, url=url, bitrate=bitrate)
+				)
+			],
+			bitrate = bitrate,
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = resolution,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		) for bitrate, resolution in [(3000, '720'), (1700, '540'), (1400, '480')]
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, bitrate=3000, **kwargs):
+
+	json_obj = GetJSON(url)
+	smil_url = json_obj['releaseUrl'].split('?')[0]
+	smil_url = '%s?format=SMIL&MBR=true' % (smil_url)
+
+	xml = XML.ElementFromURL(smil_url)
+	available_versions = xml.xpath('//a:switch[1]/a:video/@system-bitrate', namespaces=NAMESPACES)
+
+	if len(available_versions) < 1:
+		raise Ex.MediaNotAvailable
+
+	closest = min((abs((bitrate*1000) - int(i)), int(i)) for i in available_versions)[1]
+	video_url = xml.xpath('//a:switch[1]/a:video[@system-bitrate="%s"]/@src' % (closest), namespaces=NAMESPACES)[0]
+
+	return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def GetJSON(url):
+
+	try:
+		data = HTTP.Request(url).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	json = RE_JSON.search(data)
+
+	if not json:
+		raise Ex.MediaNotAvailable
+	else:
+		return JSON.ObjectFromString(json.group(1))

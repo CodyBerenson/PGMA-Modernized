@@ -1,0 +1,90 @@
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 6_0_1 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A523 Safari/8536.25'}
+RE_VIDEO_URL = Regex('source src=.([^\'"]+). type=.application/x-mpegurl.')
+RE_CONTROL_CHARS = Regex(u'[\u0000-\u001F]')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	url = url.split('?')[0].split('\n')[0]
+
+	if '/embed/' in url:
+		url = url.replace('/embed/', '/videos/')
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		data = HTTP.Request(url, headers=HTTP_HEADERS).content
+		data = RE_CONTROL_CHARS.sub('', data)
+		html = HTML.ElementFromString(data)
+	except Ex.HTTPError, e:
+		if e.code == 410:
+			raise Ex.MediaExpired
+
+		raise Ex.MediaNotAvailable
+
+	# Extract the details available directly form the page.
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	description = html.xpath('//meta[@property="og:description"]/@content')[0]
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0]
+
+	try:
+		duration = html.xpath('//meta[@property="video:duration"]/@content')[0]
+		duration = int(duration) * 1000
+	except:
+		duartion = None
+
+	try:
+		date = html.xpath('//meta[@itemprop="uploadDate"]/@content')[0].split(' ')[0]
+		date = Datetime.ParseDate(date)
+	except:
+		date = None
+
+	return VideoClipObject(
+		title = title,
+		summary = description,
+		thumb = Resource.ContentsOfURLWithFallback(thumb),
+		duration = duration,
+		originally_available_at = date
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(
+					key = HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+				)
+			],
+			video_resolution = '720',
+			audio_channels = 2
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	if not url:
+		raise Ex.MediaNotAvailable
+
+	url = URLService.NormalizeURL(url)
+
+	try:
+		data = HTTP.Request(url, headers=HTTP_HEADERS).content
+	except Ex.HTTPError, e:
+		if e.code == 410:
+			raise Ex.MediaExpired
+
+		raise Ex.MediaNotAvailable
+
+	video_url = RE_VIDEO_URL.search(data)
+
+	if not video_url:
+		raise Ex.MediaNotAvailable
+
+	return IndirectResponse(VideoClipObject, key='https://%s' % (video_url.group(1).split('//')[-1]))

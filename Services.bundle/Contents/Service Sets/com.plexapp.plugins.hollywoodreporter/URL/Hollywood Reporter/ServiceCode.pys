@@ -1,0 +1,168 @@
+BASE_URL = 'http://www.hollywoodreporter.com'
+AMF_URL = 'http://c.brightcove.com/services/messagebroker/amf'
+RE_APP = Regex('rtmpe?://.+?/(.+)')
+
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	data = DoAmfRequest(url)
+	
+	if data == None:
+		# we didn't get any AMF info returned, this is a youtube, let fallback handle it (more info on this later)
+		return None
+
+	title = data['displayName']
+	summary = data['shortDescription']
+	thumb_url = data['videoStillURL']
+	date = data['publishedDate']
+	duration = data['length']
+
+	# Construct a metadata item
+	mo = VideoClipObject(
+		title = title,
+		originally_available_at = date,
+		summary = summary,
+		duration = int(duration),
+		thumb = thumb_url
+	)
+
+	return mo
+
+####################################################################################################
+def MediaObjectsForURL(url):
+	
+	# we have to check this here as well just to make sure this is a brightcove video, if it's not
+	# return None and let the fallback handle things (it's likely youtube), but we can't do this nicely until 
+	# @deffered is working.  Locaing each page here to test from this site makes the service unusable
+	# as there is a 1-2 second delay on each page load.
+
+	# pretty much all we get is 480p from these guys from what I can tell
+	return [
+		MediaObject(
+			video_resolution = "480",
+			audio_channels = 2,
+			parts = [PartObject(key=Callback(PlayVideo, url=url))]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	data = DoAmfRequest(url)
+
+	if data == None:
+		# we didn't get any AMF info returned, this is a youtube, and we should let fallback handle it ...
+		# But for right now without @deffered we don't have a nice way of dealing with this, so return None
+		# and let it error :(
+		# the following is for reference purposes for later, this is where to find the URL for youtube videos
+		# youtube_url = HTML.ElementFromURL(url).xpath('//div[contains(@class,"emvideo-youtube")]//a/@href')[0]
+		return None
+		
+	video_url = data['FLVFullLengthURL']
+
+	if video_url.endswith(".mp4"):
+		return IndirectResponse(VideoClipObject, key=video_url)
+	elif video_url.startswith('rtmp://brightcove'):
+		# this is rtmp based brightcove
+		# BC rtmp url: rtmp://brightcove.fcod.llnwd.net/a500/d16/&mp4:media/769341148/769341148_1791529017001_hd-thr-sparkle-music-industry-in-film-rev-720.mp4&1346176800000&a6d281872a61a9cee901261cf9780520
+		
+		SWF_URL = 'http://admin.brightcove.com/viewer/us20120810.1250/BrightcoveBootloader.swf'
+		video_url = data['FLVFullLengthURL'].split('&', 1)
+		player = video_url[0]
+		app = RE_APP.search(player).group(1)
+		playpathFull = video_url[1] # the passed argument ( -C in rtmpdump world ) needs the additional info for auth purposes
+		playpathClip = video_url[1].split('&')[0] # the actual clip needs to have anyting after & removed
+
+		return IndirectResponse(VideoClipObject, key=RTMPVideoURL(url=player, clip=playpathClip, app=app, swf_url=SWF_URL, args=[False, playpathFull]))
+
+	else:
+		# this is an edgefcs based rtmp (akamai)
+		# edgefcs rtmp url: rtmp://cp101675.edgefcs.net/ondemand/&mp4:23/769341148/201208/158/769341148_1801472960001_hd-thr-sarah-paulson-horror-and-newsroom-720.mp4?__nn__=1545806548001&slist=23/769341148/201208/158/;23/769341148/201208/202/;23/769341148/201208/2346/;23/769341148/201208/3346/;23/769341148/201208/3578/;23/769341148/201208/950/&auth=daEdUcPcBc1dXaicNaobRaSbIdib4dqc5au-bqpoSa-bWG-ECyo_GAp_AKxH_HnE&aifp=rtmpeuds17
+		
+		# edgefcs working example
+		# rtmpdump -r 'rtmp://cp101675.edgefcs.net/ondemand/' \
+		# -a 'ondemand?__nn__=1545806548001&slist=23/769341148/201208/1860/;23/769341148/201208/2180/;23/769341148/201208/2804/;23/769341148/201208/2860/;23/769341148/201208/3492/;23/769341148/201208/3860/&auth=daEcdajbadsa8b_c9biblcZa4d2b2dlbZa3-bqpKQq-bWG-BAGn_HFm_BFxz_LnC&aifp=rtmpeuds17' \
+		# -W 'http://admin.brightcove.com/viewer/us20120824.1350/federatedVideoUI/BrightcovePlayer.swf' \
+		# -y 'mp4:23/769341148/201208/2180/769341148_1811394497001_SWT-Trailer.mp4'
+
+		SWF_URL = 'http://admin.brightcove.com/viewer/us20120824.1350/federatedVideoUI/BrightcovePlayer.swf'
+		video_url = data['FLVFullLengthURL'].split('&', 1)
+
+		player = video_url[0]
+		app = RE_APP.search(player).group(1) + '?' + video_url[1].split('?')[1]
+		clip = video_url[1].split('?')[0]
+				
+		return IndirectResponse(VideoClipObject, key=RTMPVideoURL(url=player, clip=clip, app=app, swf_url=SWF_URL))
+
+
+####################################################################################################
+def DoAmfRequest(url):
+
+	try:
+		data = HTML.ElementFromURL(url).xpath('//object[@class="BrightcoveExperience"]')[0]
+		playerID = data.xpath('./param[@name="playerID"]')[0].get('value')
+		videoPlayer = data.xpath('./param[@name="videoID"]')[0].get('value')
+		playerKey = data.xpath('./param[@name="playerKey"]')[0].get('value')
+	
+		return AmfRequest(url=url, playerID=playerID, playerKey=playerKey, videoPlayer=videoPlayer)
+	except:
+		# if that element doesn't exist it's probably youtube, return none
+		return None
+		
+####################################################################################################
+def AmfRequest(url=None, playerID=None, playerKey=None, videoPlayer=None):
+
+	endpoint = AMF_URL
+	if playerKey:
+		endpoint += '?playerKey=%s' % playerKey
+
+	client = AMF.RemotingService(url=endpoint, user_agent='', amf_version=3)
+	service = client.getService('com.brightcove.experience.ExperienceRuntimeFacade')
+
+	AMF.RegisterClass(ContentOverride, 'com.brightcove.experience.ContentOverride')
+	AMF.RegisterClass(ViewerExperienceRequest, 'com.brightcove.experience.ViewerExperienceRequest')
+
+	video_obj = ContentOverride(videoPlayer)
+	experience = ViewerExperienceRequest(url, playerID, playerKey, video_obj)
+
+	result = service.getDataForExperience('', experience)
+
+	return result['programmedContent']['videoPlayer']['mediaDTO']
+
+####################################################################################################
+class ContentOverride(object):
+	def __init__ (self, videoPlayer=None):
+		self.contentType = int(0)
+		self.contentIds = None
+		self.target = 'videoPlayer'
+		self.contentId = int(videoPlayer)
+		self.featuredRefId = None
+		self.contentRefIds = None
+		self.featuredId = float('nan')
+		self.contentRefId = None
+
+class ViewerExperienceRequest(object):
+	def __init__ (self, url=None, playerID=None, playerKey=None, video_obj=None):
+		self.experienceId = int(playerID)
+		self.playerKey = playerKey
+		self.contentOverrides = []
+		self.contentOverrides.append(video_obj)
+		self.TTLToken = ''
+		self.URL = url
+		self.deliveryType = float('nan')
+
+####################################################################################################
+def TestURLs():
+
+	test_urls = []
+	data = HTML.ElementFromURL(BASE_URL + "/video").xpath("//ul[@class='thr-video-main-block thr-video-main-2']/li/div/div/a/@href")
+
+	for url in data:
+		if len(test_urls) < 3:
+			test_urls.append(BASE_URL + url)
+		else:
+			break
+
+	return test_urls

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>VK</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://vk.com/video_ext\.php\?oid=\d{9,}&amp;id=\d{9,}&amp;hash=[\da-f]{16}</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

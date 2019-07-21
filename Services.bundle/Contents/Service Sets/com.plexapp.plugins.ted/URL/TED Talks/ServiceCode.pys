@@ -1,0 +1,81 @@
+RE_JSON = Regex('<script>q\("talkPage.init", ({.+})\)<\/script>', Regex.DOTALL)
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0].split('.html')[0].split('/transcript')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJSON(url)
+
+	title = json_obj['player_talks'][0]['title']
+	speaker = json_obj['player_talks'][0]['speaker']
+	summary = json_obj['description']
+	thumb = '%s?w=1280' % (json_obj['player_talks'][0]['thumb'].split('?')[0])
+	published = Datetime.FromTimestamp(json_obj['player_talks'][0]['published'])
+	duration = int(float(json_obj['duration'])*1000)
+
+	return VideoClipObject(
+		title = '%s: %s' % (speaker, title),
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb),
+		originally_available_at = published,
+		duration = duration
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(
+					key=Callback(PlayVideo, url=url)
+				)
+			],
+			container = Container.MP4,
+			video_resolution = '480',
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	json_obj = GetJSON(url)
+
+	if 'downloads' in json_obj and 'nativeDownloads' in json_obj['downloads'] and json_obj['downloads']['nativeDownloads']:
+		if 'high' in json_obj['downloads']['nativeDownloads']:
+			video_url = json_obj['downloads']['nativeDownloads']['high']
+		elif 'medium' in json_obj['downloads']['nativeDownloads']:
+			video_url = json_obj['downloads']['nativeDownloads']['medium']
+		elif 'low' in json_obj['downloads']['nativeDownloads']:
+			video_url = json_obj['downloads']['nativeDownloads']['low']
+		else:
+			video_url = None
+
+		if video_url:
+			return IndirectResponse(VideoClipObject, key=video_url)
+
+	raise Ex.MediaNotAvailable
+
+####################################################################################################
+def GetJSON(url):
+
+	try:
+		data = HTTP.Request(url).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	json = RE_JSON.search(data)
+
+	if not json:
+		raise Ex.MediaNotAvailable
+
+	return JSON.ObjectFromString(json.group(1))['__INITIAL_DATA__']['talks'][0]

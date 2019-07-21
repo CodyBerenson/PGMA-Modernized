@@ -1,0 +1,109 @@
+DATA_URL = 'http://legacyweb-us.crackle.com/app/revamp/vidwallcache.aspx?flags=-1&fm=%s&partner=20'
+THUMB_URL = 'http://images-us-am.crackle.com/%stnl_700x394.jpg'
+VIDEO_URL = 'http://media-us-am.crackle.com/%s480p_1mbps.mp4'
+
+RE_MEDIA_ID = Regex('\/(?P<media_id>\d+)')
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    media_id = RE_MEDIA_ID.search(url).group('media_id')
+    xml = XML.ElementFromURL(DATA_URL % (media_id))
+
+    title = xml.xpath('//i/@t')
+
+    if len(title) < 1:
+        raise Ex.MediaNotAvailable
+
+    summary = xml.xpath('//i/@d')[0]
+    thumb = THUMB_URL % (xml.xpath('//i/@p')[0])
+    duration = int(xml.xpath('//i/@r')[0], 16)
+    content_rating = xml.xpath('//i/@dc')[0]
+
+    media_type = xml.xpath('//i/@odt')[0].lower()
+
+    if 'episode' in media_type or 'original' in media_type:
+
+        show = xml.xpath('//i/@sn')[0]
+        season = int(xml.xpath('//i/@se')[0]) if len(xml.xpath('//i/@se')) > 0 else None
+        index = int(xml.xpath('//i/@ep')[0]) if len(xml.xpath('//i/@ep')) > 0 else None
+
+        return EpisodeObject(
+            title = title[0],
+            summary = summary,
+            thumb = Resource.ContentsOfURLWithFallback(url=thumb),
+            duration = duration,
+            content_rating = content_rating,
+            show = show,
+            season = season,
+            index = index
+        )
+
+    elif 'film' in media_type:
+
+        year = int(xml.xpath('//i/@ry')[0], 16)
+
+        genres = []
+        if len(xml.xpath('//i/@ge')) > 0:
+            genres = [genre for genre in xml.xpath('//i/@ge')[0].split(',')]
+
+        directors = []
+        if len(xml.xpath('//i/@dr')) > 0:
+            directors = [director for director in xml.xpath('//i/@dr')[0].split(',')]
+
+        writers = []
+        if len(xml.xpath('//i/@wr')) > 0:
+            writers = [writer for writer in xml.xpath('//i/@wr')[0].split(',')]
+
+        return MovieObject(
+            title = title[0],
+            summary = summary,
+            thumb = Resource.ContentsOfURLWithFallback(url=thumb),
+            duration = duration,
+            content_rating = content_rating,
+            year = year,
+            genres = genres,
+            #directors = directors,
+            #writers = writers
+        )
+
+    else:
+
+        return VideoClipObject(
+            title = title[0],
+            summary = summary,
+            thumb = Resource.ContentsOfURLWithFallback(url=thumb),
+            duration = duration,
+            content_rating = content_rating
+        )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+        MediaObject(
+            container = Container.MP4,
+            video_codec = VideoCodec.H264,
+            audio_codec = AudioCodec.AAC,
+            video_resolution = 480,
+            optimized_for_streaming = True,
+            audio_channels = 2,
+            parts = [
+                PartObject(key=Callback(PlayVideo, url=url))
+            ]
+        )
+    ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+    media_id = RE_MEDIA_ID.search(url).group('media_id')
+    xml = XML.ElementFromURL(DATA_URL % (media_id))
+
+    path = xml.xpath('//i/@p')
+
+    if len(path) < 1:
+        raise Ex.MediaExpired
+
+    return IndirectResponse(VideoClipObject, key=VIDEO_URL % (path[0]))

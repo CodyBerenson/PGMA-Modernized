@@ -1,0 +1,113 @@
+JSON_URL = 'http://www.bing.com/videos/services/videodata/?responseEncoding=json&ids=%s&detailed=true&v=2'
+RE_UUID = Regex("uuid: '([^']+)'")
+RE_JSON_QUOTES = Regex("'([^']*)'")
+RE_JSON_NEWLINES = Regex("\r\n")
+
+####################################################################################################
+def NormalizeURL(url):
+
+	url = url.split('?')[0]
+
+	if not 'bing.com' in url:
+		url = 'http://www.bing.com/videos/watch/video/%s' % url.split('/watch/video/')[-1]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJSON(url)
+	if not json_obj:
+		return None
+
+	title = json_obj['title']
+	description = json_obj['description']
+	thumb = json_obj['thumb'].replace('&w=112&h=63', '&w=640&h=360')
+	duration = int(json_obj['durationSecs']) * 1000
+	date = Datetime.ParseDate(json_obj['startDate'])
+
+	return VideoClipObject(
+		title = title,
+		summary = description,
+		thumb = Resource.ContentsOfURLWithFallback(thumb),
+		duration = duration,
+		originally_available_at = date
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			video_resolution = 720,
+			parts = [PartObject(key=Callback(PlayVideo, url=url, formatCode='104'))]
+		),
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			video_resolution = 576,
+			parts = [PartObject(key=Callback(PlayVideo, url=url, formatCode='103'))]
+		),
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			video_resolution = 360,
+			parts = [PartObject(key=Callback(PlayVideo, url=url, formatCode='102'))]
+		),
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			video_resolution = 180,
+			parts = [PartObject(key=Callback(PlayVideo, url=url, formatCode='101'))]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, formatCode, **kwargs):
+
+	json_obj = GetJSON(url)
+	if not json_obj:
+		raise Ex.MediaNotAvailable
+
+	video_files = json_obj['files']
+	resolutions = ['104', '103', '102', '101']
+	index = resolutions.index(formatCode)
+
+	for available_resolution in range(index, len(resolutions)):
+		for video in video_files:
+			if video['formatCode'] == resolutions[available_resolution]:
+				return IndirectResponse(VideoClipObject, key=video['url'])
+
+	raise Ex.MediaNotAvailable
+
+####################################################################################################
+def GetJSON(url):
+
+	# Request the url and determine the uuid associated with the title
+	try:
+		page_content = HTTP.Request(url, cacheTime=CACHE_1HOUR).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	uuid = RE_UUID.search(page_content)
+	if not uuid:
+		return None
+
+	# Obtain the JSON representation of the title's details
+	json = HTTP.Request(JSON_URL % uuid.group(1), cacheTime=CACHE_1HOUR).content
+
+	if not json[0:1] == '{':
+		raise Ex.MediaNotAvailable
+
+	json = json.replace('\\x22', '\\\\"')
+	json = RE_JSON_QUOTES.sub('"\\1"', json)
+	json = json.decode('string-escape').decode('utf-8')
+	json = RE_JSON_NEWLINES.sub('\\\n', json)
+	json = JSON.ObjectFromString(json)
+
+	return json['videos'][0]

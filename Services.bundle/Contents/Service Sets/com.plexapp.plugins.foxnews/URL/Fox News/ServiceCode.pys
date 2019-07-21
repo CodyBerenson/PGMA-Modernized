@@ -1,0 +1,82 @@
+BASE_URL = 'http://video.foxnews.com'
+JSON_FEED = '%s/v/feed/video/%%s.js' % BASE_URL
+RE_ASSED_ID = Regex('/v/(?P<asset_id>[0-9]+)')
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    # The url should contain details of the actual media asset number.
+    asset_id = RE_ASSED_ID.search(url).group('asset_id')
+
+    # Once we've determined the asset id, we can request the associated json.
+    try:
+        json_obj = JSON.ObjectFromURL(JSON_FEED % asset_id)
+    except:
+        raise Ex.MediaNotAvailable
+
+    if not 'channel' in json_obj:
+        raise Ex.MediaNotAvailable
+
+    json_root = json_obj['channel']['item']
+
+    # Extract the available information from the page...
+    title = json_root['title']
+    description = json_root['media-content']['media-description']
+    duration = json_root['media-content']['mvn-duration']
+    duration = int(duration) * 1000
+    date = json_root['media-content']['mvn-airDate']
+    date = Datetime.ParseDate(date)
+    thumb_url = json_root['media-content']['mvn-fnc_grab_320x240']
+
+    return VideoClipObject(
+        title = title,
+        summary = description,
+        thumb = Resource.ContentsOfURLWithFallback(thumb_url),
+        duration = duration,
+        originally_available_at = date
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+        MediaObject(
+            video_codec = VideoCodec.H264,
+            audio_codec = AudioCodec.AAC,
+            container = Container.MP4,
+            parts = [
+                PartObject(
+                    key = Callback(PlayVideo, url=url)
+                )
+            ]
+        )
+    ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+    # The url should contain details of the actual media asset number.
+    asset_id = RE_ASSED_ID.search(url).group('asset_id')
+
+    # Once we've determined the asset id, we can request the associated son.
+    try:
+        json_obj = JSON.ObjectFromURL(JSON_FEED % asset_id)
+    except:
+        raise Ex.MediaExpired
+
+    if not 'channel' in json_obj:
+        raise Ex.MediaNotAvailable
+
+    json_root = json_obj['channel']['item']
+
+    # Redirect to the associated video url. It appears that some older videos are not MP4 but are FLVs
+    # instead. If this is the case, we should just fallback to this.
+    try:
+        video_url = json_root['media-content']['mvn-fnc_mp4']
+        video_url = video_url.replace(' ', '%20')
+    except:
+        video_url = json_root['media-content']['mvn-flv1200']
+        video_url = video_url.replace(' ', '%20')
+
+    return IndirectResponse(VideoClipObject, key=video_url)

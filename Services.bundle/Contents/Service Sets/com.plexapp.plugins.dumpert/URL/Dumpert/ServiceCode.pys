@@ -1,0 +1,71 @@
+DEFAULT_AUDIO_THUMB = 'http://www.dumpert.nl/gfx/thumb_audio.png'
+THUMB_URL = 'http://static.dumpert.nl/sq_thumbs/%s_%s.jpg'
+HTTP_HEADERS = {'Cookie': 'cpc=10'}
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	html = HTML.ElementFromURL(url, headers=HTTP_HEADERS)
+	video = html.xpath('//div[@class="videoplayer"]')
+
+	Log(len(video))
+
+	if len(video) < 1:
+		raise Ex.MediaNotAvailable
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	summary = html.xpath('//meta[@property="og:description"]/@content')[0]
+	thumb = html.xpath('//link[@rel="image_src"]/@href')[0]
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, res=resolution))
+			],
+			video_resolution = resolution,
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		) for resolution in (720, 360)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res, **kwargs):
+
+	html = HTML.ElementFromURL(url, headers=HTTP_HEADERS)
+	video = html.xpath('//div[@class="videoplayer"]/@data-files')
+
+	if len(video) < 1:
+		raise Ex.MediaNotAvailable
+
+	json_obj = JSON.ObjectFromString(String.Base64Decode(video[0]))
+	video_url = None
+
+	if res == 720:
+		if '720p' in json_obj:
+			video_url = json_obj['720p']
+		elif 'h264' in json_obj:
+			video_url = json_obj['h264']
+
+	if not video_url:
+		if 'tablet' in json_obj:
+			video_url = json_obj['tablet']
+		elif 'mobile' in json_obj:
+			video_url = json_obj['mobile']
+
+	if video_url:
+		return IndirectResponse(VideoClipObject, key=video_url)
+
+	raise Ex.MediaNotAvailable

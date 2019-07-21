@@ -1,0 +1,109 @@
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.117 Safari/537.36'}
+RE_SXX_EXX = Regex('Season (\d+).+Episode (\d+)')
+RE_SHOW_TITLE = Regex('Watch (.+) S\dE\d "(.+)" Online')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.replace('abcfamily.go.com', 'freeform.go.com').replace('/episode-guide/', '/episodes/')
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		html = HTML.ElementFromURL(url, headers=HTTP_HEADERS, cacheTime=CACHE_1HOUR)
+	except:
+		raise Ex.MediaNotAvailable
+
+	# Expired and unavailable media redirects to the home page. Instead of catching (multiple)
+	# redirects we check if there is a 'og:url' HTML element.
+	og_url = html.xpath('//meta[@property="og:url"]')
+
+	if len(og_url) < 1:
+		raise Ex.MediaNotAvailable
+
+	(show_title, episode_title) = RE_SHOW_TITLE.search(html.xpath('//title/text()')[0]).groups()
+	summary = html.xpath('//meta[@property="og:title"]/@content')[0]
+
+	try:
+		sxx_exx = html.xpath('//title/text()')[0]
+		(season, index) = RE_SXX_EXX.search(sxx_exx).groups()
+	except:
+		season = None
+		index = None
+
+	thumb = html.xpath('//meta[@property="og:image"]/@content')
+
+	if len(thumb) < 1:
+		thumb = html.xpath('//meta[@name="twitter:image"]/@content')
+
+	if len(thumb) < 1:
+		thumb = html.xpath('//meta[@name="ogImageFromApi"]/@content')
+
+	if len(thumb) < 1:
+		thumb = ''
+	else:
+		thumb = thumb[0]
+
+	return EpisodeObject(
+		show = show_title,
+		title = episode_title,
+		season = int(season) if season else None,
+		index = int(index) if index else None,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	video_id = GetVideoId(url)
+
+	if not video_id:
+		raise Ex.MediaNotAvailable
+
+	storage_id = 1571
+
+	f4m_url = 'http://cdnapi.kaltura.com/p/585231/sp/58523100/playManifest/entryId/%s/format/http/protocol/http/cdnHost/cdnbakmi.kaltura.com/storageId/%d/uiConfId/8628152/tags/uplynk/a/a.f4m' % (video_id, storage_id)
+
+	return [
+		MediaObject(
+			protocol = 'hls',
+			container = 'mpegts',
+			video_codec = VideoCodec.H264,
+			video_resolution = '1080',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True,
+			parts = [
+				PartObject(
+					key = Callback(PlayVideo, f4m_url=f4m_url, post_url=f4m_url, ext='m3u8')
+				)
+			]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(f4m_url=None, **kwargs):
+
+	if not f4m_url:
+		raise Ex.MediaNotAvailable
+
+	try:
+		xml = XML.ElementFromURL(f4m_url)
+		video_url = xml.xpath('//a:media/@url', namespaces={'a': 'http://ns.adobe.com/f4m/1.0'})[0]
+		return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(url=video_url))
+	except:
+		raise Ex.MediaNotAvailable
+
+####################################################################################################
+def GetVideoId(url):
+
+	html = HTML.ElementFromURL(url, headers=HTTP_HEADERS, cacheTime=CACHE_1HOUR)
+	video_id = html.xpath('//*[@data-video-id]/@data-video-id')
+
+	if len(video_id) < 1:
+		raise Ex.MediaNotAvailable
+
+	return video_id[0].split('VDKA')[-1].strip("'")

@@ -1,0 +1,76 @@
+RE_VIDEO_DATA = Regex('urPlayer.init\((.*)\);')
+VIDEO_TEMPLATE_URL = 'http://streaming3.ur.se/%s/%s?null='
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    element = HTML.ElementFromURL(url)
+
+    title = unicode(element.xpath("//meta[@property='og:title']/@content")[0]).strip()
+    summary = unicode(element.xpath("//meta[@property='og:description']/@content")[0]).strip()
+    thumb   = element.xpath("//meta[@property='og:image']/@content")[0]
+
+    try:
+        show = unicode(element.xpath("//*[@class='tv']//h1/text()")[0]).strip()
+    except:
+        show = None
+
+    try:
+        durationString = element.xpath("//*[@class='duration']/text()")[0]
+        duration       = (int(durationString.split(':')[0]) * 60 + int(durationString.split(':')[1])) * 1000
+    except:
+        duration = None
+
+    return EpisodeObject(
+        url = url,
+        title = title,
+        summary = summary,
+        thumb = thumb,
+        show = show,
+        duration = duration
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+        MediaObject(
+            video_resolution = 'sd', 
+            audio_channels = 2,
+            optimized_for_streaming = True,
+            parts = [
+                PartObject(
+                    key = HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+                )
+            ]
+        )
+    ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+    try:
+        content = HTTP.Request(url).content
+        data    = JSON.ObjectFromString(RE_VIDEO_DATA.search(content).groups()[0])
+    except:
+        raise Ex.MediaNotAvailable
+
+    if 'file_http_sub_hd' in data and data['file_http_sub_hd']:
+        file = data['file_http_sub_hd']
+    elif 'file_http_hd' in data and data['file_http_hd']:
+        file = data['file_http_hd']
+    elif 'file_http' in data and data['file_http']:
+        file = data['file_http']
+    else:
+        raise Ex.MediaNotAvailable
+
+    try:
+        hls_url = VIDEO_TEMPLATE_URL % (file, data['streaming_config']['http_streaming']['hls_file'])
+    except:
+        raise Ex.MediaNotAvailable
+
+    return IndirectResponse(
+        VideoClipObject,
+        key = HTTPLiveStreamURL(url=hls_url)
+    )

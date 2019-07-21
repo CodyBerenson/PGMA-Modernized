@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>CollegeHumor</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.collegehumor.com/video/6579356/game-of-thrones-rpg</string>
+				<string>http://www.collegehumor.com/video/6550847/female-armor-sucks</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://www.collegehumor.com/(video|embed)/\d+</string>
+				<string>^http://\d+\.static\.collegehumor\.cvcdn\.com/moogaloop.+clip_id=\d+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

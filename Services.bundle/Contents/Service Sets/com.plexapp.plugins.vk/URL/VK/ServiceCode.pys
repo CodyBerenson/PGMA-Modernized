@@ -1,0 +1,71 @@
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36'}
+RE_JSON = Regex('var vars = ({.+?})\n')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJSON(url)
+
+	title = json_obj['md_title'] if json_obj['md_title'] != "" else "-"
+	title = String.Unquote(str(title), usePlus=True)
+	thumb = json_obj['thumb']
+
+	return VideoClipObject(
+		title = title,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, res=resolution))
+			],
+			video_resolution = resolution,
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		) for resolution in [720, 480, 360]
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res, **kwargs):
+
+	json_obj = GetJSON(url)
+	available_resolutions = []
+
+	for resolution in [720, 480, 360, 240]:
+		key = 'url%d' % resolution
+
+		if key in json_obj:
+			available_resolutions.append(resolution)
+
+	if len(available_resolutions) < 1:
+		raise Ex.MediaNotAvailable
+
+	closest = min((abs(res - i), i) for i in available_resolutions)[1]
+	key = 'url%d' % closest
+
+	return IndirectResponse(VideoClipObject, key=json_obj[key])
+
+####################################################################################################
+def GetJSON(url):
+
+	data = HTTP.Request(url).content
+	data = data.decode('cp1251').encode('utf8')
+	json = RE_JSON.search(data)
+
+	if not json:
+		raise Ex.MediaNotAvailable
+
+	return JSON.ObjectFromString(json.group(1))

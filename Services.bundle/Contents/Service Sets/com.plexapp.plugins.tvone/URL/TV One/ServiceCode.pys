@@ -1,0 +1,53 @@
+BASE_URL = 'http://www.tvone.tv'
+
+NAMESPACES = {"a":"http://www.w3.org/2005/SMIL21/Language"}
+
+SMIL_URL = "http://link.theplatform.com/s/6VRNfB/%s"
+
+THUMB_URL = "http://tvone.tv/pdk/thumbnails/%s.jpg"
+
+def NormalizeURL(url):
+    return url
+
+def MetadataObjectForURL(url):
+    smil = GetSMIL(url)
+    details = smil.xpath('//a:video', namespaces=NAMESPACES)[0]
+    title = details.get('title')
+    summary = details.get('abstract')
+    duration = int(details.get('dur').strip('ms'))
+    thumb = THUMB_URL % details.get('src').strip('.flv').replace(' ', '_')
+    
+    return VideoClipObject(
+        title = title,
+        summary = summary,
+        duration = duration,
+        thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+    )
+
+def MediaObjectsForURL(url):
+    return [
+        MediaObject(
+            audio_channels = 2,
+            parts = [PartObject(key=Callback(PlayVideo, url=url))]
+        )
+    ]
+
+@indirect
+def PlayVideo(url, **kwargs):
+    smil = GetSMIL(url)
+    source = smil.xpath('//a:video', namespaces=NAMESPACES)[0]
+    player = smil.xpath('//a:meta', namespaces=NAMESPACES)[0].get('base')
+    clip = source.get('src').strip('flv')
+    return IndirectResponse(VideoClipObject, key=RTMPVideoURL(url=player, clip=clip))
+
+def GetSMIL(url):
+    pID = url.split('?pid=')[1]
+    smil = XML.ElementFromURL(SMIL_URL % pID)
+    return smil
+
+def TestURLs():
+    test_urls = []
+    data = HTML.ElementFromURL(BASE_URL + '/video')
+    for video in data.xpath('//div[@class="hv-item"]/a'):
+        test_urls.append(BASE_URL + video.get('href'))
+    return test_urls

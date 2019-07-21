@@ -1,0 +1,65 @@
+iMOVIES_SEARCH = 'http://www.google.com/custom?domains=imovies.blogspot.com&q=%s&sa=Google Search&sitesearch=imovies.blogspot.com&client=pub-0024438614172783&forid=1&channel=0953628090&ie=ISO-8859-1&oe=ISO-8859-1&flav=0000&sig=1IM7oqh8bkNQM8Wj&cof=GALT:#008000;GL:1;DIV:#336699;VLC:663399;AH:center;BGC:FFFFFF;LBGC:336699;ALC:0000FF;LC:0000FF;T:000000;GFNT:0000FF;GIMP:0000FF;LH:49;LW:386;L:http://img133.imageshack.us/img133/4669/fpdmhm6.png;S:http://imovies.blogspot.com/;FORID:1&hl=en'
+
+####################################################################################################
+
+def NormalizeURL(url):
+  #add code to normalize as necessary
+  return url
+
+####################################################################################################
+
+def MetadataObjectForURL(url):
+  data = HTML.ElementFromURL(url, cacheTime=7200, errors='ignore')
+
+  title = data.xpath('//title')[0].text.strip('iMovies Public Domain Theater - ')
+  #Log(title)
+  summary = data.xpath('//meta[@name="Description"]')[0].get('content')
+  #Log(summary)
+  
+  #thumbUrl = GetThumb(title)
+  
+  # Construct a metadata item
+  mc = MovieObject(
+    title = title,
+    summary = summary,
+    #thumb = thumbUrl
+  )
+  return mc
+  
+####################################################################################################
+
+def MediaObjectsForURL(url):
+
+  return [
+    MediaObject(
+      parts = [PartObject(key=Callback(PlayVideo, url=url))],
+      container = Container.MP4,
+      video_codec = VideoCodec.H264,
+      audio_codec = AudioCodec.AAC,
+      audio_channels = 2,
+      bitrate = 600,
+      optimized_for_streaming = True,
+      video_resolution = 'sd'
+      )
+  ]
+
+####################################################################################################
+
+def PlayVideo(url, **kwargs):
+  content = HTTP.Request(url).content
+  video_url = content.split("'file=")[1].split("&")[0]
+  #Log(video_url)
+  return Redirect(video_url)
+
+####################################################################################################
+
+def GetThumb(title):
+  ### Currently non-funtional ###
+
+  searchResult = HTML.ElementFromURL(iMOVIES_SEARCH % title)
+  firstResult = searchResult.xpath('//h2[@class="r"]/a')[0].get('href')
+  #Log(firstResult)
+  
+  thumb_url = None
+  
+  return redirect(thumb_url)

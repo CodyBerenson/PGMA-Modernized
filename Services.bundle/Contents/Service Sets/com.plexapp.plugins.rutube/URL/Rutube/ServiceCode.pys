@@ -1,0 +1,84 @@
+RE_JSON = Regex('window\.player_data = (\{.+\});', Regex.DOTALL)
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		html = HTML.ElementFromURL(url)
+	except Ex.HTTPError, e:
+		if e.code == 404:
+			raise Ex.MediaNotAvailable
+
+	if len(html.xpath('//meta[@property="og:video"]')) < 1:
+		raise Ex.MediaNotAvailable
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	summary = html.xpath('//meta[@property="og:description"]/@content')[0]
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0]
+	duration = html.xpath('//meta[@property="og:video:duration"]/@content')[0]
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = thumb,
+		duration = int(duration)*1000
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=HTTPLiveStreamURL(Callback(PlayVideo, url=url)))
+			],
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	try:
+		html = HTML.ElementFromURL(url)
+	except Ex.HTTPError, e:
+		if e.code == 404:
+			raise Ex.MediaExpired
+
+	embed_url = html.xpath('//meta[@property="og:video:iframe"]/@content')[0]
+	page = HTTP.Request(embed_url).content
+	json = RE_JSON.search(page)
+
+	if not json:
+		raise Ex.MediaNotAvailable
+
+	json_obj = JSON.ObjectFromString(json.group(1))
+
+	if not 'video_balancer' in json_obj['options']:
+		raise Ex.MediaNotAvailable
+
+	m3u8_url = json_obj['options']['video_balancer']['m3u8']
+
+	return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(url=m3u8_url))
+
+####################################################################################################
+def TestURLs():
+
+	test_urls = []
+	html = HTML.ElementFromURL('http://rutube.ru/')
+
+	for vid in html.xpath('//article[contains(@class, "editorsfeed")]'):
+		url = vid.xpath('.//meta[@itemprop="url"]/@content')[0]
+		test_urls.append(url)
+
+		if len(test_urls) > 2:
+			break
+
+	return test_urls

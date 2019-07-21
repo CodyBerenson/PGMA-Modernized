@@ -1,0 +1,27 @@
+PLAYER_KEY = Regex('"playerKey": "([^"]+)"')
+VIDEO_ID = Regex('"videoID": "(\d+)"')
+
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_4) AppleWebKit/537.78.2 (KHTML, like Gecko) Version/7.0.6 Safari/537.78.2'}
+BC_URL = 'http://c.brightcove.com/services/viewer/htmlFederated?playerKey=%s&dynamicStreaming=true&@videoPlayer=%s&refURL=%s'
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	bc_url = GetBrightCoveURL(url)
+	return URLService.MetadataObjectForURL(bc_url)
+
+####################################################################################################
+@deferred
+def MediaObjectsForURL(url):
+
+	bc_url = GetBrightCoveURL(url)
+	return URLService.MediaObjectsForURL(bc_url)
+
+####################################################################################################
+def GetBrightCoveURL(url):
+
+	page = HTTP.Request(url).content
+	player_key = PLAYER_KEY.search(page).group(1)
+	video_id = VIDEO_ID.search(page).group(1)
+
+	return BC_URL % (player_key, video_id, String.Quote(url))

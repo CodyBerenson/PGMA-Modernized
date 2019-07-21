@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Wimp</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^(?!.*/(archives|random)/?$)http://www.wimp.com/.+</string>
+			</array>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.wimp.com/heres-a-guy-giving-his-hedgehog-a-bath/</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

@@ -1,0 +1,154 @@
+HTTP.CacheTime = CACHE_1DAY
+httpHeaders = {'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/536.26.14 (KHTML, like Gecko) Version/6.0.1 Safari/536.26.14'}
+
+QUALITY = ['HD', 'Med', 'Low']
+
+RE_JSON = Regex("(?P<json>('|\")client_JSON('|\")(\s*):(\s*)\{.+\})")
+RE_IFRAMES = Regex('<iframe.+?/iframe>')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	video = VideoClipObject()
+	json = GetJson(url)
+
+	if json:
+		video.title = json['title']
+		video.summary = json['description']
+		video.thumb = json['thumbnail']
+
+		if 'start_date' in json:
+			try: video.originally_available_at = Datetime.ParseDate(json['start_date']).date()
+			except: pass
+
+		if 'duration' in json:
+			video.duration = TimeToMs(json['duration'])
+
+		if 'rating_cache' in json and json['rating_cache'] != '':
+			video.rating = float(json['rating_cache']) * 2
+
+		tags = []
+		if 'keywords' in json:
+			for keyword in json['keywords']:
+				tags.append(keyword['keyword'])
+			video.tags = tags
+
+	return video
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url, fmt='HD'))],
+			video_resolution = '720',
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		),
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url, fmt='Med'))],
+			video_resolution = '480',
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		),
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url, fmt='Low'))],
+			video_resolution = 'sd',
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+def GetJson(url):
+
+	html = HTTP.Request(url, headers=httpHeaders).content
+
+	# Extract the relevant JSON part
+	result = RE_JSON.search(html)
+
+	if result:
+		json_string = '{%s' % result.group('json')
+		json_string = RE_IFRAMES.sub('', json_string)
+		json_string = json_string.replace("'client_JSON'", '"client_JSON"')
+		json = JSON.ObjectFromString(json_string)['client_JSON']['episode']
+		json['relatedShows'] = []
+
+		return json
+	else:
+		return None
+
+####################################################################################################
+def TimeToMs(timecode):
+
+	seconds = 0
+
+	try:
+		duration = timecode.split(':')
+		duration.reverse()
+
+		for i in range(0, len(duration)):
+			seconds += int(duration[i]) * (60**i)
+	except:
+		pass
+
+	return seconds * 1000
+
+####################################################################################################
+@indirect
+def PlayVideo(url=None, fmt='HD', **kwargs):
+
+	if not url:
+		return None
+
+	json = GetJson(url)
+
+	if not json:
+		return
+
+	available = {}
+
+	# If multiple versions of a video are available, get the ones with 'quality_level' info
+	for video in json['videos']:
+		if 'quality_level' in video and video['url'].endswith('.mp4'):
+			key = video['quality_level']
+			if key in QUALITY:
+				available[key] = video['url']
+
+	# Or if there's just one quality available (older videos mostly), get the mp4 version
+	if len(available) == 0:
+		for video in json['videos']:
+			if video['url'].endswith('.mp4'):
+				key = QUALITY[-1]
+				available[key] = video['url']
+				break
+
+	# Return the requested quality or figure out what the next best available quality is
+	start_index = QUALITY.index(fmt)
+	end_index = len(QUALITY)
+
+	for i in range(start_index, end_index):
+		key = QUALITY[i]
+		if key in available:
+			return IndirectResponse(VideoClipObject, key=available[key])
+			break
+
+	for i in reversed(range(0, start_index)):
+		key = QUALITY[i]
+		if key in available:
+			return IndirectResponse(VideoClipObject, key=available[key])
+			break

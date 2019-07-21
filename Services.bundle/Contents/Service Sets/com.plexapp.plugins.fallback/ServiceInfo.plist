@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Fallback</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://videojs.com/</string>
+				<string>http://sublimevideo.net/</string>
+				<string>http://www.macslocum.com/html5-video.html</string>
+				<string>http://www.miracletutorials.com/howto-embed-vimeo/</string>
+				<string>http://apiblog.youtube.com/2010/07/new-way-to-embed-youtube-videos.html</string>
+				<string>http://events.apple.com.edgesuite.net/1201oihbafvpihboijhpihbasdouhbasv/event/index.html</string>
+				<string>http://feeds.gawker.com/~r/kotaku/full/~3/2EtRMj7UFH8/angry-birds-observe-easter-too-but-its-weird</string>
+				<string>http://www.bbc.co.uk/go/rss/int/news/-/news/entertainment-arts-17249429</string>
+				<string>http://www.theverge.com/2011/11/17/2568348/galaxy-nexus-review</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^$</string>
+			</array>
+			<key>Fallback</key>
+			<true/>
+		</dict>
+	</dict>
+</dict>
+</plist>

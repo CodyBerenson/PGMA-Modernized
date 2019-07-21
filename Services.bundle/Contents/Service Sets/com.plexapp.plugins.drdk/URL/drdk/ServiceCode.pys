@@ -1,0 +1,194 @@
+BASE_URL = "http://www.dr.dk/tv"
+API_URL = "http://www.dr.dk/mu-online/api/1.3/"
+RE_DRTV = Regex('(.+)dr.dk/tv/se/(.*)/(.*)')
+RE_DRWEB = Regex('(.+)dr.dk/(?!tv)|(?!radio)')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	if 'mobil.dr.dk' in url:
+		url = url.replace('mobil.dr.dk', 'www.dr.dk')
+		url = url.replace('/smartphone/#artikel/', '/')
+
+	return url.split('/popup')[0].rsplit('!#',1)[0].rsplit('#!',1)[0].lower()
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	if RE_DRTV.match(url):
+
+		slug = url.rsplit('/',1)[1]
+
+		if slug == '':
+			html = HTML.ElementFromURL(url)
+			url = html.xpath('//input[@id="shareLink"]/@data-value')[0]
+			slug = url.rsplit('/',1)[1]
+
+		json = JSON.ObjectFromURL(API_URL + 'programcard/' + slug)
+
+		if not 'PrimaryAsset' in json:
+			raise Ex.MediaNotAvailable
+
+		# Expired check
+		# Check for big future years first to prevent "OverflowError: mktime argument out of range" error on the node server
+		expired = False
+
+		if int(json['PrimaryAsset']['EndPublish'].split('-')[0]) > Datetime.Now().year:
+			expired = False
+		elif Datetime.TimestampFromDatetime(Datetime.ParseDate(json['PrimaryAsset']['EndPublish'])) < Datetime.TimestampFromDatetime(Datetime.Now()):
+			expired = True
+
+		if expired:
+			raise Ex.MediaExpired
+		else:
+			mo = EpisodeObject()
+			mo.title = unicode(json['Title']).split(' | ')[0]
+			mo.summary = json['Description'] if 'Description' in json else None
+			mo.originally_available_at = Datetime.ParseDate(json['PrimaryBroadcastStartTime'])
+			mo.show = json['SeriesTitle']
+			mo.thumb = json['PrimaryImageUri'] + '?width=512&height=512'
+			mo.art = json['PrimaryImageUri']
+			mo.source_title = 'DR'
+			mo.duration = json['PrimaryAsset']['DurationInMilliseconds']
+
+	elif RE_DRWEB.match(url):
+
+		try:
+			page = HTML.ElementFromURL(url)
+		except:
+			raise Ex.MediaNotAvailable
+
+		dataResource = page.xpath("//div/@data-resource")
+
+		if len(dataResource) < 1:
+			raise Ex.MediaNotAvailable
+		else:
+			dataResource = dataResource[0]
+
+			if dataResource.startswith('//'):
+				dataResource = 'http:%s' % (dataResource)
+
+		title = page.xpath('//title')[0].text
+		json = JSON.ObjectFromURL(dataResource)
+
+		if json['ResultSize'] > 0:
+
+			# Expired check
+			# Check for big future years first to prevent "OverflowError: mktime argument out of range" error on the node server
+			if int(json['Data'][0]['PrimaryAssetEndPublish'].split('-')[0]) > Datetime.Now().year:
+				expired = False
+			elif Datetime.TimestampFromDatetime(Datetime.ParseDate(json['Data'][0]['PrimaryAssetEndPublish'])) < Datetime.TimestampFromDatetime(Datetime.Now()):
+				expired = True
+			else:
+				expired = False
+
+			if expired:
+				raise Ex.MediaExpired
+			else:
+				mo = EpisodeObject()
+				mo.title = unicode(title).split(' | ')[0]
+				mo.summary = json['Data'][0]['Description'] if 'Description' in json['Data'][0] else None
+				mo.thumb = 'http://www.dr.dk/mu/ProgramCard/ImageUri/' + json['Data'][0]['Slug'] + '?height=512&width=512'
+				mo.art = 'http://www.dr.dk/mu/ProgramCard/ImageUri/' + json['Data'][0]['Slug']
+
+				for data_asset in json['Data'][0]['Assets']:
+					if data_asset['Kind'] == 'Image':
+						continue
+					else:
+						asset = data_asset
+						break
+
+				mo.duration = asset['DurationInMilliseconds']
+		else:
+			raise Ex.MediaNotAvailable
+
+	else:
+		raise Ex.MediaNotAvailable
+
+	return mo
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	if RE_DRTV.match(url):
+
+		slug = url.rsplit('/',1)[1]
+
+		return [
+			MediaObject(
+				audio_channels = 2,
+				optimized_for_streaming = True,
+				parts = [
+					PartObject(key=HTTPLiveStreamURL(Callback(PlayMedia, slug=slug)))
+				]
+			)
+		]
+
+	elif RE_DRWEB.match(url):
+
+		return [
+			MediaObject(
+				audio_channels = 2,
+				optimized_for_streaming = True,
+				parts = [
+					PartObject(key=HTTPLiveStreamURL(Callback(PlayMedia, url=url)))
+				]
+			)
+		]
+
+####################################################################################################
+@indirect
+def PlayMedia(slug=None, url=None, **kwargs):
+
+	if slug:
+
+		ProgramCard = JSON.ObjectFromURL(API_URL + 'programcard/' + slug)
+
+		try:
+			PrimaryAsset = JSON.ObjectFromURL(ProgramCard['PrimaryAsset']['Uri'])
+		except:
+			raise Ex.MediaNotAvailable
+
+		for Links in PrimaryAsset['Links']:
+			if Links['Target'] == 'HLS':
+
+				#values = {
+				#	"Id": slug,
+				#	"Client": "Plex.%s.%s" % (Client.Platform, Client.Version)
+				#}
+				#HTTP.Request(API_URL + 'reporting/viewed', values=values)
+
+				return IndirectResponse(EpisodeObject, key=Links['Uri'])
+
+		raise Ex.MediaNotAvailable
+
+	elif url:
+
+		page = HTML.ElementFromURL(url)
+		dataResource = page.xpath("//div/@data-resource")
+
+		if len(dataResource) < 1:
+			raise Ex.MediaNotAvailable
+		else:
+			dataResource = dataResource[0]
+
+			if dataResource.startswith('//'):
+				dataResource = 'http:%s' % (dataResource)
+
+		asset_json = JSON.ObjectFromURL(dataResource)['Data'][0]['Assets']
+
+		for data_asset in asset_json:
+			if data_asset['Kind'] == 'Image':
+				continue
+			else:
+				asset = data_asset
+				break
+
+		for links in asset['Links']:
+			if 'HLS' in links['Target']:
+				return IndirectResponse(EpisodeObject, key=links['Uri'])
+
+####################################################################################################
+def TestURLs():
+
+	pass

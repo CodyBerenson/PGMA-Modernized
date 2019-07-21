@@ -1,0 +1,46 @@
+VIDEO_DETAILS_URL = 'http://c.brightcove.com/services/viewer/htmlFederated?&width=1000&height=512&playerID=%s&@videoPlayer=%s&playerKey=%s'
+RE_EXPERIENCE = Regex('var experienceJSON = (.+)};')
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	details = GetDetails(url)
+
+	return VideoClipObject(
+		title = details['displayName'],
+		summary = details['shortDescription'],
+		thumb = Resource.ContentsOfURLWithFallback([details['videoStillURL'], details['thumbnailURL']]),
+		originally_available_at = Datetime.FromTimestamp(float(details['publishedDate']) / 1000)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True,
+			parts = [PartObject(key = Callback(PlayVideo, url = url))]
+		)
+	]
+
+####################################################################################################
+def PlayVideo(url, **kwargs):
+
+	return Redirect(GetDetails(url)['FLVFullLengthURL'])
+
+####################################################################################################
+def GetDetails(url):
+
+	page = HTML.ElementFromURL(url)
+
+	playerId = page.xpath('//object[@class = "BrightcoveExperience"]//param[@name = "playerID"]')[0].get('value')
+	playerKey = page.xpath('//object[@class = "BrightcoveExperience"]//param[@name = "playerKey"]')[0].get('value')
+	videoPlayer = page.xpath('//object[@class = "BrightcoveExperience"]//param[@name = "@videoPlayer"]')[0].get('value')
+
+	video_details_page = HTTP.Request(VIDEO_DETAILS_URL % (playerId, videoPlayer, playerKey)).content
+	experience = RE_EXPERIENCE.search(video_details_page).group(1) + '}'
+	return JSON.ObjectFromString(experience)['data']['programmedContent']['videoPlayer']['mediaDTO']

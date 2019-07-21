@@ -1,0 +1,134 @@
+MOVIE_JSON_URL = 'http://movietrailers.apple.com/trailers/%s/%s/data/page.json'
+RE_URL_INFO = Regex('^https?:\/\/(?:movie)?trailers\.apple\.com\/trailers\/([^\/]+)\/([^\/#]+)\/?#?([^\/]+)?$')
+
+HTTP_HEADERS = {
+	'User-Agent': 'AppleCoreMedia/1.0.0.12D78 (Macintosh; U; Intel Mac OS X 10_8_3; en_us)'
+}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	(studio, movie_title, clip_type) = RE_URL_INFO.findall(url)[0]
+
+	if not clip_type:
+		clip_type = 'trailer'
+
+	return 'http://movietrailers.apple.com/trailers/%s/%s/#%s' % (studio, movie_title, clip_type)
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	(studio, movie_title, clip_type) = RE_URL_INFO.findall(url)[0]
+	json_obj = JSON.ObjectFromURL(MOVIE_JSON_URL % (studio, movie_title))
+
+	title = json_obj['page']['movie_title']
+
+	if 'synopsis' in json_obj['details']:
+		summary = json_obj['details']['synopsis']
+	else:
+		summary = json_obj['details']['locale']['en']['synopsis']
+
+	clip_title = FindClip(url)
+
+	for clip in json_obj['clips']:
+
+		if clip['title'] == clip_title:
+			thumb = clip['screen'].replace('http://trailers.apple.com/', 'http://movietrailers.apple.com/')
+			duration = Datetime.MillisecondsFromString(clip['runtime']) if clip['runtime'] else None
+			break
+
+	return VideoClipObject(
+		title = '%s (%s)' % (title, clip_title),
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(thumb),
+		duration = duration
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, fmt=resolution))
+			],
+			bitrate = bitrate,
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = resolution,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		) for resolution, bitrate in [('1080', 10000), ('720', 5000), ('sd', 1500)]
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, fmt=None, **kwargs):
+
+	if fmt is None or url.split('.')[-1] in ('mov', 'm4v', 'mp4'):
+		return None
+
+	(studio, movie_title, clip_type) = RE_URL_INFO.findall(url)[0]
+	json_obj = JSON.ObjectFromURL(MOVIE_JSON_URL % (studio, movie_title))
+
+	clip_title = FindClip(url)
+
+	for clip in json_obj['clips']:
+
+		if clip['title'] == clip_title:
+			versions = clip['versions']['enus']['sizes']
+			break
+
+	if fmt == '1080' and 'hd1080' in versions:
+		if 'srcAlt' in versions['hd1080']:
+			video_url = versions['hd1080']['srcAlt']
+		else:
+			video_url = versions['hd1080']['src']
+
+	elif fmt in ['1080', '720'] and 'hd720' in versions:
+		if 'srcAlt' in versions['hd720']:
+			video_url = versions['hd720']['srcAlt']
+		else:
+			video_url = versions['hd720']['src']
+
+	elif fmt in ['1080', '720', 'sd'] and 'sd' in versions:
+		if 'srcAlt' in versions['sd']:
+			video_url = versions['sd']['srcAlt']
+		else:
+			video_url = versions['sd']['src']
+
+	else:
+		raise Ex.MediaNotAvailable
+
+	return IndirectResponse(VideoClipObject, key=video_url, http_headers=HTTP_HEADERS)
+
+####################################################################################################
+def FindClip(url):
+
+	(studio, movie_title, clip_type) = RE_URL_INFO.findall(url)[0]
+	json_obj = JSON.ObjectFromURL(MOVIE_JSON_URL % (studio, movie_title))
+	clip_type = String.Unquote(clip_type).lower()
+
+	# If there's only one clip available, use that one
+	if len(json_obj['clips']) == 1:
+		return json_obj['clips'][0]['title']
+	else:
+		for clip in json_obj['clips']:
+			if clip['title'].lower() == clip_type or clip['title'].lower().replace(' ', '') == clip_type:
+				return clip['title']
+
+		if clip_type != 'trailer':
+			raise Ex.MediaNotAvailable
+		else:
+			# Fallback to 'trailer 2', 'theatrical trailer', 'international trailer', etc.
+			for clip in json_obj['clips']:
+				if 'trailer' in clip['title'].lower():
+					return clip['title']
+
+	raise Ex.MediaNotAvailable
+
+####################################################################################################
+def GetThumb(**kwargs):
+
+	return Redirect('http://resources-cdn.plexapp.com/image/source/com.plexapp.plugins.amt.jpg')

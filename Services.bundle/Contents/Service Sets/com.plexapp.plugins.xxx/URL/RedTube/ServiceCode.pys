@@ -1,0 +1,117 @@
+RE_VIDEO_ID = Regex('redtube\.com/(?P<video_id>\d+)')
+RE_JSON = Regex('mediaDefinition:.*(\[.+?\])')
+API_URL = 'https://api.redtube.com/?data=redtube.Videos.getVideoById&video_id=%s&output=json'
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	video_id = RE_VIDEO_ID.search(url)
+
+	if not video_id:
+		return None
+
+	try:
+		data = JSON.ObjectFromURL(API_URL % video_id.group('video_id'))
+	except:
+		raise Ex.MediaNotAvailable
+
+	if not 'video' in data:
+		raise Ex.MediaNotAvailable
+	else:
+		data = data['video']
+
+	title = data['title']
+	thumb = data['default_thumb']
+
+	try: duration = TimeToMs(data['duration'])
+	except: duration = None
+
+	try: rating = float(data['rating']) * 2
+	except: rating = None
+
+	tags = []
+	if 'tags' in data:
+		for key in data['tags']:
+			tags.append(data['tags'][key])
+
+	try: originally_available_at = Datetime.ParseDate(data['publish_date']).date()
+	except: originally_available_at = None
+
+	try: year = int(data['publish_date'].split('-')[0])
+	except: year = None
+
+	return VideoClipObject(
+		title = title,
+		thumb = thumb,
+		duration = duration,
+		rating = rating,
+		tags = tags,
+		originally_available_at = originally_available_at,
+		year = year,
+		genres = ['XXX', 'Adult', '18+'],
+		content_rating_age = 18
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = video_resolution,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True,
+			parts = [
+				PartObject(
+					key = Callback(PlayVideo, url=url, res=video_resolution)
+				)
+			]
+		) for video_resolution in ['720', '480']
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res='720', **kwargs):
+
+	try:
+		data = HTTP.Request(url).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	json = RE_JSON.search(data)
+	json_obj = JSON.ObjectFromString(json.group(1))
+
+	available_versions = {}
+
+	for version in json_obj:
+		available_versions[version['quality']] = version['videoUrl']
+
+	if res == '720' and '720' in available_versions:
+		video_url = available_versions['720']
+	elif '480' in available_versions:
+		video_url = available_versions['480']
+	else:
+		video_url = available_versions[available_versions.keys()[0]]
+
+	video_url = 'https://%s' % (video_url.split('//')[-1])
+
+	return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def TimeToMs(timecode):
+
+	seconds  = 0
+	duration = timecode.split(':')
+	duration.reverse()
+
+	for i in range(0, len(duration)):
+		seconds += int(duration[i]) * (60**i)
+
+	return seconds * 1000

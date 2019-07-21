@@ -1,0 +1,65 @@
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36'}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		html = HTML.ElementFromURL(url, headers=HTTP_HEADERS)
+	except:
+		raise Ex.MediaNotAvailable
+
+	youtube_id = html.xpath('//div[contains(@id, "youtube_")]/div[@data-id]/@data-id')
+	vimeo_embed = html.xpath('//iframe[contains(@src, "vimeo.com")]/@src')
+
+	if len(youtube_id) > 0:
+		return URLService.MetadataObjectForURL('https://www.youtube.com/watch?v=%s' % (youtube_id[0]))
+	elif len(vimeo_embed) > 0:
+		return URLService.MetadataObjectForURL(vimeo_embed[0])
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	summary = html.xpath('//meta[@property="og:description"]/@content')[0]
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0]
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url))
+			],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = 'sd',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	try:
+		html = HTML.ElementFromURL(url, headers=HTTP_HEADERS)
+	except:
+		raise Ex.MediaNotAvailable
+
+	video_url = html.xpath('//div[contains(@data-src, ".mp4")]/@data-src')
+
+	if len(video_url) > 0:
+		return IndirectResponse(VideoClipObject, key=video_url[0])
+
+	raise Ex.MediaNotAvailable

@@ -1,0 +1,121 @@
+JSON_URL = 'https://www.dailymotion.com/json/video/%s?fields=video_id,title,thumbnail_large_url,url,stream_h264_sd_url,stream_h264_url,stream_h264_hd_url,rating,duration,description'
+RE_ID = Regex('dailymotion\.com/((embed/)?video/|swf/(video/)?|.+#video(Id)?=)(?P<id>[0-9a-z]+)', Regex.IGNORECASE)
+
+####################################################################################################
+def NormalizeURL(url):
+
+	video_id = RE_ID.search(url)
+
+	if video_id:
+		return 'https://www.dailymotion.com/video/%s' % video_id.group('id')
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	video_id = url.rsplit('/',1)[1]
+
+	try:
+		video = JSON.ObjectFromURL(JSON_URL % video_id)
+	except:
+		raise Ex.MediaNotAvailable
+
+	title = video['title']
+	summary = String.StripTags(video['description'])
+
+	if 'thumbnail_large_url' in video:
+		thumb_url = video['thumbnail_large_url']
+	elif 'thumbnail_url' in video:
+		thumb_url = video['thumbnail_url']
+	else:
+		thumb_url = ''
+
+	duration = int(video['duration'])*1000
+
+	try:
+		date_string = thumb_url.split('?')[-1]
+		date = '%s/%s/%s' % (date_string[4:6], date_string[6:8], date_string[0:4])
+		originally_available_at = Datetime.ParseDate(date).date()
+	except:
+		originally_available_at = None
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(thumb_url),
+		duration = duration,
+		originally_available_at = originally_available_at
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	video_id = url.rsplit('/',1)[1]
+	json_url = JSON_URL % video_id
+	
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=json_url, post_url=json_url, fmt='hd'))],
+			container = Container.MP4,
+			bitrate = '1500',
+			video_resolution = '720',
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		),
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=json_url, post_url=json_url, fmt='sd'))],
+			container = Container.MP4,
+			bitrate = '400',
+			video_resolution = 'sd',
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		),
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=json_url, post_url=json_url, fmt='low-res'))],
+			container = Container.MP4,
+			bitrate = '180',
+			video_resolution = 'sd',
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url=None, fmt=None, **kwargs):
+
+	if not url or not fmt:
+		raise Ex.MediaNotAvailable
+
+	try:
+		data = HTTP.Request(url).content
+		if not data[0:1] == '{':
+			raise Ex.MediaNotAvailable
+	except:
+		raise Ex.MediaNotAvailable
+
+	video = JSON.ObjectFromString(data)
+	video_url = None
+
+	if fmt == 'hd':
+		if 'stream_h264_hd_url' in video:
+			video_url = video['stream_h264_hd_url']
+		elif 'stream_h264_url' in video:
+			video_url = video['stream_h264_url']
+		elif 'stream_h264_sd_url' in video:
+			video_url = video['stream_h264_sd_url']
+
+	if fmt == 'sd' or video_url is None:
+		if 'stream_h264_url' in video:
+			video_url = video['stream_h264_url']
+		elif 'stream_h264_sd_url' in video:
+			video_url = video['stream_h264_sd_url']
+		else:
+			raise Ex.MediaNotAvailable
+
+	return IndirectResponse(VideoClipObject, key=video_url.replace('http://', 'https://'))

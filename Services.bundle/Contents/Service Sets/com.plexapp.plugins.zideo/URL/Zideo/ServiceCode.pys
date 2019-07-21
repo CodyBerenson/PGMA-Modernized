@@ -1,0 +1,80 @@
+VIDEO_URL = 'http://www.zideo.nl/playzideo/%s'
+XML_URL = 'http://www.zideo.nl/player/config?playzideo=%s'
+VIDEO_ID = Regex('playzideo=(?P<id>[^&]+)')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	video_id = GetVideoId(url)
+	if video_id:
+		return VIDEO_URL % video_id
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	video_id = GetVideoId(url)
+	if not video_id:
+		return None
+
+	xml = XML.ElementFromURL(XML_URL % video_id)
+	video_url = xml.xpath('//file/text()')[0]
+
+	if 'youtube.com/' in video_url:
+		return URLService.MetadataObjectForURL(video_url)
+
+	html = HTML.ElementFromURL(url)
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	summary = html.xpath('//meta[@property="og:description"]/@content')[0]
+	duration = int(xml.xpath('//duration/text()')[0]) * 1000
+	thumb = xml.xpath('//image/text()')[0]
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url))],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = 'sd',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	video_id = GetVideoId(url)
+	if not video_id:
+		return None
+
+	xml = XML.ElementFromURL(XML_URL % video_id)
+	video_url = xml.xpath('//file/text()')[0]
+
+	return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def GetVideoId(url):
+
+	html = HTML.ElementFromURL(url)
+
+	iframe = html.xpath('//iframe[contains(@src, "playzideo=")]/@src')
+	if len(iframe) < 1:
+		return None
+
+	video_id = VIDEO_ID.search(iframe[0])
+	if video_id:
+		return video_id.group('id')
+
+	return None

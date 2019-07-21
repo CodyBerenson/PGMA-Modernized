@@ -1,0 +1,86 @@
+# http://www.cbc.ca/player/play/786494019881
+# http://www.cbc.ca/player/play/786490435768
+
+FEED_URL = "http://tpfeed.cbc.ca/f/ExhSPC/vms_5akSXx4Ng_Zn?q=*&byGuid=%s"
+FEED_URL_2 = "http://feed.theplatform.com/f/h9dtGB/dHMhf1eENFvm?pretty=true&form=json&&sort=title&fields=media$content,title,guid,media$thumbnails,:adOrder,id,:audioVideo,:liveOnDemand,pubDate&fileFields=plfile$url,plfile$duration&byContent=byReleases%3DbyId%253D"
+SMIL_PARAMS = "?manifest=m3u&feed=iOS%20News%20app%20feed&format=smil&mbr=true"
+AudioStreamObject.language_code = Locale.Language.English
+
+####################################################################################################
+def NormalizeURL(url):
+	Log.Debug('Parsing old CBC.ca URL:' + url)
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+	Log.Debug('Getting metadata for old CBC.ca URL:' + url)
+	try:
+		page = HTML.ElementFromURL(url)
+	except:
+		raise Ex.MediaNotAvailable
+	
+	title = page.xpath('//meta[@property="og:title"]/@content')[0]
+	summary = page.xpath('//meta[@property="og:description"]/@content')[0]
+	thumb = page.xpath('//meta[@property="og:image"]/@content')[0]
+	date = page.xpath('//meta[@property="video:release_date"]/@content')[0]
+
+	video_type = page.xpath('//meta[@property="og:type"]/@content')[0]
+
+	if video_type == "video.episode":
+		show = page.xpath('//meta[@property="video:series"]/@content')[0]
+		title = "%s - %s" % (show, title)
+	
+	duration = int(page.xpath('//meta[@property="video:duration"]/@content')[0])*1000
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		originally_available_at	= Datetime.ParseDate(date).date(),
+		duration = duration,
+		thumb = thumb
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			audio_channels = 2,
+			video_resolution = 720,
+			optimized_for_streaming = True,
+			parts = [
+				PartObject(
+					key = HTTPLiveStreamURL(Callback(PlayHLS, url=url))
+				)
+			]
+		)
+	]
+
+####################################################################################################
+# Example URL: http://tpfeed.cbc.ca/f/ExhSPC/vms_5akSXx4Ng_Zn?q=*&byGuid=762553411825
+@indirect
+def PlayHLS(url, **kwargs):
+	vid = url.split('/')[-1]
+
+	try:
+		feed = JSON.ObjectFromURL(FEED_URL % vid)
+		content_url = feed['entries'][0]['content'][0]['url']
+		# http://link.theplatform.com/s/ExhSPC/s_Pp3MqJIFzB/meta.smil?feed=Player%20Selector%20-%20Prod&format=smil&mbr=true
+	except:
+		feed = JSON.ObjectFromURL(FEED_URL_2 + vid)
+
+		if not 'entries' in feed or len(feed['entries']) < 1:
+			raise Ex.MediaNotAvailable
+
+		content_url = feed['entries'][0]['media$content'][0]['plfile$url']
+
+	smil_url = content_url.split('?')[0] + SMIL_PARAMS
+	smil = XML.ElementFromURL(smil_url)
+
+	# Check for geoblock
+	if len(smil.xpath('//a:param[contains(@value, "Geo")]', namespaces={'a':'http://www.w3.org/2005/SMIL21/Language'})) > 0:
+		raise Ex.MediaGeoblocked
+
+	m3u8_url = smil.xpath('//a:video/@src', namespaces={'a':'http://www.w3.org/2005/SMIL21/Language'})[0]
+
+	return IndirectResponse(VideoClipObject, key=m3u8_url)

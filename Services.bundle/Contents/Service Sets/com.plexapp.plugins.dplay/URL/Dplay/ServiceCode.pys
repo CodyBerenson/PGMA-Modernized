@@ -1,0 +1,110 @@
+RE_VIDEO_ID = Regex('\?p=(\d+)')
+
+####################################################################################################
+def MetadataObjectForURL(url):
+    
+    video_id = GetVideoID(url)
+    
+    try:
+        json_data = JSON.ObjectFromURL(url = 'http://www.dplay.se/api/v2/ajax/videos?video_id=%s' % video_id, cacheTime = CACHE_1HOUR)
+        json_data = json_data['data'][0]
+    except:
+        raise Ex.MediaNotAvailable
+    
+    title = unicode(json_data['title']) if 'title' in json_data else None
+    summary = unicode(json_data['video_metadata_longDescription']) if 'video_metadata_longDescription' in json_data else None
+    thumb = json_data['video_metadata_videoStillURL'] if 'video_metadata_videoStillURL' in json_data else None
+    
+    try: originally_available_at = Datetime.ParseDate(json_data['created'].split(' ')[0]).date()
+    except: originally_available_at = None
+    
+    show = unicode(json_data['video_metadata_show']) if 'video_metadata_show' in json_data else None
+    
+    try: index = int(json_data['episode'])
+    except: index = None
+    
+    try: season = int(json_data['season'])
+    except: season = None
+    
+    try: duration = int(json_data['video_metadata_length'])
+    except: duration = None
+    
+    return EpisodeObject(
+        title = title,
+        summary = summary,
+        thumb = thumb,
+        originally_available_at = originally_available_at,
+        show = show,
+        index = index,
+        season = season,
+        duration = duration
+    )
+
+
+####################################################################################################
+@deferred
+def MediaObjectsForURL(url):
+
+    video_id = GetVideoID(url)
+    geo_data = JSON.ObjectFromURL('http://geo.dplay.se/geo.js')
+    timestamp = (int(Datetime.TimestampFromDatetime(Datetime.Now()))+3600)*1000
+    dsc_geo = String.Quote('{"countryCode":"%s","expiry":%s}' % (geo_data['countryCode'], timestamp))
+    headers = {'Cookie': 'dsc-geo=%s' % dsc_geo} 
+
+    try:
+        video_data = JSON.ObjectFromURL('https://secure.dplay.se/secure/api/v2/user/authorization/stream/%s?stream_type=hls' % video_id, headers=headers)
+    except Ex.HTTPError, e:
+        if e.code == 403:
+            raise Ex.MediaGeoblocked
+        else:
+            raise Ex.MediaNotAvailable
+    except:
+        raise Ex.MediaNotAvailable
+
+    video_resolution = 576
+    if 'type' in video_data:
+        if video_data['type'] == 'securehd':
+            video_resolution = 1080
+    
+    key = HTTPLiveStreamURL(video_data['hls'])
+    
+    # - Fix for Plex Web clients(avoid M3U8 cross domain access denied)
+    # - Fix for Plex Home Theater(only the master playlist utilizes https)
+    if (Client.Product in ['Plex Web'] and Client.Platform not in ['Safari']) or Client.Platform == 'Plex Home Theater':
+        key = HTTPLiveStreamURL(Callback(PlayVideo, hls_url=video_data['hls']))
+    
+    return [
+        MediaObject(
+            video_resolution = video_resolution,
+            audio_channels = 2,
+            optimized_for_streaming = True,
+            parts = [PartObject(key = key)]
+        )
+    ]
+
+####################################################################################################
+def PlayVideo(hls_url):
+    return HTTP.Request(hls_url).content
+
+####################################################################################################
+def GetVideoID(url):
+    
+    # First search the url
+    video_id = None
+    match = RE_VIDEO_ID.search(url)
+
+    if match:
+        video_id = match.group(1)
+    else:
+        # Try to get the video id via website instead
+        try:
+            element = HTML.ElementFromURL(url = url, cacheTime = CACHE_1HOUR)
+            alternate_url = element.xpath("//link[@rel='shortlink']/@href")[0]
+            video_id = RE_VIDEO_ID.search(alternate_url).groups()[0]
+        except:
+            pass
+
+    if video_id:
+        return video_id
+    else:
+        raise Ex.MediaNotAvailable

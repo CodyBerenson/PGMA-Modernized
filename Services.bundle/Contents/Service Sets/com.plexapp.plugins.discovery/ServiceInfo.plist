@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Discovery</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://(www\.)?(dsc.)?discovery\.com/</string>
+				<string>^http://(www\.)?animal.discovery\.com/</string>
+				<string>^http://(www\.)?animalplanet\.com/</string>
+				<string>^http://(www\.)?apl\.tv/</string>
+				<string>^http://(www\.)?tlc\.com/</string>
+				<string>^http://(www\.)?investigationdiscovery\.com/</string>
+				<string>^http://(www\.)?sci(ence)?\.discovery\.com/</string>
+				<string>^http://(www\.)?america\.discovery\.com/</string>
+				<string>^http://(www\.)?military\.discovery\.com/</string>
+				<string>^http://(www\.)?velocity\.discovery\.com/</string>
+				<string>^http(s)?://(www\.)?ahctvgo\.com/</string>
+				<string>^http(s)?://(www\.)?discoverygo\.com/</string>
+				<string>^http(s)?://(www\.)?velocitychannelgo\.com/</string>
+				<string>^http(s)?://(www\.)?animalplanetgo\.com/</string>
+				<string>^http(s)?://(www\.)?discoverylifego\.com/</string>
+				<string>^http(s)?://(www\.)?tlcgo\.com/</string>
+				<string>^http(s)?://(www\.)?sciencechannelgo\.com/</string>
+				<string>^http(s)?://(www\.)?destinationamericago\.com/</string>
+				<string>^http(s)?://(www\.)?investigationdiscoverygo\.com/</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

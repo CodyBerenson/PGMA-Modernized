@@ -1,0 +1,277 @@
+import re
+
+AUTH_URL = 'https://api-cbc.cloud.clearleap.com/cloffice/client/device/register'
+AUTH_DATA = '<device><type>web</type></device>'
+AudioStreamObject.language_code = Locale.Language.English
+NAMESPACES = {'media': 'http://search.yahoo.com/mrss/', 'clearleap': 'http://www.clearleap.com/namespace/clearleap/1.0/'}
+BASE_URL = 'https://api-cbc.cloud.clearleap.com/cloffice/client/web/browse/'
+CACHE_TIME = CACHE_1HOUR
+ENABLE_HTTPS = True
+
+#### AUTH DATA/CACHE
+# Since it appears the global Dict and Data storage isn't available in a URL Service,
+# declare our own global dict
+#
+# TODO: Implement a proper cache
+AUTH_CACHE = {}
+
+####################################################################################################
+# EXAMPLE URLs:
+#
+# 1) API Root URL: 
+#	https://api-cbc.cloud.clearleap.com/cloffice/client/web/browse/
+#
+# 2) All Shows:
+#	https://api-cbc.cloud.clearleap.com/cloffice/client/web/browse/babb23ae-fe47-40a0-b3ed-cdc91e31f3d6
+#
+# 3) Being Erica Season Index:
+#	https://api-cbc.cloud.clearleap.com/cloffice/client/web/browse/3503afbf-1f80-4f8f-b26d-581082617c5a
+#
+# 4) Being Erica Season Episode list: 
+#	https://api-cbc.cloud.clearleap.com/cloffice/client/web/browse/9536e9fb-84f4-4637-afa3-3500b05f3dc3
+# 
+#	This page contains the <media:content> element with a URL attribute. This URL is the full episode details page
+#		that contains the m3u playlist file URL
+#
+# 5) Episode Details page:
+# 	https://api-cbc.cloud.clearleap.com/cloffice/client/web/browse/38e815a-009d9df1ce0
+#
+# 6) Full show details for Being Erica S01E01 (This page contains playlist URL) 
+#	https://api-cbc.cloud.clearleap.com/cloffice/client/web/play/?contentId=d158320f-cb3d-4bb7-91e9-8aee19f0d296&categoryId=38e815a-009d46e060f
+#	
+#	NOTE: This URL requires authentication headers set
+#
+# 7) Playlist URL that contains additional playlists at various bitrates
+#	http://v.watch.cbc.ca/p//38e815a-009d46e060f//CBC_BEING_ERICA_SEASON_01_S01E01-v1-8852479/CBC_BEING_ERICA_SEASON_01_S01E01-v1-8852479__desktop.m3u8?cbcott=st=1476034102~exp=1476120502~acl=/*~hmac=c133fb8c9fa001c0fdb694a02227c9154465d6dbd07cde81ee02b1c04dc7beef
+#
+# 8) Final playlist URL to play media
+# 	http://v.watch.cbc.ca/p//38e815a-009d46e060f//CBC_BEING_ERICA_SEASON_01_S01E01-v1-8852479/segments/CBC_BEING_ERICA_SEASON_01_S01E01_v7/prog_index.m3u8
+#
+# 9) CBC front-end web page episode URL:
+#	http://watch.cbc.ca/kims-convenience/-/episode-1/38e815a-00ade4014dc
+#	http://watch.cbc.ca/this-hour-has-22-minutes/season-24/episode-2/38e815a-00afd5b8702
+
+
+####################################################################################################
+def NormalizeURL(url):
+	Log.Debug('Normalizing Watch.CBC.ca URL:' + url)
+	# For watch.cbc.ca URLs, extract the GUID at the end of the URL
+	# Eg: http://watch.cbc.ca/kims-convenience/-/episode-1/38e815a-00ade4014dc
+	if re.search('^http(s?):\/\/watch\.cbc\.ca\/.+', url):
+		try:
+			new_url = url.rsplit('/', 1)[1]
+			new_url = BASE_URL + new_url
+			url = new_url
+		except:
+			Log.Debug('Could not convert watch.cbc.ca URL into an API URL. Given URL: ' + url)
+			raise Ex.MediaNotAvailable
+
+	if url.startswith('http://'):
+		ENABLE_HTTPS = False
+
+	return StripHTTPS(url.split('?')[0])
+
+####################################################################################################
+# Example URL: https://api-cbc.cloud.clearleap.com/cloffice/client/web/browse/38e815a-009d9df1ce0
+def MetadataObjectForURL(url):
+	Log.Debug('Getting metadata for Watch.CBC.ca URL:' + url)
+	try:
+		video_data = XML.ElementFromURL(url, cacheTime=CACHE_TIME)
+	except:
+		raise Ex.MediaNotAvailable
+
+	video_data = video_data.xpath('//item')
+
+	# We should only get 1 result, since the URL service is only dealing with episodes/videos
+	if not len(video_data) == 1:
+		raise Ex.MediaNotAvailable
+
+	video_data = video_data[0]
+
+	# Since all varieties of URLs (season, episode list, episode), first verify
+	# we're looking at an episode
+	item_type = video_data.xpath('.//clearleap:itemType/text()', namespaces=NAMESPACES)
+
+	# Bail earlier if the response isn't for a media object
+	if not item_type or not 'media' in item_type:
+		raise Ex.MediaNotAvailable
+
+
+	# Get a set of metadata
+	title = video_data.xpath('.//title/text()')[0]
+	summary = video_data.xpath('.//description/text()')[0]
+	content_element = video_data.xpath('.//media:content', namespaces=NAMESPACES)[0]
+	duration = int(content_element.get('duration')) * 1000 # ms
+	date = video_data.xpath('.//media:credit[contains(@role, "releaseDate")]/text()', namespaces=NAMESPACES)
+	show = video_data.xpath('.//clearleap:series/text()', namespaces=NAMESPACES)[0]
+	actors = video_data.xpath('.//media:credit[contains(@role,"actor")]/text()', namespaces=NAMESPACES)
+	season = video_data.xpath('.//clearleap:season/text()', namespaces=NAMESPACES)
+	episode = video_data.xpath('.//clearleap:episodeInSeason/text()', namespaces=NAMESPACES)
+	content_rating = video_data.xpath('.//media:rating/text()', namespaces=NAMESPACES)
+	
+	Log.Debug('Got video ' + title)
+
+	# Get some images
+	thumb = StripHTTPS(video_data.xpath('.//media:thumbnail[contains(@profile,"CBC-THUMBNAIL-2X")]', namespaces=NAMESPACES)[0].get('url'))
+	art = video_data.xpath('.//media:thumbnail[contains(@profile,"CBC-POSTER-2X")]', namespaces=NAMESPACES)
+
+
+	# Keywords are used on first-level media containers, or second-level season containers
+	# to group a seasoned show, series or season-less show. On an actual media item,
+	# keyword contains the actual show-type, eg: Drama, Documentary
+	# 
+	# Routing values are stored in SHOW_TYPES
+
+	keywords = video_data.xpath('.//media:keywords/text()', namespaces=NAMESPACES)
+
+	item_type = video_data.xpath('.//clearleap:itemType/text()', namespaces=NAMESPACES)
+	parent_url = video_data.xpath('.//clearleap:parentFolderUri/text()', namespaces=NAMESPACES)
+
+	video_obj = EpisodeObject(
+		title = title,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb),
+		duration = duration,
+		show = show
+	)
+
+	# Add some extra metadata
+	if art: video_obj.art = Resource.ContentsOfURLWithFallback(url=StripHTTPS(art[0].get('url')))
+	if duration: video_obj.duration = duration
+	if date: video_obj.originally_available_at = Datetime.ParseDate(date[0]).date()
+	if season: video_obj.season = int(season[0])
+	if episode: video_obj.index = int(episode[0])
+	if content_rating: content_rating = content_rating[0]
+	#if actors: video_obj.guest_stars = actors
+
+	return video_obj
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	Log.Debug('MediaObects URL: ' + url)
+
+	return [
+		MediaObject(
+			#video_resolution = int(item['plfile$height']),
+            #audio_channels = 2,
+            #audio_codec = AudioCodec.AAC,
+            #bitrate = int(item['plfile$bitrate'] / 100),
+            #duration = int(item['plfile$duration'] * 1000),
+            #video_frame_rate = int(item['plfile$frameRate']),
+			parts = [
+				PartObject(key=HTTPLiveStreamURL(Callback(PlayHLS, url=url)))
+			]
+		)
+
+	]
+
+####################################################################################################
+@indirect
+def PlayHLS(url, **kwargs):
+
+	video_data = XML.ElementFromURL(url, cacheTime=CACHE_TIME)
+
+	content = video_data.xpath('.//media:content', namespaces=NAMESPACES)
+
+	if len(content) < 1:
+		raise Ex.MediaNotAvailable
+
+	content = content[0]
+
+	# Extract the URL for the XML that will contain the final playlist URL
+	# EXAMPLE RESULT:
+	# https://api-cbc.cloud.clearleap.com/cloffice/client/web/play/?contentId=d158320f-cb3d-4bb7-91e9-8aee19f0d296&categoryId=38e815a-009d46e060f
+	url = content.get('url')
+
+	headers = GetAuthHeaders()
+
+	# Get the URL for the m3u8 playlist file, with auth headers
+	# If the request fails, invalidate auth cache
+	try:
+		playlist_response = XML.ElementFromURL(url, headers=headers, cacheTime=CACHE_TIME)
+	except HTTPError, e:
+		Log.Debug('Invalidating headers')
+		headers = GetAuthHeaders(invalidate=True)
+
+		try:
+			playlist_response = XML.ElementFromURL(url, headers=headers, cacheTime=CACHE_TIME)
+		except:
+			Log.Error ('Response from server: ' + str(e.code))
+			raise Ex.MediaNotAvailable
+
+	# Get the playlist URL
+	# EXAMPLE RESULT: 
+	# http://v.watch.cbc.ca/p//38e815a-00a02504379//CBC_NTL_ABORIGINAL_HIS_MO_WERE_STILL_HERE-v2-9145569/CBC_NTL_ABORIGINAL_HIS_MO_WERE_STILL_HERE-v2-9145569__desktop.m3u8?cbcott=st=1475461788~exp=1475548188~acl=/*~hmac=8fd64e3dd9b73caf1ce12198259990cccd223d98aef3c6220cbea80df68df0e7
+	playlist_response = playlist_response.xpath('//url')
+
+	if (not playlist_response or len(playlist_response) < 1):
+		Log.Error ('Could not find a playlist URL')
+		raise Ex.MediaNotAvailable
+
+	playlist_url = playlist_response[0].text
+	Log.Debug('Playlist URL: ' + playlist_url)
+
+	return IndirectResponse(VideoClipObject, key=playlist_url)
+
+
+####################################################################################################
+# Get the auth tokens that we need for the API
+def GetAuthHeaders(invalidate=False):
+	global AUTH_CACHE
+
+	Log.Debug('Starting CBC auth')
+
+	# Cache auth for 6 hours
+	if (not AUTH_CACHE or not AUTH_CACHE.get('cbc_auth_timestamp') or not AUTH_CACHE.get('cbc_device_token') or not AUTH_CACHE.get('cbc_device_id')):
+		Log.Debug('No valid CBC authentation')
+		invalidate = True
+	elif (Datetime.Now() > (Datetime.FromTimestamp(AUTH_CACHE['cbc_auth_timestamp']) + Datetime.Delta(hours=6))):
+		Log.Debug('CBC Authentication has expired')
+		invalidate = True
+	else:
+		if not invalidate:
+			Log.Debug('Cache hit on CBC auth tokens')
+			return {'X-Clearleap-DeviceToken': AUTH_CACHE['cbc_device_token'], 'X-Clearleap-DeviceId': AUTH_CACHE['cbc_device_id']}
+
+	if invalidate:
+		Log.Debug('Invalidating CBC auth tokens')
+		AUTH_CACHE['cbc_device_id'] = None
+		AUTH_CACHE['cbc_device_token'] = None
+		AUTH_CACHE['cbc_auth_timestamp'] = None
+
+	try:
+		auth = XML.ElementFromURL(StripHTTPS(AUTH_URL), values={'data': AUTH_DATA}, cacheTime=None)
+
+		'''
+		EXAMPLE RESPONSE:
+
+		<result version='2.0' xmlns:media='http://search.yahoo.com/mrss/' xmlns:dcterms='http://purl.org/dc/terms/' xmlns:clearleap='http://www.clearleap.com/namespace/clearleap/1.0/'>
+		<systemMessage>Device registered - deviceId:6a3cc941-f5df-47b1-a4cb-c609a87be207 type:null</systemMessage>
+		<userMessage>Device has been successfully registered.</userMessage>
+		<status>Success</status>
+		<deviceId>6a3cc941-f5df-47b1-a4cb-c609a87be207</deviceId>
+		<deviceToken>bEFzWk9EUENFQjVxRGhIb3hVRUtHYnZXcGxpRnZZQ0ZwWDFmYXE4dzJsTT0=</deviceToken>
+		</result>
+		'''
+
+		AUTH_CACHE['cbc_device_id'] = auth.xpath('//deviceId')[0].text
+		AUTH_CACHE['cbc_device_token'] = auth.xpath('//deviceToken')[0].text
+		AUTH_CACHE['cbc_auth_timestamp'] = Datetime.TimestampFromDatetime(Datetime.Now())
+
+		Log.Debug('CBC Authentication successful')
+ 
+		return {'X-Clearleap-DeviceToken': AUTH_CACHE['cbc_device_token'], 'X-Clearleap-DeviceId': AUTH_CACHE['cbc_device_id']}
+	except Ex.HTTPError, e:
+		Log.Error ('Error authing. Response from server: ' + str(e.code))
+		raise Ex.MediaNotAuthorized
+
+####################################################################################################
+# Depending on the global variable, strip the HTTPS and use HTTP connections only.
+# This functionality is assuming that if the URL Service is passed an HTTP URL, 
+# the following requests should be HTTP
+def StripHTTPS (url):
+	if not ENABLE_HTTPS:
+		return url.replace('https://', 'http://')
+
+	return url

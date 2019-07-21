@@ -1,0 +1,3 @@
+def Search(query):
+
+  return ObjectContainer()

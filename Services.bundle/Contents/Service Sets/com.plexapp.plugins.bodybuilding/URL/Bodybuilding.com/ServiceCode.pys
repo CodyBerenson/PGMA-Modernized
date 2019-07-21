@@ -1,0 +1,59 @@
+PLAYLIST_URL = 'http://videos.bodybuilding.com/nuevo/playlist.php?key=%s'
+PLAYLIST_NS = {'a': 'http://xspf.org/ns/0/'}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	html = HTML.ElementFromURL(url)
+	key = html.xpath('//div[@data-video-key]/@data-video-key')
+
+	if len(key) < 1:
+		raise Ex.MediaNotAvailable
+
+	thumb = html.xpath('//div[@data-thumbnail-url]/@data-thumbnail-url')[0]
+
+	xml = XML.ElementFromURL(PLAYLIST_URL % key[0])
+	title = xml.xpath('//a:title/text()', namespaces=PLAYLIST_NS)[0]
+	duration = xml.xpath('//a:duration/text()', namespaces=PLAYLIST_NS)[0]
+	duration = int(float(duration) * 1000)
+
+	return VideoClipObject(
+		title = title,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url))],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = 'sd',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	html = HTML.ElementFromURL(url)
+	key = html.xpath('//div[@data-video-key]/@data-video-key')
+
+	if len(key) < 1:
+		raise Ex.MediaNotAvailable
+
+	xml = XML.ElementFromURL(PLAYLIST_URL % key[0])
+	video_url = xml.xpath('//a:file/text()', namespaces=PLAYLIST_NS)[0]
+
+	return IndirectResponse(VideoClipObject, key=video_url)

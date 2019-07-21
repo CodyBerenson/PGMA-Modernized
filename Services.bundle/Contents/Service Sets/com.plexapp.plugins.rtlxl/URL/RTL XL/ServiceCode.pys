@@ -1,0 +1,110 @@
+XL_URL = 'http://www.rtlxl.nl/#!/u/%s'
+XL_DATA_URL = 'http://www.rtl.nl/system/s4m/xldata/ux/%s?context=rtlxl&d=pc&ive&version=3&fmt=adaptive'
+
+THUMB_URL = 'http://data.rtl.nl/system/img//%s.jpg'
+
+RE_UUID = Regex('(?P<uuid>[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12})')
+RE_SERIES_ID = Regex('/(?P<series_id>\d+)\.xml')
+
+HTTP_HEADERS_DESKTOP = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/536.26.17 (KHTML, like Gecko) Version/6.0.2 Safari/536.26.17'}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	uuid = RE_UUID.search(url)
+	if uuid:
+		url = XL_URL % uuid.group('uuid')
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	uuid = RE_UUID.search(url)
+	if not uuid:
+		raise Ex.MediaNotAvailable
+
+	data_url = XL_DATA_URL % (uuid.group('uuid'))
+	material_node = XML.ElementFromURL(data_url, headers=HTTP_HEADERS_DESKTOP, encoding='iso-8859-1').xpath('//material[@key="%s"]' % uuid.group('uuid'))
+
+	if len(material_node) < 1:
+		raise Ex.MediaNotAvailable
+	else:
+		data = material_node[0]
+
+	try: title = data.xpath('./title/text()')[0]
+	except: raise Ex.MediaNotAvailable
+
+	studio = data.xpath('./broadcast_station_display/text()')[0]
+
+	try:
+		summary = data.xpath('./synopsis/text()')[0]
+	except:
+		try:
+			episode_key = data.get('episode_key')
+			summary = data.xpath('./../../episode-list/episode[@key="%s"]/synopsis/text()' % episode_key)[0]
+		except:
+			summary = None
+
+	broadcast = data.xpath('./broadcast_date_display/text()')[0]
+	broadcast = Datetime.FromTimestamp(float(broadcast))
+	originally_available_at = Datetime.ParseDate(str(broadcast)).date()
+
+	try:
+		duration = data.xpath('./length/text()')[0]
+		duration = Datetime.MillisecondsFromString(duration.split('.')[0])
+	except:
+		duration = None
+
+	thumb_id = data.xpath('./thumbnail_id/text()')[0]
+	thumb = THUMB_URL % thumb_id
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		originally_available_at = originally_available_at,
+		duration = duration,
+		studio = studio,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			video_resolution = '720',
+			audio_channels = 2,
+			optimized_for_streaming = True,
+			parts = [
+				PartObject(
+					key = HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+				)
+			]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	uuid = RE_UUID.search(url)
+	if not uuid:
+		raise Ex.MediaNotAvailable
+
+	data_url = XL_DATA_URL % (uuid.group('uuid'))
+	material_node = XML.ElementFromURL(data_url, headers=HTTP_HEADERS_DESKTOP, encoding='iso-8859-1').xpath('//material[@key="%s"]' % uuid.group('uuid'))
+
+	if len(material_node) < 1:
+		raise Ex.MediaNotAvailable
+	else:
+		data = material_node[0]
+
+	try:
+		urls = data.xpath('./playlist[@type="vod"]/sources/ref[@type]')[0]
+		url = urls.xpath('./@host')[0] + urls.xpath('./@href')[0]
+
+		return IndirectResponse(VideoClipObject, key=url)
+
+	except: 
+		raise Ex.MediaNotAvailable

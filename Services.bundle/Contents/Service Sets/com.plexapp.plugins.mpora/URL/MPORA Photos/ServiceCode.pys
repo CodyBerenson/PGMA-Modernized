@@ -1,0 +1,34 @@
+def MetadataObjectForURL(url):
+
+    page = HTML.ElementFromURL(url)
+
+    # Extract the details
+    title = page.xpath("//meta[@property = 'og:title']")[0].get('content')
+    thumb = page.xpath("//meta[@property = 'og:image']")[0].get('content')
+
+    description = page.xpath("//meta[@name = 'description']")[0].get('content')
+    description = description.replace('on MPORA', '').strip()
+
+    # Return the photo
+    return PhotoObject(
+        title = title,
+        summary = description,
+        thumb = thumb
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+        MediaObject(
+            parts = [PartObject(key = Callback(GetPhoto, url = url))]
+        )
+    ]
+
+####################################################################################################
+def GetPhoto(url):
+
+    # Find the url to the original image
+    page = HTML.ElementFromURL(url)
+    photo_url = page.xpath('//div[@class = "photo-box"]//img')[0].get('src')
+    return Redirect(photo_url)

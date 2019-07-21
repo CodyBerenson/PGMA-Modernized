@@ -1,0 +1,71 @@
+RE_VIDEO = Regex('file:\s"(?P<url>[^"]+)')
+RE_THUMB = Regex('image:\s"(?P<thumb>[^"]+)')
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    try:
+        page_content = HTTP.Request(url).content
+    except:
+        raise Ex.MediaNotAvailable
+
+    page = HTML.ElementFromString(page_content)
+
+    title = page.xpath("//meta[@property='og:title']")[0].get('content')
+    title = title.replace('- video', '')
+    summary = page.xpath("//meta[@property='og:description']")[0].get('content')
+    tags = page.xpath("//meta[@name='keywords']")[0].get('content').split(',')
+
+    date = None
+    try:
+        page.xpath("//meta[@property='article:published_time']")[0].get('content')
+        date = Datetime.ParseDate(date)
+    except: pass
+
+    # Attempt to extract a higher quality thumbnail from the actual player configuration. Otherwise
+    # we'll just drop down to the known one from the head of the page.
+    thumb = None
+    try:
+        thumb = RE_THUMB.search(page_content).group('thumb')
+    except:
+        thumb = page.xpath("//meta[@property='og:image']")[0].get('content')
+    thumb = thumb.replace('https://', 'http://')
+
+    return VideoClipObject(
+        title = title,
+        summary = summary,
+        thumb = thumb,
+        tags = tags,
+        originally_available_at = date
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+        MediaObject(
+            video_codec = VideoCodec.H264,
+            audio_codec = AudioCodec.AAC,
+            container = Container.MP4,
+            video_resolution = "360",
+            parts = [PartObject(key=Callback(PlayVideo, url=url))]
+        )
+    ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+    try:
+        page_content = HTTP.Request(url).content
+    except:
+        raise Ex.MediaNotAvailable
+
+    # Find the src url
+    video_url = RE_VIDEO.search(page_content)
+
+    if video_url:
+        video_url = video_url.group('url').replace('https://', 'http://')
+        return IndirectResponse(VideoClipObject, key=video_url)
+
+    raise Ex.MediaNotAvailable

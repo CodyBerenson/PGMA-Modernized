@@ -1,0 +1,36 @@
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	html = HTML.ElementFromURL(url)
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0].strip()
+	summary = html.xpath('//meta[@property="og:description"]/@content')[0].strip()
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0]
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = thumb
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url))
+			],
+			video_resolution = 'sd',
+			optimized_for_streaming = False
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	video_id = url.split('/')[4]
+	video_url = 'http://cdn.videos.snotr.com/%s.flv' % (video_id)
+
+	return IndirectResponse(VideoClipObject, key=video_url)

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>TOU TV</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://ici.tou.tv/les-chefs</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://api.radio-canada.ca/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

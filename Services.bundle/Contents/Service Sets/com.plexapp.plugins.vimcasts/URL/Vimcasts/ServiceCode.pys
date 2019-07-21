@@ -1,0 +1,56 @@
+JSON_PATH = 'http://vimcasts.org/episodes.json'
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    # Request the url and identify the episode number
+    page = HTML.ElementFromURL(url)
+    episode_number = int(page.xpath('//*[@class="episode_number"]/text()')[-1].strip())
+
+    # Now we'll request the JSON equivalent page and find the associated title.
+    json_page = JSON.ObjectFromURL(JSON_PATH)
+    details = json_page['episodes'][episode_number - 1]
+
+    # Extract the details available directly form the page.
+    title = details['title']
+    description = details['abstract']
+    thumb = details['poster']
+    date = details['published_at']
+    date = Datetime.ParseDate(date)
+
+    return VideoClipObject(
+        title = title,
+        summary = description,
+        thumb = thumb,
+        originally_available_at = date
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+        MediaObject(
+            video_codec = VideoCodec.H264,
+            audio_codec = AudioCodec.AAC,
+            container = Container.MP4,
+            optimized_for_streaming = True,
+            parts = [
+                PartObject(key=Callback(PlayVideo, url=url))
+            ]
+        )
+    ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+    # Request the url and identify the episode number
+    page = HTML.ElementFromURL(url)
+    episode_number = int(page.xpath('//*[@class="episode_number"]/text()')[-1].strip())
+
+    # Now we'll request the JSON equivalent page and find the associated title.
+    json_page = JSON.ObjectFromURL(JSON_PATH)
+    details = json_page['episodes'][episode_number - 1]
+
+    video_url = details['quicktime']['url']
+    return IndirectResponse(VideoClipObject, key=video_url)

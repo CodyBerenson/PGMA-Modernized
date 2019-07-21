@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>The Onion</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.theonion.com/video/new-apple-friend-bar-gives-customers-someone-to-ta,17693/</string>
+				<string>http://www.theonion.com/video/seven-male-role-models-every-child-needs-healthy-u-50487</string>
+				<string>http://www.onionstudios.com/videos/baby-naming-tips-for-new-moms-2805</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http:\/\/www\.(theonion|onionstudios)\.com\/videos?\/.+(,|-)\d+\/?</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

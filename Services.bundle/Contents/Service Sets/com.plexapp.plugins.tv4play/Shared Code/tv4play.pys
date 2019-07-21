@@ -1,0 +1,61 @@
+LOGIN_URL   = 'https://www.tv4play.se/session/new?https='
+SESSION_URL = 'https://www.tv4play.se/session'
+
+###################################################################################################
+def LoggedIn():
+    if not (Prefs['premium'] and Prefs['email'] and Prefs['password']):
+        return None
+    
+    try:
+    	login_request = HTTP.Request(SESSION_URL)
+        content       = login_request.content
+        success       = content.strip().lower() == 'ok'
+    except:
+        success = False
+    
+    if success:
+        Log("Logged in!")
+        return login_request.headers['Set-Cookie']
+    else:
+        Log("Not logged in")
+        return None    
+
+###################################################################################################
+def Login():    
+    # Check that the user has entered all required parameters for Login
+    if not (Prefs['premium'] and Prefs['email'] and Prefs['password']):
+        return None
+
+    # Check if we are already logged in ...
+    cookies = LoggedIn()
+    if cookies:
+    	return cookies
+
+    Log("Trying to login...")
+    
+    # ... else make a new login attempt
+    element = HTML.ElementFromURL(LOGIN_URL, cacheTime = 0)
+    
+    try:
+        authenticity_token = element.xpath("//input[@id = 'authenticity_token']/@value")[0]
+    except:
+        Log.Error("Could not retrieve authenticity token!")
+        return None
+        
+    try:
+        https = element.xpath("//input[@id = 'https']/@value")[0]
+    except:
+        Log.Warn("Using default value for https")
+        https = ''
+        
+    postData = {}
+    postData['username']           = Prefs['email']
+    postData['password']           = Prefs['password']
+    postData['remember_me']        = 'true'
+    postData['authenticity_token'] = authenticity_token
+    postData['https']              = https
+    postData['my_page']            = 'true'
+
+    response = HTTP.Request(SESSION_URL, values = postData, cacheTime = 0).content
+    
+    return LoggedIn()

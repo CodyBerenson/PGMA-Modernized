@@ -1,0 +1,63 @@
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.11; rv:51.0) Gecko/20100101 Firefox/51.0'}
+RE_VIDEOS = Regex('"quality":"(medium|high)".+?"url":"([^"]+)"')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('#')[0].split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	html = HTML.ElementFromURL(url, headers=HTTP_HEADERS, cacheTime=CACHE_1HOUR)
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0].split('?')[0]
+
+	return VideoClipObject(
+		title = title,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, resolution=resolution))
+			],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = resolution,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		) for resolution in ['720', '360']
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, resolution='720', **kwargs):
+
+	video_url_high = None
+	video_url_med = None
+
+	page = HTTP.Request(url, headers=HTTP_HEADERS, cacheTime=CACHE_1HOUR).content
+	videos = RE_VIDEOS.findall(page)
+
+	for video in videos:
+
+		if video[0] == 'medium':
+			video_url_med = video[1]
+		elif video[0] == 'high':
+			video_url_high = video[1]
+
+	if resolution == '720' and video_url_high:
+		video_url = video_url_high
+	elif video_url_med:
+		video_url = video_url_med
+	else:
+		raise Ex.MediaNotAvailable
+
+	return IndirectResponse(VideoClipObject, key='http://%s' % (video_url.split('//')[-1]))

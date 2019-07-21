@@ -1,0 +1,38 @@
+def MetadataObjectForURL(url):
+
+    details = HTML.ElementFromURL(url)
+
+    # Extract the details
+    title = details.xpath("//meta[@property = 'og:title']")[0].get('content')
+    summary = details.xpath("//meta[@name = 'description']")[0].get('content')
+    thumb = details.xpath("//meta[@property = 'og:image']")[0].get('content')
+
+    # Return the photo
+    return PhotoObject(
+        title = title,
+        summary = summary,
+        thumb = thumb
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+      MediaObject(
+        parts = [PartObject(key=Callback(GetPhoto, url = url))]
+      )
+    ]
+
+####################################################################################################
+def GetPhoto(url):
+
+    # Request the page
+    page = HTML.ElementFromURL(url)
+
+    # Find the url to the original image
+    photo_url = page.xpath("//div[@class = 'primary_photo']//img")[0].get('src')
+    
+    if photo_url.startswith("//"):
+        photo_url = "http:%s" % (photo_url) # for some reason images urls al incomplete on national Geographic
+    
+    return Redirect(photo_url)

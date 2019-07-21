@@ -1,0 +1,102 @@
+EXTREME_INFO_URL = "http://player.extreme.com/info/%s"
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    info = GetVideoDetails(url)
+    external_url = info.xpath('//streams/stream[contains(text(), "youtube.com") or contains(text(), "vimeo.com")]/text()')
+
+    if len(external_url) > 0:
+        return URLService.MetadataObjectForURL(external_url[0])
+
+    # Extract the available meta data from the page
+    title = info.xpath("//title/text()")[0]
+    try: summary = info.xpath("//description/text()")[0]
+    except: summary = None
+    thumb = info.xpath("//video//posterframe/text()")[-1]
+    date = info.xpath("//onlinedate/text()")[0]
+    date = Datetime.ParseDate(date)
+    tags = info.xpath("//channels/channel/text()")
+
+    return VideoClipObject(
+        title = title,
+        summary = summary,
+        thumb = thumb,
+        originally_available_at = date,
+        tags = tags
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+      MediaObject(
+        video_codec = VideoCodec.H264,
+        audio_codec = AudioCodec.AAC,
+        container = Container.MP4,
+        bitrate = 5120,
+        video_resolution = 1920,
+        audio_channels = 2,
+        parts = [PartObject(key=Callback(PlayVideo, url=url, res='FULL-HD'))]
+      ),
+      MediaObject(
+        video_codec = VideoCodec.H264,
+        audio_codec = AudioCodec.AAC,
+        container = Container.MP4,
+        bitrate = 2560,
+        video_resolution = 1280,
+        audio_channels = 2,
+        parts = [PartObject(key=Callback(PlayVideo, url=url, res='HD'))]
+      ),
+      MediaObject(
+        video_codec = VideoCodec.H264,
+        audio_codec = AudioCodec.AAC,
+        container = Container.MP4,
+        bitrate = 1280,
+        video_resolution = 640,
+        audio_channels = 2,
+        parts = [PartObject(key=Callback(PlayVideo, url=url, res='SD'))]
+      ),
+      MediaObject(
+        video_codec = VideoCodec.H264,
+        audio_codec = AudioCodec.AAC,
+        container = Container.MP4,
+        bitrate = 640,
+        video_resolution = 320,
+        audio_channels = 2,
+        parts = [PartObject(key=Callback(PlayVideo, url=url, res='LD'))]
+      )
+    ]
+
+####################################################################################################
+def PlayVideo(url, res, **kwargs):
+
+    info = GetVideoDetails(url)
+
+    server = info.xpath('//streams')[0].get('server')
+    clip = None
+
+    resolutions = ['FULL-HD', 'HD', 'SD', 'LD']
+    index = resolutions.index(res)
+
+    for resolution_index in range(index, len(resolutions)):
+        current_resolution = resolutions[resolution_index]
+        try:
+            clip = info.xpath('//streams/stream[@quality = "%s"]/text()' % current_resolution)[0]
+            break
+        except:
+            pass
+
+    if clip is None:
+        clip = info.xpath('//streams/stream/text()')[-1]
+
+    # Redirect to the appropriate stream.
+    return Redirect(server + clip)
+
+####################################################################################################
+def GetVideoDetails(url):
+
+    page = HTML.ElementFromURL(url)
+    video_id = page.xpath('//meta[@property="og:image"]/@content')[0].split('.jpg')[0].rsplit('/',1)[1]
+
+    return XML.ElementFromURL(EXTREME_INFO_URL % video_id)

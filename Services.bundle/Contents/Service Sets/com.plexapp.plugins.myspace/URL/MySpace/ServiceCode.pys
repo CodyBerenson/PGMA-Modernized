@@ -1,0 +1,72 @@
+DETAILS_PAGE = 'http://mediaservices.myspace.com/services/rss.ashx?type=video&videoID=%s'
+NAMESPACES = {'media': 'http://search.yahoo.com/mrss/'}
+RE_VIDEO_ID = Regex('/([0-9]+)$')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('#')[0].split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	# Find the appropriate details page
+	video_id = RE_VIDEO_ID.search(url).group(1)
+	details_page = XML.ElementFromURL(DETAILS_PAGE % video_id)
+
+	# Check statusCode for errors:
+	# 2 = copyright violation
+	# 4 = geoblock
+	# 5 = currently unavailable
+	status_code = details_page.xpath('//statusCode')
+	if len(status_code) > 0:
+		if status_code[0].text == '4':
+			raise Ex.MediaGeoblocked
+		else:
+			raise Ex.MediaNotAvailable
+
+	# Extract the available information from the details page.
+	title = details_page.xpath('//item/media:content/media:title/text()', namespaces=NAMESPACES)[0]
+	try: summary = details_page.xpath('//item/media:content/media:description/text()', namespaces=NAMESPACES)[0]
+	except: summary = None
+	thumb = details_page.xpath('//item/media:still', namespaces=NAMESPACES)[0].get('url')
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = thumb
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			parts = [PartObject(key=Callback(PlayVideo, url = url))]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	# Find the appropriate details page
+	video_id = RE_VIDEO_ID.search(url).group(1)
+	details_page = XML.ElementFromURL(DETAILS_PAGE % video_id, cacheTime=0)
+
+	# Check statusCode for errors:
+	# 2 = copyright violation
+	# 4 = geoblock
+	# 5 = currently unavailable
+	status_code = details_page.xpath('//statusCode')
+	if len(status_code) > 0:
+		if status_code[0].text == '4':
+			raise Ex.MediaGeoblocked
+		else:
+			raise Ex.MediaNotAvailable
+
+	video_url = details_page.xpath('//item/media:content', namespaces=NAMESPACES)[0].get('url')
+	return IndirectResponse(VideoClipObject, key=video_url)

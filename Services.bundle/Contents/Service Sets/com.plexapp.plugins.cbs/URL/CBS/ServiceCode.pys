@@ -1,0 +1,98 @@
+TP_VIDEO = "http://link.theplatform.com/s/dJ5BDC/media/guid/2198311517/{}?mbr=true&assetTypes=StreamPack&formats=MPEG4,M3U"
+RE_JSON = Regex("var \$module = (\{.+\});")
+HTTP_HEADERS = {
+	"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_3) AppleWebKit/604.5.6 (KHTML, like Gecko) Version/11.0.3 Safari/604.5.6"
+}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	page = HTTP.Request(url, headers=HTTP_HEADERS, cacheTime=300).content
+	json = RE_JSON.search(page)
+
+	if not json:
+		Log(" --> Unable to find JSON in the page")
+		raise Ex.MediaNotAvailable
+
+	json_obj = JSON.ObjectFromString(json.group(1))['video']
+
+	if json_obj['status'] != "AVAILABLE":
+		Log(" --> Content not available")
+		raise Ex.MediaNotAvailable
+
+	if json_obj['is_paid_content']:
+		Log(" --> Paid content")
+		raise Ex.MediaNotAvailable
+
+	show = json_obj['series_title'] if 'series_title' in json_obj else None
+	title = json_obj['episode_title']
+	summary = json_obj['description']
+	duration = json_obj['duration_raw'] * 1000
+	thumb = json_obj['thumb']['large']
+	airdate = Datetime.ParseDate(json_obj['airdate_iso']).date()
+	season = int(json_obj['season_number']) if 'season_number' in json_obj and json_obj['season_number'].isdigit() else None
+	index = int(json_obj['episode_number']) if 'episode_number' in json_obj and json_obj['episode_number'].isdigit() else None
+
+	if show and season and index:
+		return EpisodeObject(
+			show = show,
+			season = season,
+			index = index,
+			title = title,
+			summary = summary,
+			duration = duration,
+			thumb = Resource.ContentsOfURLWithFallback(thumb),
+			originally_available_at = airdate
+		)
+	else:
+		return VideoClipObject(
+			title = title,
+			summary = summary,
+			duration = duration,
+			thumb = Resource.ContentsOfURLWithFallback(thumb),
+			originally_available_at = airdate
+		)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(
+					key = HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+				)
+			],
+			video_resolution = '1080',
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	id = url.split("/")[6]
+
+	try:
+		tp = HTTP.Request(TP_VIDEO.format(id), headers=HTTP_HEADERS, follow_redirects=False).content
+	except Ex.RedirectError, e:
+		if 'Location' in e.headers:
+			if not '?' in e.headers['Location']:
+				video_url = "{}?__b__=5000".format(e.headers['Location'])
+			else:
+				video_url = "{}&__b__=5000".format(e.headers['Location'])
+
+			return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(url=video_url))
+		else:
+			Log(" --> No redirect URL found")
+			raise Ex.MediaNotAvailable
+	except:
+		Log(" --> HTTP request for TP failed")
+		raise Ex.MediaNotAvailable

@@ -1,0 +1,110 @@
+####################################################################################################
+def MetadataObjectForURL(url):
+    pageElement = HTML.ElementFromURL(url)
+    
+    link = pageElement.xpath("//*[contains(@src, 'youtube.com/embed')]/@src")
+    
+    if len(link) > 0:
+        url = 'http:' + link[0]
+        return URLService.MetadataObjectForURL(url)
+
+    else:
+        # This page contains a photo album
+        
+        desc = unicode(pageElement.xpath('//meta[@property="og:Description"]')[0].get('content'))
+        thumb = pageElement.xpath('//meta[@property="og:Image"]')[0].get('content')
+        title = unicode(pageElement.xpath('//head//title/text()')[0].strip())
+        
+        return PhotoAlbumObject(
+            key = Callback(GetPhotos, url=url),
+            title = title,
+            summary = desc,
+            thumb = thumb
+        )
+
+####################################################################################################
+@deferred
+def MediaObjectsForURL(url):
+    pageElement = HTML.ElementFromURL(url)
+    
+    link = pageElement.xpath("//*[contains(@src, 'youtube.com/embed')]/@src")
+    
+    if len(link) > 0:
+        url = 'http:' + link[0]
+        return URLService.MediaObjectsForURL(url)
+
+    else:
+        # This page contains a photo album
+        return [
+            MediaObject(
+                parts = Callback(GetPhotos, url)
+            )
+        ]
+
+####################################################################################################   
+def GetPhotos(url):
+    oc = ObjectContainer()
+    
+    pageElement = HTML.ElementFromURL(url)
+    
+    photos = []
+    photo = {}
+    
+    for item in pageElement.xpath("//*[@class='mediaText']//*[@class='descriptionText']//following-sibling::*"):
+        if item.xpath("name()")[0] == 'h':
+            try:
+                text = item.xpath("./text()")[0]
+            except:
+                text = None
+            
+            if text:
+                # Start of a new image section
+                if photo:
+                    photos.append(photo)
+
+                photo = {}
+                photo['title'] = unicode(text)
+                photo['images'] = []
+                photo['summary'] = None
+        
+        if photo:
+            try:
+                photo['images'].append(item.xpath(".//img/@data-src")[0])
+            except:
+                pass
+            
+            if not photo['summary'] and item.xpath("name()")[0] == 'p':
+                try:
+                    photo['summary'] = item.xpath("./text()")[0]
+                except:
+                    pass
+                    
+    if not photos:
+        # Page with no text just images
+        images = pageElement.xpath("//*[@class='mediaText']//*[@class='descriptionText']//following-sibling::*//img/@data-src")
+        title = unicode(pageElement.xpath('//head//title/text()')[0].strip())
+        
+        for image in images:
+            oc.add(
+                PhotoObject(
+                    key = image,
+                    rating_key = image,
+                    title = title,
+                    thumb = image
+                )
+            )
+        
+    else:       
+        for photo in photos:
+            for image in photo['images']:
+                oc.add(
+                    PhotoObject(
+                        key = image,
+                        rating_key = image,
+                        title = photo['title'],
+                        summary = photo['summary'],
+                        thumb = image
+                    )
+                )
+        
+    return oc

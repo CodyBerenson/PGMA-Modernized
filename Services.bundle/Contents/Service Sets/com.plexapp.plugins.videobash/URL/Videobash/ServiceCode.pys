@@ -1,0 +1,60 @@
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.122 Safari/537.36'}
+VIDEO_PATTERN = Regex("flashvars.+?'http://'.+?'([^']+)")
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		html = HTML.ElementFromURL(url, headers=HTTP_HEADERS)
+	except:
+		raise Ex.MediaNotAvailable
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	summary = ''.join(html.xpath('//p[@class="description"]/text()')).strip()
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0]
+
+	try:
+		date = html.xpath('//span[@class="time-upload"]/text()')[0].split(' on ')[-1].strip()
+		date = Datetime.ParseDate(date)
+	except:
+		date = None
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(thumb),
+		originally_available_at = date
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, post_url=url))
+			],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = '480',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	try:
+		content = HTTP.Request(url, headers=HTTP_HEADERS).content
+		video_url = VIDEO_PATTERN.search(content)
+	except:
+		raise Ex.MediaNotAvailable
+
+	if video_url:
+		video_url = String.Unquote(video_url.group(1))
+		return IndirectResponse(VideoClipObject, key='http://%s' % video_url)
+	else:
+		raise Ex.MediaNotAvailable

@@ -1,0 +1,89 @@
+RE_BANDWIDTH = Regex('BANDWIDTH=(\d+)')
+RE_JSON = Regex('window\.__data=(\{.+?\});')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('#')[0].split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJSON(url)
+
+	return VideoClipObject(
+		title = json_obj['title'],
+		summary = json_obj['description'],
+		duration = json_obj['duration'] * 1000,
+		thumb = Resource.ContentsOfURLWithFallback(url='http://%s' % (json_obj['posterarts'][0].split('//')[-1]))
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(
+					key = HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+				)
+			]
+		)
+	]
+
+####################################################################################################
+def PlayVideo(url, **kwargs):
+
+	json_obj = GetJSON(url)
+	playlist_url = 'http://%s' % (json_obj['url'].split('//')[-1])
+	playlist = HTTP.Request(playlist_url).content
+
+	new_playlist = '#EXTM3U'
+	streams = []
+	bandwidth = None
+
+	for line in playlist.splitlines(False)[1:]:
+		if line.startswith('#'):
+			bandwidth = RE_BANDWIDTH.search(line)
+			previous_line = line
+			continue
+		elif len(line) < 1:
+			continue
+		else:
+			if not bandwidth:
+				continue
+			if line.startswith('/'):
+				host = playlist_url.split('/')[2]
+				line = 'http://%s%s' % (host, line)
+			elif not line.startswith('http://') or not line.startswith('https://'):
+				rel_url = playlist_url.rsplit('/', 1)[0]
+				line = '%s/%s' % (rel_url, line)
+
+			streams.append({
+				'bandwidth': int(bandwidth.group(1)),
+				'stream': '%s\n%s' % (previous_line, line)
+			})
+
+	sorted_streams = sorted(streams, key=lambda stream: stream['bandwidth'])
+
+	for stream in sorted_streams:
+		new_playlist += '\n%s' % stream['stream']
+
+	return new_playlist
+
+####################################################################################################
+def GetJSON(url):
+
+	video_id = url.split('/')[4]
+
+	try:
+		data = HTTP.Request(url, cacheTime=CACHE_1HOUR).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	json = RE_JSON.search(data)
+
+	if not json:
+		raise Ex.MediaNotAvailable
+
+	return JSON.ObjectFromString(json.group(1))['video']['byId'][video_id]

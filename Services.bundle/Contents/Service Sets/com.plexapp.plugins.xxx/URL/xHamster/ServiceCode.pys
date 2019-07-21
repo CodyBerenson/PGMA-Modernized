@@ -1,0 +1,118 @@
+VIDEO_URL = 'http://xhamster.com/movies/%s/.html'
+RE_JSON = Regex('sources:\s*(\{.+\}),')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	if '/xembed.php' in url:
+		video_id = url.split('video=')[-1]
+		return VIDEO_URL % video_id
+	else:
+		return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		html = HTML.ElementFromURL(url)
+	except:
+		raise Ex.MediaNotAvailable
+
+	# A missing mp4 link means we don't have a video (or a low-res flv)
+	mp4_url = html.xpath('//div[@class="noFlash"]/a/@href')
+
+	if len(mp4_url) < 1:
+		raise Ex.MediaNotAvailable
+
+	title = html.xpath('//title/text()')[0].rsplit(' - ', 1)[0].strip()
+
+	# A missing description tag means we don't have a video
+	summary = html.xpath('//meta[@name="description"]/@content')
+
+	if len(summary) < 1:
+		raise Ex.MediaNotAvailable
+
+	summary = summary[0].split('xHamster.com! ', 1)[-1].strip()
+
+	if summary.startswith('xHamster'):
+		summary = None
+
+	thumb = html.xpath('//div[@class="noFlash"]//img/@src')
+	thumb = thumb[0] if len(thumb) > 0 else ''
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(thumb),
+		genres = ['XXX','Adult','18+'],
+		content_rating = 'X'
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	if Client.Product == 'Plex Web':
+
+		return [
+			MediaObject(
+				video_resolution = video_resolution,
+				optimized_for_streaming = False,
+				parts = [
+					PartObject(
+						key = Callback(PlayVideo, url=url, res=video_resolution)
+					)
+				]
+			) for video_resolution in ['720', '480']
+		]
+
+	else:
+
+		return [
+			MediaObject(
+				container = Container.MP4,
+				video_codec = VideoCodec.H264,
+				video_resolution = video_resolution,
+				audio_codec = AudioCodec.AAC,
+				audio_channels = 2,
+				optimized_for_streaming = True,
+				parts = [
+					PartObject(
+						key = Callback(PlayVideo, url=url, res=video_resolution)
+					)
+				]
+			) for video_resolution in ['720', '480']
+		]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res='720', **kwargs):
+
+	try:
+		data = HTTP.Request(url).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	json = RE_JSON.search(data)
+
+	if json:
+
+		json_obj = JSON.ObjectFromString(json.group(1))
+
+		if res == '720' and '720p' in json_obj:
+			video_url = json_obj['720p']
+		elif '480p' in json_obj:
+			video_url = json_obj['480p']
+		else:
+			video_url = json_obj[json_obj.keys()[0]]
+
+	else:
+
+		html = HTML.ElementFromString(data)
+		mp4_url = html.xpath('//div[@class="noFlash"]/a/@href')
+
+		if len(mp4_url) < 1:
+			raise Ex.MediaNotAvailable
+		else:
+			video_url = mp4_url[0]
+
+	return IndirectResponse(VideoClipObject, key=video_url)

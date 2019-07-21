@@ -1,0 +1,74 @@
+httpHeaders = {'Accept-Encoding' : 'deflate'}
+HTTP.CacheTime = CACHE_1HOUR
+
+BASE_URL = 'http://arbejdsglaede.23video.com'
+JSON_URL = 'http://arbejdsglaede.23video.com/api/photo/list?raw&format=json&photo_id=%s&token=%s&player_id=0'
+
+RE_PHOTO_ID = Regex(".+/video/(?P<id>[0-9]+)/")
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+  photo_id = RE_PHOTO_ID.match(url).groupdict()['id']
+  data = HTML.ElementFromURL(url, headers=httpHeaders)
+
+  thumbUrl = data.xpath('//link[@rel="image_src"]')[0].get('href')
+  token = thumbUrl.split('/')[-2]
+  details = JSON.ObjectFromURL(JSON_URL % (photo_id, token))['photo']
+  title = details['title']
+  summary = details['content_text'].replace('\n', '')
+  postedDate = Datetime.ParseDate(details['original_date_ansi']).date()
+
+  # Construct a metadata item
+  vc = VideoClipObject(
+    title = title,
+    originally_available_at = postedDate,
+    summary = summary,
+    thumb = thumbUrl
+  )
+
+  return vc
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+  return [
+    MediaObject(
+      parts = [PartObject(key=Callback(PlayVideo, url=url, fmt='hd'))],
+      container = Container.MP4,
+      video_codec = VideoCodec.H264,
+      #aspect_ratio = '1.78',
+      bitrate = '1500',
+      video_resolution = 'sd',
+      audio_codec = AudioCodec.AAC,
+      optimized_for_streaming = True
+    ),
+    MediaObject(
+      parts = [PartObject(key=Callback(PlayVideo, url=url))],
+      container = Container.MP4,
+      video_codec = VideoCodec.H264,
+      #aspect_ratio = '1.78',
+      bitrate = '900',
+      video_resolution = 'sd',
+      audio_codec = AudioCodec.AAC,
+      optimized_for_streaming = True
+    )
+  ]
+
+####################################################################################################
+def PlayVideo(url, fmt='', **kwargs):
+
+  photo_id = RE_PHOTO_ID.match(url).groupdict()['id']
+  data = HTML.ElementFromURL(url, headers=httpHeaders)
+
+  token = (data.xpath('//link[@rel="image_src"]')[0].get('href')).split('/')[-2]
+  details = JSON.ObjectFromURL(JSON_URL % (photo_id, token))['photo']
+
+  if fmt == 'hd':
+    video = details['video_hd_download']
+  else:
+    video = details['video_medium_download']
+
+  video_url = BASE_URL + video
+
+  return Redirect(video_url)

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>MPORA</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://mpora.com/videos/AA68kn5IEOu</string>
+				<string>http://mpora.com/videos/AA68i036GUe</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://mpora.com/videos/\w+/?</string>
+			</array>
+		</dict>
+		<key>MPORA Photos</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://mpora.com/photos/AA68i3b4GRW</string>
+				<string>http://mpora.com/photos/awASZauAjL</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://mpora.com/photos/\w+/?</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

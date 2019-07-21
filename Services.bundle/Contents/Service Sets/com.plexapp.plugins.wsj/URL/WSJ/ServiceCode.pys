@@ -1,0 +1,55 @@
+HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36'}
+RE_ID = Regex('[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}')
+WSJ_URL = 'http://live.wsj.com/#!%s'
+API_URL = 'http://live.wsj.com/api-video/get_video_info.asp?guid={%s}&fields=all'
+
+####################################################################################################
+def NormalizeURL(url):
+
+	id = RE_ID.findall(url)[0]
+	return WSJ_URL % id
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	id = RE_ID.findall(url)[0]
+	json_obj = JSON.ObjectFromURL(API_URL % id, headers=HTTP_HEADERS)
+
+	title = json_obj['name']
+	summary = json_obj['description']
+	originally_available_at = Datetime.FromTimestamp(json_obj['unixCreationDate'])
+	duration = int(json_obj['duration']) * 1000
+	thumb = json_obj['videoStillURL']
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		originally_available_at = originally_available_at,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(
+					key = HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+				)
+			],
+			video_resolution = 'sd',
+			audio_channels = 2
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	id = RE_ID.findall(url)[0]
+	json_obj = JSON.ObjectFromURL(API_URL % id, headers=HTTP_HEADERS)
+	video_url = json_obj['hls']
+
+	return IndirectResponse(VideoClipObject, key=video_url)

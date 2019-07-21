@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>SVTPlay</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.svtplay.se/aktuellt</string>
+				<string>http://www.svtplay.se/rapport</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://www.svtplay.se/(?!sok).+</string>
+				<string>^http://www.oppetarkiv.se/.+</string>
+				<string>^http://www.svtflow.se/video/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

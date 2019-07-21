@@ -1,0 +1,64 @@
+IPAD_HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 6_0_1 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A523 Safari/8536.25'}
+MOOGALOOP_JSON = 'http://www.collegehumor.com/moogaloop/video/%s.json'
+
+####################################################################################################
+def NormalizeURL(url):
+
+	if 'moogaloop' in url and 'clip_id' in url:
+		clip_id = url.split('clip_id=')[-1].split('&')[0]
+		return 'http://www.collegehumor.com/video/%s/' % clip_id
+
+	return url.split('#')[0].split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	video_id = url.split('/')[4]
+	json_obj = JSON.ObjectFromURL(MOOGALOOP_JSON % video_id)
+
+	if not 'video' in json_obj:
+		raise Ex.MediaNotAvailable
+
+	if 'youtubeId' in json_obj['video']:
+		return URLService.MetadataObjectForURL('http://www.youtube.com/watch?v=%s' % json_obj['video']['youtubeId'])
+
+	return VideoClipObject(
+		title = json_obj['video']['title'],
+		summary = json_obj['video']['description'],
+		thumb = json_obj['video']['thumbnail'],
+		duration = int(json_obj['video']['duration']) * 1000
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = '480',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True,
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url))
+			]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	video_id = url.split('/')[4]
+	json_obj = JSON.ObjectFromURL(MOOGALOOP_JSON % video_id)
+
+	if not 'video' in json_obj or not 'mp4' in json_obj['video']:
+		raise Ex.MediaNotAvailable
+
+	if 'high_quality' in json_obj['video']['mp4']:
+		video_url = json_obj['video']['mp4']['high_quality']
+	else:
+		video_url = json_obj['video']['mp4']['low_quality']
+
+	return IndirectResponse(VideoClipObject, key=video_url)

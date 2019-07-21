@@ -1,0 +1,73 @@
+IFRAME_URL = 'http://player.rutv.ru/iframe/play/id/%s/'
+RE_VIDEO_ID = Regex('/(?:video/id|episode_id)/(\d+)')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('/video_id/')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJSON(url)
+
+	title = json_obj['title']
+	summary = json_obj['anons']
+	duration = int(json_obj['duration']) * 1000
+	thumb = json_obj['picture']
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(
+					key = HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+				)
+			],
+			video_resolution = 'sd',
+			audio_channels = 2
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	json_obj = GetJSON(url)
+	video_url = json_obj['sources']['m3u8']['auto']
+
+	return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def GetJSON(url):
+
+	id = RE_VIDEO_ID.search(url).group(1)
+
+	try:
+		json_obj = JSON.ObjectFromURL(IFRAME_URL % id)['data']
+	except:
+		raise Ex.MediaNotAvailable
+
+	if not 'playlist' in json_obj:
+		html = HTML.ElementFromURL(url)
+		iframe = html.xpath('//iframe[contains(@src, "/iframe/video/id/")]/@src')
+
+		if len(iframe) < 1:
+			raise Ex.MediaNotAvailable
+
+		id = RE_VIDEO_ID.search(iframe[0]).group(1)
+		json_obj = JSON.ObjectFromURL(IFRAME_URL % id)['data']
+
+		if not 'playlist' in json_obj:
+			raise Ex.MediaNotAvailable
+
+	return json_obj['playlist']['medialist'][0]

@@ -1,0 +1,89 @@
+RE_DURATION = Regex("(?P<mins>[0-9]+) minutes, (?P<secs>[0-9]+) seconds")
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    try:
+        page = HTML.ElementFromURL(url)
+    except:
+        raise Ex.MediaNotAvailable
+
+    # Extract the information from the page...
+    title = page.xpath("//meta[@name='title']")[0].get('content')
+    description = page.xpath("//meta[@name='description']")[0].get('content')
+    try: rating = float(page.xpath("//p[@class='avg-rating']/span/text()")[0]) * 2
+    except: rating = None
+
+    try:
+        thumb = page.xpath("//link[@rel='image_src']")[0].get('href')
+    except:
+        try:
+            thumb = page.xpath("//meta[@property='og:image']/@content")[0]
+        except:
+            thumb = ''
+
+    try:
+        duration_text = page.xpath("//div[@class='entry-caption']/text()")[0]
+        duration_dict = RE_DURATION.match(duration_text).groupdict()
+        mins = int(duration_dict['mins'])
+        secs = int(duration_dict['secs'])
+        duration = ((mins * 60) + secs) * 1000
+    except:
+        duration = None
+
+    return VideoClipObject(
+        title = title,
+        summary = description,
+        thumb = thumb,
+        duration = duration,
+        rating = rating
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+        MediaObject(
+            container = Container.MP4,
+            video_codec = VideoCodec.H264,
+            audio_codec = AudioCodec.AAC,
+            audio_channels = 2,
+            video_resolution = '480',
+            bitrate = 3000,
+            optimized_for_streaming = True,
+            parts = [PartObject(key=Callback(PlayVideo, url=url, res='hd'))]
+      ),
+          MediaObject(
+            container = Container.MP4,
+            video_codec = VideoCodec.H264,
+            audio_codec = AudioCodec.AAC,
+            audio_channels = 1,
+            video_resolution = 'sd',
+            bitrate = 750,
+            optimized_for_streaming = True,
+            parts = [PartObject(key=Callback(PlayVideo, url=url, res='sd'))]
+        )
+    ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res, **kwargs):
+
+    page = HTML.ElementFromURL(url)
+
+    try:
+        sd_video_url = page.xpath('//a[text()="MP4"]')[0].get('href')
+    except:
+        sd_video_url = None
+
+    try:
+        hd_video_url = page.xpath('//a[text()="High Quality MP4"]')[0].get('href')
+    except:
+        hd_video_url = None
+
+    if res == 'hd' and hd_video_url:
+        return IndirectResponse(VideoClipObject, key=hd_video_url)
+    elif sd_video_url:
+        return IndirectResponse(VideoClipObject, key=sd_video_url)
+    else:
+        raise Ex.MediaNotAvailable

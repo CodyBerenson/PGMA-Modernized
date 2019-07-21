@@ -1,0 +1,101 @@
+VIDEO_XML = 'http://link.theplatform.com/s/dJ5BDC/%s?format=SMIL&Tracking=true&mbr=true'
+SMIL_NS = {'a': 'http://www.w3.org/2005/SMIL21/Language'}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		page = HTML.ElementFromURL(url)
+	except:
+		raise Ex.MediaNotAvailable
+
+	try:
+		pid = page.xpath("//iframe[@id='tp-global-player']/@src")[0].split("/select/")[1].split("?")[0]
+	except:
+		raise Ex.MediaNotAvailable
+
+	smil = XML.ElementFromURL(VIDEO_XML % pid)
+
+	# wrapped a try here, their content not available messages are not consistent but this should catch most fails here
+ 	try:
+	 	title = smil.xpath('//a:switch[1]/a:ref/@title', namespaces=SMIL_NS)[0]
+	except:
+		raise Ex.MediaNotAvailable
+
+	try:
+	 	duration = smil.xpath('//a:switch[1]/a:ref/@dur', namespaces=SMIL_NS)[0].strip('ms')
+	except:
+		duration = 0
+
+	try:
+		summary = page.xpath("//div[contains(@class,'panel-col-last')]//div[contains(@class,'field-item even')]/text()")[0]
+	except:
+		summary = ""
+
+	# sometimes the above gives us either "" or "  " instead of failing
+	if summary.strip() == "":
+
+		try:
+			summary = page.xpath("//div[contains(@class,'panel-col-last')]//div[contains(@class,'field-item even')]//p/text()")[0]
+		except:
+			summary = None
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = int(duration)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	# resolution and codecs are a bit all over the place and we don't really know until we pull 
+	# the SMIL which we don't want to do here ... so we have to be a bit vague
+	return [
+		MediaObject(
+			parts = [PartObject(key = Callback(PlayVideo, url=url))],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True	
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	try:
+		page = HTML.ElementFromURL(url)
+	except:
+		raise Ex.MediaNotAvailable
+
+	try:
+		pid = page.xpath("//iframe[@id='tp-global-player']/@src")[0].split("/select/")[1].split("?")[0]
+	except:
+		raise Ex.MediaNotAvailable
+
+	smil = XML.ElementFromURL(VIDEO_XML % pid)
+
+	try:
+		video_url = smil.xpath('//a:switch[1]/a:video/@src', namespaces=SMIL_NS)[0]
+	except:
+		try:
+			video_url = smil.xpath('//a:switch[1]/a:ref/@src', namespaces=SMIL_NS)[0]
+		except:
+			raise Ex.MediaNotAvailable
+
+	if video_url.startswith("http://"):
+		# this is a direct MP4 video
+		return IndirectResponse(VideoClipObject, key=video_url)
+	else:
+		# this is an rtmp based video and they've kept it nice and simple for us (for a change!)
+		rtmp_url = smil.xpath('//a:meta[starts-with(@base, "rtmp")]/@base', namespaces=SMIL_NS)[0]
+		#Log(' --> RTMPDump test command line: rtmpdump -r "%s%s" -o test.flv' % (rtmp_url, video_url))
+		return IndirectResponse(VideoClipObject, key=RTMPVideoURL(url="%s%s" % (rtmp_url, video_url)))

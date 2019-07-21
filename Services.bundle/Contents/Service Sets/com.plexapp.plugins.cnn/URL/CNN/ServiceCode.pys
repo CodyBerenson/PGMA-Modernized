@@ -1,0 +1,111 @@
+BASE_URL = 'http://ht.cdn.turner.com/cnn/big'
+VIDEO_XML = '%s/video/data/3.0/video/%s/index.xml?xml=true'
+VIDEO_XML2 = '%s/video/data/4.0/video/%s.xml?xml=true'
+
+####################################################################################################
+def NormalizeURL(url):
+
+    url = url.split('?')[0].split('/video/playlists/')[0].split('/index.html')[0]
+    return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    xml_data = GetVideoXML(url)
+
+    vid_title = xml_data.xpath('//headline/text()')[0]
+    summary = xml_data.xpath('//description/text()')[0]
+    duration = xml_data.xpath('//length/text()')[0]
+    duration = Datetime.MillisecondsFromString(duration)
+    date = xml_data.xpath('//dateCreated/text()')[0]
+    date = Datetime.ParseDate(date).date()
+
+    thumb = xml_data.xpath('//image[@name="lg"]/text()')[0]
+
+    if thumb == '':
+        thumb = xml_data.xpath('//image/text()')[0]
+
+    return VideoClipObject(
+        title = vid_title,
+        duration = duration,
+        originally_available_at = date,
+        summary = summary,
+        thumb = Resource.ContentsOfURLWithFallback(thumb)
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    if '/videos/' in url:
+        return [
+            MediaObject(
+                bitrate = bitrate,
+                container = Container.MP4,
+                video_codec = VideoCodec.H264,
+                video_resolution = resolution,
+                audio_codec = AudioCodec.AAC,
+                audio_channels = 2,
+                optimized_for_streaming = True,
+                parts = [
+                    PartObject(
+                        key = Callback(PlayVideo, url=url, bitrate=bitrate)
+                    )
+                ]
+            ) for bitrate, resolution in [(5500, '1080'), (3500, '720'), (1850, '504'), (1300, '432'), (900, '360'), (550, '288')]
+        ]
+    else:
+        return [
+            MediaObject(
+                protocol = 'hls',
+                container = 'mpegts',
+                video_codec = VideoCodec.H264,
+                audio_codec = AudioCodec.AAC,
+                audio_channels = 2,
+                optimized_for_streaming = True,
+                parts = [
+                    PartObject(
+                        key = HTTPLiveStreamURL(Callback(PlayVideo, url=url, bitrate='hls'))
+                    )
+                ]
+            )
+        ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, bitrate=5500, **kwargs):
+
+    xml_data = GetVideoXML(url)
+    (video_url, available_bitrates) = (None, [])
+
+    if bitrate=='hls':
+        try:
+            video_url = xml_data.xpath('//files/file[@bitrate="ipadFile"]/text()')[0]
+            return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(video_url))
+        except: raise Ex.MediaNotAvailable
+
+    else:
+        for version in xml_data.xpath('//files/file/@bitrate'):
+            if version.endswith('k_mp4'):
+                vid_bitrate = version.split('_')[1].split('k')[0]
+                available_bitrates.append(vid_bitrate)
+
+        try:
+            closest = min((abs((bitrate*1000) - int(i)), int(i)) for i in available_bitrates)[1]
+            video_url = BASE_URL+xml_data.xpath('//files/file[contains(@bitrate, "%sk_mp4")]/text()' %closest)[0]
+            return IndirectResponse(VideoClipObject, key=video_url)
+        except:
+            raise Ex.MediaNotAvailable
+        
+####################################################################################################
+def GetVideoXML(url):
+
+	video_id = url.split('/videos/')
+	if len(video_id)!=2:
+		video_id = url.split('/video/')
+
+	try: xml_data = XML.ElementFromURL(VIDEO_XML %(video_id[0], video_id[1]))
+	except:
+		try: xml_data = XML.ElementFromURL(VIDEO_XML2 %(video_id[0], video_id[1]))
+		except: raise Ex.MediaNotAvailable
+        
+	return xml_data

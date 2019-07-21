@@ -1,0 +1,114 @@
+VIDEO_URL = 'http://on.aol.com/video/%s'
+JSON_DATA_URL = 'http://syn.5min.com/handlers/SenseHandler.ashx?func=GetResults&playlist=%s&sid=%s&url=http://on.aol.com'
+
+RE_VIDEO_ID = Regex('(videoid=|playlist=|/episode/)(?P<video_id>\d+)', Regex.IGNORECASE)
+RE_VIDEO_URL = Regex('videoUrl=(?P<video_url>[^&]+)')
+RE_SID = Regex('embed\.5min\.com.+(\?|&(amp;)?)sid=(?P<sid>\d+)')
+
+HTTP.CacheTime = CACHE_1WEEK
+
+####################################################################################################
+def NormalizeURL(url):
+
+	if 'videoid=' in url:
+		video_id = RE_VIDEO_ID.search(url).group('video_id')
+		return VIDEO_URL % video_id
+
+	elif 'on.aol.com/video/' in url and len(url.split('-')) > 1:
+		url = url.split('?')[0]
+		video_id = url.split('-')[-1]
+		return VIDEO_URL % video_id
+
+	elif 'on.aol.com/playlist/' in url:
+		html = HTML.ElementFromURL(url)
+		embed_url = html.xpath('//meta[@property="og:video"]/@content')[0]
+		video_id = embed_url.split('/')[-1].split('&')[0]
+		return VIDEO_URL % video_id
+
+	elif not 'on.aol.com/video/' in url:
+		video_id = RE_VIDEO_ID.search(url).group('video_id')
+		return VIDEO_URL % video_id
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJSON(url)
+
+	title = json_obj['Title']
+	duration = Datetime.MillisecondsFromString(json_obj['Duration'])
+
+	thumb = json_obj['ThumbURL']
+	thumb_orig = thumb.replace('.jpg', '_o.jpg')
+
+	html = HTML.ElementFromURL(url)
+	summary = html.xpath('//meta[@property="og:description"]/@content')[0]
+
+	try:
+		date = html.xpath('//span[contains(@class, "creation-date")]/text()')[0].split(': ')[-1]
+		date = Datetime.ParseDate(date).date()
+	except:
+		date = None
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback([thumb_orig, thumb]),
+		originally_available_at = date
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			audio_channels = 2,
+			optimized_for_streaming = True,
+			parts = [
+				PartObject(
+					key = HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+				)
+			]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	json_obj = GetJSON(url)
+
+	for r in json_obj['Renditions']:
+
+		if r['RenditionType'] == 'm3u8':
+			return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(url=r['Url']))
+
+	raise Ex.MediaNotAvailable
+
+####################################################################################################
+def GetJSON(url):
+
+	try:
+		page = HTTP.Request(url).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	sid = RE_SID.search(page)
+
+	if sid:
+		sid = sid.group('sid')
+	else:
+		sid = ''
+
+	video_id = url.split('/')[-1]
+	json_obj = JSON.ObjectFromURL(JSON_DATA_URL % (video_id, sid))
+
+	if 'success' in json_obj and json_obj['success']:
+		return json_obj['binding'][0]
+	elif 'errorMessage' in json_obj:
+		if json_obj['errorMessage'] == 'ErrorVideoUserNotGeo':
+			raise Ex.MediaGeoblocked
+		else:
+			raise Ex.MediaNotAvailable
+	else:
+		raise Ex.MediaNotAvailable

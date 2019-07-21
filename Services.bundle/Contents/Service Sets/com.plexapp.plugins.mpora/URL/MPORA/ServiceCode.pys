@@ -1,0 +1,89 @@
+RE_PLAYER_CONFIG = Regex('new FM\.Player\([^{]+(.+)\)')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	url = url.replace('?hd=1', '')
+
+	if '/embed' in url:
+		url = url.split('/embed')[0]
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	html = HTML.ElementFromURL(url)
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	description = html.xpath('//meta[@property="og:description"]/@content')[0]
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0]
+	tags = html.xpath('//meta[@name="keywords"]/@content')[0]
+	tags = [ tag.strip() for tag in tags.split(',') ]
+	date = html.xpath('//time/@datetime')[0]
+	date = Datetime.ParseDate(date)
+
+	if thumb.endswith('/'):
+		thumb = '%s.jpg' % (thumb)
+
+	return VideoClipObject(
+		title = title,
+		summary = description,
+		thumb = Resource.ContentsOfURLWithFallback(thumb),
+		tags = tags,
+		originally_available_at = date
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			video_resolution = '720',
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			bitrate = 2400,
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, res='hd'))
+			]
+		),
+		MediaObject(
+			container = Container.MP4,
+			video_resolution = 'sd',
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			bitrate = 1500,
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, res='sd'))
+			]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res, **kwargs):
+
+	if res == 'hd':
+		url = '%s?hd=1' % (url)
+
+	try:
+		page = HTTP.Request(url).content
+	except Ex.HTTPError, e:
+		if e.code == 404:
+			raise Ex.MediaExpired
+		else:
+			raise Ex.MediaNotAvailable
+	except:
+		raise Ex.MediaNotAvailable
+
+	player_config_src = RE_PLAYER_CONFIG.findall(page)[0]
+	player_config = JSON.ObjectFromString(player_config_src)
+	videos = player_config['video']['encodings']
+
+	if res == 'hd' and 'hd' in videos and len(videos['hd']['sources']) > 0:
+		return IndirectResponse(VideoClipObject, key=videos['hd']['sources'][0]['src'])
+	else:
+		return IndirectResponse(VideoClipObject, key=videos['sd']['sources'][0]['src'])

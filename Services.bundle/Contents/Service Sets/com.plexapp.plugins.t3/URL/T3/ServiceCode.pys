@@ -1,0 +1,31 @@
+VIDEO_INFO_URL = 'http://endpoint.vams.futurecdn.net/vams/search.php?source=new&searchType=embed&id=%s'
+YT_URL = 'http://www.youtube.com/watch?v=%s'
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0].split('#')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	return URLService.MetadataObjectForURL(GetYouTubeURL(url))
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	# Since there isn't a T3 channel, do it the 'easy' way
+	return URLService.MediaObjectsForURL(GetYouTubeURL(url))
+
+####################################################################################################
+def GetYouTubeURL(url):
+
+	video_id = HTML.ElementFromURL(url).xpath('//*[@data-vams-id]/@data-vams-id')
+
+	if len(video_id) < 1:
+		return None
+
+	json_obj = JSON.ObjectFromURL(VIDEO_INFO_URL % video_id[0])
+	yt_id = json_obj['result']['provider_refs']['youtube']
+
+	return YT_URL % yt_id

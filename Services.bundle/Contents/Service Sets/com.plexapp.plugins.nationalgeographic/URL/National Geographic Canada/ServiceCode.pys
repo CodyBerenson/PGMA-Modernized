@@ -1,0 +1,75 @@
+SMIL_NS = {"a" : "http://www.w3.org/2005/SMIL21/Language"}
+
+MediaObject.container = 'mp4'
+MediaObject.video_codec = 'h264'
+MediaObject.audio_codec = 'aac'
+AudioStreamObject.language_code = Locale.Language.English
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	details = JSON.ObjectFromURL(PlatformURL(url).replace('format=smil', 'format=Script'))
+
+	title = details['title']
+	summary = details['description']
+	thumb = details['defaultThumbnailUrl']
+	duration = details['duration']
+	date = Datetime.FromTimestamp(float(details['pubDate'])/1000).date()
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = duration,
+		originally_available_at = date,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url))]
+		)
+	]
+
+####################################################################################################
+def PlayVideo(url, **kwargs):
+
+	data = XML.ElementFromURL(PlatformURL(url))
+
+	try:
+		mp4_url = data.xpath('//a:video/@src', namespaces=SMIL_NS)[0]
+		return Redirect(mp4_url)
+	except:
+		raise Ex.MediaNotAvailable
+
+####################################################################################################
+def PlatformURL(url):
+
+	data = HTML.ElementFromURL(url)
+
+	try:
+		platform_url = data.xpath('//div[@class="tpPlayer"]/@*[name()="tp:releaseurl"]')[0]
+		return platform_url
+	except:
+		raise Ex.MediaNotAvailable
+
+####################################################################################################
+def TestURLs():
+
+	test_urls = []
+	data = HTML.ElementFromURL('http://natgeotv.com/ca/videos')
+
+	for vid in data.xpath('//a[@class="title"]/@href'):
+		test_urls.append('http://natgeotv.com%s' % vid)
+
+		if len(test_urls) > 2:
+			break
+
+	return test_urls

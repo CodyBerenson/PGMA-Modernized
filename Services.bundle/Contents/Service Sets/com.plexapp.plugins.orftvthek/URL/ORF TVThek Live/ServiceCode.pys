@@ -1,0 +1,46 @@
+RE_DATA = Regex("initializeAdworx\(\[(.*)\]\);")
+
+####################################################################################################
+def MetadataObjectForURL(url):
+    content   = HTTP.Request(url).content
+    data      = RE_DATA.search(content).groups()[0]
+    json_data = JSON.ObjectFromString(data)
+    
+    return VideoClipObject(
+        title = json_data['values']['channel']['name'].strip(),
+        summary = json_data['values']['episode']['share_subject'],
+        thumb = json_data['values']['episode']['image_url'],
+        originally_available_at = Datetime.ParseDate(json_data['values']['episode']['datetime_as_string_for_css'].split('T')[0]).date()
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+    return [
+        MediaObject(
+            video_resolution        = 360,         
+            audio_channels          = 2,
+            optimized_for_streaming = True,
+            parts                   = [
+                PartObject(
+                    key = HTTPLiveStreamURL(Callback(PlayVideo, url = url))
+                )
+            ]
+        )
+    ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+    pageElement = HTML.ElementFromURL(url, cacheTime = 0)
+    data        = pageElement.xpath("//*[contains(@class,'jsb_VideoPlaylist')]")[0].get('data-jsb')
+    json_data   = JSON.ObjectFromString(data)
+    
+    for source in json_data['selected_video']['sources']:
+        if source['protocol'] == 'http' and source['delivery'] == 'hls' and source['quality'] == 'Q6A':
+            return IndirectResponse(
+                VideoClipObject,
+                key = HTTPLiveStreamURL(source['src'])
+            )
+
+    raise Ex.MediaNotAvailable
+

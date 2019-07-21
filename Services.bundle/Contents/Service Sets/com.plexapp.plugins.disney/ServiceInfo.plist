@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Disney</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^(?!.*live\-stream)http:\/\/(video|disneyjunior)\.disney\.com(\/watch)?\/.+</string>
+			</array>
+			<key>TestURLs</key>
+			<array>
+				<string>http://video.disney.com/watch/awakening-part-1-4c764a4e2cc4d75c5e80a06a</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

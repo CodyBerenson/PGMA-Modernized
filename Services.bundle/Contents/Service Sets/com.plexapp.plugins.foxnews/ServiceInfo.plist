@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Fox News</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://video.foxnews.com/#/v/1087515397001/fabio-sends-hearts-racing-on-red-eye/?playlist_id=87485</string>
+					<string>http://video.foxnews.com/v/1084986724001/us-debt-crisis-the-world-is-watching/?playlist_id=86857</string>
+				<string>http://video.foxnews.com/v/1094428245001</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http:\/\/video\.foxnews\.com(\/#)?\/v\/\d+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

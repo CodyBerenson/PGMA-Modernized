@@ -1,0 +1,37 @@
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def GetExternalSource(url):
+
+	# Find the appropriate video source
+	html = HTML.ElementFromURL(url)
+	yt_iframe = html.xpath('//iframe[contains(@src, "youtube.com/embed")]/@src')
+
+	if len(yt_iframe) > 0:
+		return URLService.MetadataObjectForURL(yt_iframe[0])
+	else:
+		return None
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	external_source = GetExternalSource(url)
+
+	if external_source:
+		return URLService.MetadataObjectForURL(external_source)
+	else:
+		raise Ex.MediaNotAvailable
+
+####################################################################################################
+@deferred
+def MediaObjectsForURL(url):
+
+	external_source = GetExternalSource(url)
+
+	if external_source:
+		return URLService.MediaObjectsForURL(external_source)
+	else:
+		raise Ex.MediaNotAvailable

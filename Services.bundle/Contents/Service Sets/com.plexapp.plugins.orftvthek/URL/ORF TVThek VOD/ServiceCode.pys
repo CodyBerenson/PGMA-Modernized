@@ -1,0 +1,113 @@
+RE_DATA = Regex("initializeAdworx\((\[.*\])\);")
+MAX_PARTS = 15
+
+####################################################################################################
+def GetJSONData(url):
+    try:
+        content = HTTP.Request(url).content
+    except:
+        raise Ex.MediaNotAvailable
+    data = RE_DATA.search(content).group(1)
+
+    if data == '' or data == '[]':
+        raise Ex.MediaNotAvailable
+
+    json_data = JSON.ObjectFromString(data)
+
+    return json_data[-1]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+    json_data = GetJSONData(url)
+
+    if url == json_data['values']['episode']['url']:
+        # The whole episode was selected
+        video_data = json_data['values']['episode']
+        originally_available_at = Datetime.ParseDate(video_data['date'].split(' ')[0]).date()  
+    else:
+        # A specific segment in the episode was selected
+        video_data = json_data['values']['segment']
+        originally_available_at = Datetime.ParseDate(video_data['teaser_date'].split(' ')[0]).date()
+
+    return VideoClipObject(
+        title = video_data['title'],
+        summary = video_data['description'],
+        thumb = video_data['teaser_image_url'],
+        art = video_data['teaser_stage_image_url'],
+        duration = int(video_data['duration_in_milli_seconds']),
+        originally_available_at = originally_available_at  
+    )
+
+####################################################################################################
+@deferred
+def MediaObjectsForURL(url):
+    json_data = GetJSONData(url)
+
+    parts    = []
+    duration = 0
+
+    if url == json_data['values']['episode']['url']:
+        # The whole episode was selected
+        maxPartNo = json_data['values']['episode']['number_of_segments']
+
+        for partNo in range(0, maxPartNo): 
+            for source in json_data['values']['segments'][partNo]['playlist_item_array']['sources']:
+                if source['protocol'] == 'http' and source['src'].lower().endswith("mp4") and source['quality'] == 'Q6A':
+                    try:
+                        headers = HTTP.Request(source['src']).headers
+                    except:
+                        raise Ex.MediaGeoblocked
+
+                    try:
+                        segmentDuration = int(json_data['values']['segments'][partNo]['duration'])
+                        duration        = duration + segmentDuration
+                    except:
+                        segmentDuration = None
+
+                    parts.append(
+                        PartObject(
+                            key = source['src'],
+                            duration = segmentDuration
+                        )
+                    )
+
+    else:
+        # A specific segment in the episode was selected
+        for source in json_data['values']['segment']['playlist_item_array']['sources']:
+            if source['protocol'] == 'http' and source['src'].lower().endswith("mp4") and source['quality'] == 'Q6A':
+                try:
+                    headers = HTTP.Request(source['src']).headers
+                except:
+                    raise Ex.MediaGeoblocked
+
+                try:
+                    segmentDuration = int(json_data['values']['segment']['duration'])
+                except:
+                    segmentDuration = None
+
+                parts.append(
+                    PartObject(
+                        key = source['src'],
+                        duration = segmentDuration
+                    )
+                )
+
+    if len(parts) < 1:        
+        raise Ex.MediaNotAvailable
+
+    if duration == 0:
+        duration = None
+
+    return [
+        MediaObject(
+            container               = Container.MP4,
+            video_codec             = VideoCodec.H264,
+            audio_codec             = AudioCodec.AAC,
+            video_resolution        = 544,
+            audio_channels          = 2,
+            optimized_for_streaming = True,
+            duration                = duration,
+            parts                   = parts
+        )
+    ]
+ 

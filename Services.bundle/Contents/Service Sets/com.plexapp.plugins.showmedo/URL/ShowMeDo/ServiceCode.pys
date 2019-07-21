@@ -1,0 +1,52 @@
+import re
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    page = HTML.ElementFromURL(url)
+
+    title = page.xpath("//h1[@class='effects']/span/text()")[0].strip()
+    show = page.xpath("//h2[@class='seriestitle']/span/text()")[1]
+    description = ''.join(page.xpath("//div[@class='document']/p/text()"))
+    thumb = page.xpath("//div[@id='nbv2']//img")[0].get('src')
+
+    episode_details = page.xpath("//h1[@class='effects']/span/text()")[1]
+    episode_dict = re.match(".*\((?P<ep>[0-9]+)/(?P<total>[0-9]+)", episode_details).groupdict()
+    index = int(episode_dict['ep'])
+
+    date = None
+    try:
+        date_details = ''.join(page.xpath("//h2[@id='free']/text()"))
+        date = re.match(".*added (?P<date>[0-9]+/[0-9]+).*", date_details).groupdict()['date']
+        date = Datetime.ParseDate(date)
+    except: pass
+    
+    return EpisodeObject(
+        title = title,
+        show = show,
+        index = index,
+        summary = description,
+        thumb = thumb,
+        originally_available_at = date
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+      MediaObject(
+        # video_codec = Sorenson Spark???
+        audio_codec = AudioCodec.MP3,
+        container = 'flv',
+        parts = [PartObject(key=Callback(PlayVideo, url = url))]
+      )
+    ]
+
+####################################################################################################
+def PlayVideo(url, **kwargs):
+
+    page = HTML.ElementFromURL(url)
+
+    # Find the video url on the page, and redirect to it
+    video_url = page.xpath("//a[@id='downloadFLV']")[0].get('href')
+    return Redirect(video_url)

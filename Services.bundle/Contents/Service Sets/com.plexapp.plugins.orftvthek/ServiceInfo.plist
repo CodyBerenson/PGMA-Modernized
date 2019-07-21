@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>ORF TVThek VOD</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http:\/\/tvthek\.orf\.at\/(program|profile|topic)\/.+</string>
+			</array>
+		</dict>
+		<key>ORF TVThek Live</key>
+		<dict>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http:\/\/tvthek\.orf\.at\/live\/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

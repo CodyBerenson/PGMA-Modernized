@@ -1,0 +1,115 @@
+import cgi
+
+BASE_URL = 'http://www.traileraddict.com'
+VIDEO_URL = 'http://v.traileraddict.com/js/flash/fv-secure.php?tid=%s&token=%s'
+
+NO_THUMB_AVAILABLE = 'http://www.traileraddict.com/images/noembed.png'
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	html = HTML.ElementFromURL(url, cacheTime=CACHE_1HOUR)
+
+	video_id = html.xpath('//meta[@name="twitter:player"]/@content')
+
+	if len(video_id) < 1:
+		raise Ex.MediaNotAvailable
+
+	try:
+		summary = html.xpath('//div[@class="synopsis"]/div[last()]//*')
+		summary_parts = []
+
+		for s in summary:
+			if s.tag == 'p':
+				summary_parts.append(s.text_content().strip())
+			elif s.tag == 'span':
+				break
+			else:
+				continue
+
+		summary = ''.join(summary_parts)
+	except:
+		summary = None
+
+	video_id = video_id[0].split('/')[-1]
+	token = GetToken(video_id)
+
+	details_page = HTTP.Request(VIDEO_URL % (video_id, token)).content.decode('latin-1')
+	details = cgi.parse_qs(details_page)
+
+	title = details['filmtitle'][0]
+	duration = int(details['vidlength'][0]) * 1000
+
+	# The image field actually points to a php file to resize/embed the thumbnail. However, it contains
+	# a property 'dir' which points to the relative path of the original image.
+	thumb = details['image'][0]
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = '720',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True,
+			parts = [PartObject(key=Callback(PlayVideo, url=url, res='hd'))]
+		),
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = '480',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True,
+			parts = [PartObject(key=Callback(PlayVideo, url=url, res='sd'))]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res, **kwargs):
+
+	html = HTML.ElementFromURL(url, cacheTime=CACHE_1HOUR)
+	video_id = html.xpath('//meta[@name="twitter:player"]/@content')
+
+	if len(video_id) < 1:
+		raise Ex.MediaNotAvailable
+
+	video_id = video_id[0].split('/')[-1]
+	token = GetToken(video_id)
+
+	details_page = HTTP.Request(VIDEO_URL % (video_id, token)).content.decode('latin-1')
+	details = cgi.parse_qs(details_page)
+
+	if 'hdurl' in details and len(details['hdurl']) > 0 and details['hdurl'][0].startswith('http') and res == 'hd':
+		video_url = details['hdurl'][0]
+	elif 'fileurl' in details and len(details['fileurl']) > 0 and details['fileurl'][0].startswith('http'):
+		video_url = details['fileurl'][0]
+	else:
+		raise Ex.MediaNotAvailable
+
+	return IndirectResponse(VideoClipObject, key=video_url)
+
+####################################################################################################
+def GetToken(video_id):
+
+	hash_string = ''
+	digits = list(video_id)
+
+	for digit in digits:
+		x = int(digit)
+		hash_string = hash_string + 'abcdefghijklmnopqrstuvwyxz'[x:x+1]
+
+	token = Hash.MD5('%s%s' % (hash_string, video_id))[2:7]
+
+	return token

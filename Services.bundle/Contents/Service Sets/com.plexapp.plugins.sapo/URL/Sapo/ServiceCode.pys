@@ -1,0 +1,49 @@
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	data = HTML.ElementFromURL(url)
+
+	title = data.xpath('//meta[@name="title"]/@content')[0]
+	summary = data.xpath('//meta[@name="description"]/@content')[0]
+
+	try: thumb = data.xpath('//meta[@property="og:image"]/@content')[0]
+	except: thumb = ''
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url))],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = 'sd',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	data = HTML.ElementFromURL(url)
+	video = data.xpath('//meta[@property="og:video:url"]/@content')[0]
+
+	if len(video) < 1:
+		raise Ex.MediaNotAvailable
+
+	video_url = video.split('file=')[1].split('&')[0]
+
+	return IndirectResponse(VideoClipObject, key=video_url)

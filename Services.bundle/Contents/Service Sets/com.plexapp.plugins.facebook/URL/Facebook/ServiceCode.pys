@@ -1,0 +1,110 @@
+RE_JSON = Regex('\["params",\s*"(.+?)"\]')
+RE_AVAILABLE = Regex('currently unavailable|content isn.+?t available', Regex.IGNORECASE)
+
+HTTP_HEADERS = {
+	'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.63 Safari/537.36',
+	'Accept-Language': 'en-us,en'
+}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		page_content = HTTP.Request(url, headers=HTTP_HEADERS).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	if RE_AVAILABLE.search(page_content):
+		raise Ex.MediaNotAvailable
+
+	title = HTML.ElementFromString(page_content).xpath('//h2/text()|//span[@class="hasCaption"]/text()')
+
+	if len(title) < 1:
+		title = 'Untitled'
+	else:
+		title = title[0]
+
+	duration = None
+	thumb = ''
+
+	page_content = page_content.replace('\\\\', '\\').replace('\\"', '"')
+
+	json = RE_JSON.search(page_content).group(1)
+	json = json.decode('unicode-escape')
+	json_obj = JSON.ObjectFromString(String.Unquote(json))
+
+	thumb = ''
+	if 'thumbnail_src' in json_obj:
+		thumb = json_obj['thumbnail_src']
+
+	duration = None
+	if 'video_duration' in json_obj:
+		duration = int(json_obj['video_duration']) * 1000
+
+	return VideoClipObject(
+		title = title,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			video_resolution = '720',
+			audio_channels = 2,
+			parts = [PartObject(key=Callback(PlayVideo, url=url, res='720'))]
+		),
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			audio_codec = AudioCodec.AAC,
+			video_resolution = 'sd',
+			audio_channels = 2,
+			parts = [PartObject(key=Callback(PlayVideo, url=url, res='sd'))]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, res='720', **kwargs):
+
+	try:
+		page_content = HTTP.Request(url, headers=HTTP_HEADERS).content
+	except:
+		raise Ex.MediaNotAvailable
+
+	video = None
+
+	if RE_AVAILABLE.search(page_content):
+		raise Ex.MediaNotAvailable
+
+	page_content = page_content.replace('\\\\', '\\').replace('\\"', '"')
+
+	json = RE_JSON.search(page_content).group(1)
+	json = json.decode('unicode-escape')
+
+	json_obj = JSON.ObjectFromString(String.Unquote(json))
+
+	if 'video_id' in json_obj['video_data']['progressive']:
+		video_data = json_obj['video_data']['progressive']
+	else:
+		video_data = json_obj['video_data']['progressive'][0]
+
+	if res == '720' and 'hd_src' in video_data and video_data['hd_src'] is not None:
+		video_url = video_data['hd_src']
+	elif 'sd_src' in video_data and video_data['sd_src'] is not None:
+		video_url = video_data['sd_src']
+	else:
+		raise Ex.MediaNotAvailable
+
+	return IndirectResponse(VideoClipObject, key=video_url.replace('https://', 'http://'))

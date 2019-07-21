@@ -1,0 +1,100 @@
+API_URL = 'http://revision3.com/api/getPlaylist.json?api_key=ba9c741bce1b9d8e3defcc22193f3651b8867e62&codecs=h264&video_id=%s'
+RE_VIDEO_ID = Regex('embed\?videoId=(\d+)')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	if ' | ' in url:
+		url = url.split(' | ')[0]
+
+	return url.split('?')[0].split('#')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	json_obj = GetJSON(url)
+
+	title = json_obj['title']
+	summary = json_obj['summary']
+	duration = int(json_obj['duration']) * 1000
+	thumb_1 = json_obj['images']['large'] if 'large' in json_obj['images'] else ''
+	thumb_2 = json_obj['images']['medium'] if 'medium' in json_obj['images'] else ''
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		duration = duration,
+		thumb = Resource.ContentsOfURLWithFallback([thumb_1, thumb_2])
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url, fmt='hd'))],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = '720',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		),
+		MediaObject(
+			parts = [PartObject(key=Callback(PlayVideo, url=url, fmt='sd'))],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = 'sd',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, fmt, **kwargs):
+
+	# Keep some of the old 'fmt' names for videos already queued
+	if fmt in ('hd', '720p'):
+		fmt = 'hd'
+	elif fmt in ('sd', '480p', 'SD', 'large', 'small'):
+		fmt = 'large'
+
+	json_obj = GetJSON(url)
+
+	if 'media' in json_obj and 'h264' in json_obj['media']:
+		if fmt == 'hd' and 'hd' in json_obj['media']['h264']:
+			video_url = json_obj['media']['h264']['hd']['url']
+		elif 'large' in json_obj['media']['h264']:
+			video_url = json_obj['media']['h264']['large']['url']
+
+		return IndirectResponse(VideoClipObject, key=video_url)
+
+	else:
+		raise Ex.MediaNotAvailable
+
+####################################################################################################
+def GetJSON(url):
+
+	try:
+		data = HTTP.Request(url, cacheTime=CACHE_1HOUR).content
+	except Ex.HTTPError, e:
+		if e.code == 403:
+			raise Ex.MediaNotAuthorized
+		elif e.code == 404:
+			raise Ex.MediaNotAvailable
+		else:
+			raise Ex.MediaNotAvailable
+
+	video_id = RE_VIDEO_ID.search(data)
+
+	if not video_id:
+		raise Ex.MediaNotAvailable
+
+	json_obj = JSON.ObjectFromURL(API_URL % (video_id.group(1)))
+
+	if 'items' not in json_obj or json_obj['items'] < 1:
+		raise Ex.MediaNotAvailable
+
+	return json_obj['items'][0]

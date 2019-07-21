@@ -1,0 +1,64 @@
+MediaObject.container = Container.MP4
+MediaObject.video_codec = VideoCodec.H264
+MediaObject.audio_codec = AudioCodec.AAC
+MediaObject.audio_channels = 2
+MediaObject.optimized_for_streaming = True
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0].split('/embed')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		html = HTML.ElementFromURL(url)
+	except:
+		raise Ex.MediaNotAvailable
+
+	title = html.xpath('//meta[@property="og:title"]/@content')
+
+	if len(title) < 1:
+		raise Ex.MediaNotAvailable
+
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0].split('?')[0]
+
+	return VideoClipObject(
+		title = title[0],
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url))
+			],
+			video_resolution = '480',
+			width = 480,
+			height = 480,
+			optimized_for_streaming = False
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	try:
+		html = HTML.ElementFromURL(url)
+	except:
+		raise Ex.MediaNotAvailable
+
+	video_url = html.xpath('//*[@itemtype="http://schema.org/VideoObject"]//meta[@itemprop="contentUrl"]/@content')
+
+	if len(video_url) < 1:
+		video_url = html.xpath('//video/@src')
+
+	if len(video_url) > 0:
+		return IndirectResponse(VideoClipObject, key=video_url[0].replace('https://', 'http://').split('?')[0])
+
+	raise Ex.MediaNotAvailable

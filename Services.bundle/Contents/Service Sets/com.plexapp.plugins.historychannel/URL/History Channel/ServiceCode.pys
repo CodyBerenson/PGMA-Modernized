@@ -1,0 +1,130 @@
+from hashlib import sha1
+import binascii, hmac
+
+SMIL_NS = {'a': 'http://www.w3.org/2005/SMIL21/Language'}
+SMIL_DETAILS = '?assetTypes=medium_video_ak&formats=m3u,mpeg4&format=SMIL'
+
+####################################################################################################
+def NormalizeURL(url):
+
+  return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+  releaseURL = '%s?format=script' % GetSMIL(url)
+  data = JSON.ObjectFromURL(releaseURL)
+
+  thumb = data['defaultThumbnailUrl'] if 'defaultThumbnailUrl' in data else ''
+  summary = data['description']
+  duration = data['duration']
+  date = Datetime.FromTimestamp(float(data['pubDate'])/1000).date()
+  content_rating = data['ratings'][0]['rating'] if len(data['ratings']) > 0 else None
+  title = data['title']
+
+  if data['AETN$mrssLengthType'] == "Episode":
+
+    try: show = data['AETN$seriesNameGlobal']
+    except: show = data['history$seriesName']
+    index = int(data['AETN$episode']) if 'AETN$episode' in data else None
+
+    return EpisodeObject(
+      title = title,
+      show = show,
+      summary = summary,
+      absolute_index = index,
+      duration = duration,
+      originally_available_at = date,
+      content_rating = content_rating,
+      thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+    )
+  else:
+    return VideoClipObject(
+      title = title,
+      summary = summary,
+      duration = duration,
+      originally_available_at = date,
+      content_rating = content_rating,
+      thumb = Resource.ContentsOfURLWithFallback(thumb)
+    )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+  return [
+    MediaObject(
+      protocol = 'hls',
+      container = 'mpegts',
+      video_resolution = 540,
+      parts = [
+        PartObject(
+          key=HTTPLiveStreamURL(Callback(PlayVideo, url=url))
+        )
+      ]
+    )
+  ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+  url = URLService.NormalizeURL(url)
+
+  smil_url = GetSMIL(url) + SMIL_DETAILS
+  sig = sign_url(smil_url)
+  smil_url = '%s&sig=%s' % (smil_url, sig)
+
+  smil = XML.ElementFromURL(smil_url)
+  video_url = None
+
+  if smil.xpath('//a:ref', namespaces=SMIL_NS)[0].get('title') == "Geographic Restriction":
+    raise Ex.MediaGeoblocked
+
+  try: video_url = smil.xpath('//a:video/@src', namespaces=SMIL_NS)[0]
+  except: raise Ex.MediaNotAvailable
+
+  if video_url.split('?')[0].endswith('m3u8'):
+    return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(video_url))
+  else:
+    Log('the value of video_url is %s' %video_url)
+    raise Ex.MediaNotAvailable
+
+####################################################################################################
+def GetSMIL(url):
+
+  try:
+    content = HTTP.Request(url).content.decode('utf8','replace')
+  except Ex.RedirectError, e:
+    raise Ex.MediaNotAvailable
+  except:
+    raise Ex.MediaExpired
+
+  html = HTML.ElementFromString(content)
+  try: blocked = html.xpath('//meta[@name="aetn:isBehindWall"]/@content')[0]
+  except: blocked = 'false'
+  if blocked=='true':
+    raise Ex.MediaNotAuthorized
+  else:
+    try: SMIL_URL = html.xpath('//@data-media-url')[0]
+    except: raise Ex.MediaNotAvailable
+
+  return SMIL_URL
+####################################################################################################
+def sign_url(url):
+
+  hmac_key = 'crazyjava'
+  SEC_HEX = '733363723374' #'s3cr3t'
+  expiration = get_expiration()
+  path = url.split('link.theplatform.com/s/')[1].split('?')[0]
+  sign_data = binascii.unhexlify('00'+expiration+binascii.hexlify(path).lower())
+  sig = hmac.new(hmac_key, sign_data, sha1)
+  sigHEX = sig.hexdigest()
+  signature = '00' + expiration + sigHEX + SEC_HEX
+  return signature
+
+####################################################################################################
+def get_expiration(auth_length=600):
+
+  current_time = Datetime.TimestampFromDatetime(Datetime.Now()) + auth_length
+  expiration = ('%0.2X' % current_time).lower()
+  return expiration

@@ -1,0 +1,62 @@
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	html = HTML.ElementFromURL(url)
+
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	summary = html.xpath('//meta[@property="og:description"]/@content')[0]
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0]
+
+	originally_available_at = None
+	published = html.xpath('//meta[@property="og:published_time"]/@content')
+
+	if len(published) > 0:
+		originally_available_at = Datetime.ParseDate(published[0].split('T')[0]).date()
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		originally_available_at = originally_available_at,
+		thumb = Resource.ContentsOfURLWithFallback(thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = 'sd',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			parts = [PartObject(key=Callback(PlayVideo, url=url))]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	html = HTML.ElementFromURL(url)
+	video_url = html.xpath('//video[contains(@src, ".mp4")]/@src|//video/source[contains(@src, ".mp4")]/@src')
+
+	if len(video_url) > 0:
+		return IndirectResponse(VideoClipObject, key=video_url[0])
+
+	iframe_url = html.xpath('//iframe[contains(@src, "/embed?id=")]/@src')
+
+	if len(iframe_url) < 1:
+		raise Ex.MediaNotAvailable
+
+	html = HTML.ElementFromURL('http://%s' % (iframe_url[0].split('//')[-1]))
+	video_url = html.xpath('//video[contains(@src, ".mp4")]/@src|//video/source[contains(@src, ".mp4")]/@src')
+
+	if len(video_url) > 0:
+		return IndirectResponse(VideoClipObject, key=video_url[0])
+
+	raise Ex.MediaNotAvailable

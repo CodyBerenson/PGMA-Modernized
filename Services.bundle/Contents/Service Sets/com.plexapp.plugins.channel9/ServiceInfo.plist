@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Channel9</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://channel9.msdn.com/Shows/Checking-In-with-Erik-Meijer/Checking-In-Rick-Molloy-Gone-Native</string>
+				<string>http://channel9.msdn.com/Shows/Hot-Apps/Hot-Apps-Cro-Mag-Rally-Numerix-Wild-West-Activity-Roulette-HoloPhone-3D</string>
+				<string>http://channel9.msdn.com/posts/Jensen-Harris-Walks-Us-Through-the-Windows-8-UI</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^(?!.*(/feed/|/RSS/))http://channel9.msdn.com/(Shows|Series|Events)/[^/]+/.+</string>
+				<string>^http://channel9.msdn.com/posts/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

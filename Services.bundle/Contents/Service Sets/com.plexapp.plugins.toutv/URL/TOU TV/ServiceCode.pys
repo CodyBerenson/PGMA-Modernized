@@ -1,0 +1,175 @@
+import re
+
+RE_EPISODE_ID = Regex("var episodeId = '(.+?)'")
+RE_MEDIA_ID = "http:\/\/api.radio-canada.ca\/.+idMedia=(\d+).+emissionId=(\d+)"
+RE_BANDWIDTH = Regex('BANDWIDTH=([0-9]+),')
+
+NAMESPACES = {"a":"http://www.w3.org/2001/SMIL20/Language"}
+#SMIL_URL = "http://release.theplatform.com/content.select?format=SMIL&pid=%s&Embedded=True&Tracking=True"
+EMISSION_URL = "http://api.tou.tv/v1/toutvapiservice.svc/json/GetPageEmission?emissionId=%s"
+
+MEDIA_URL = "http://api.radio-canada.ca/validationMedia/v1/Validation.html?appCode=thePlatform&deviceType=%s&connectionType=wifi&idMedia=%s&output=json"
+
+IPAD_HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 6_0_1 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A523 Safari/8536.25'}
+
+CLIENT_COMPAT_EHLS = ['iOS', 'Android', 'Safari', 'tvOS'] #'Roku' should be able to handle the eHLS streams natively but for some reason cannot.
+
+SWF_URL = 'http://static.tou.tv/lib/ThePlatform/4.2.9c/swf/flvPlayer.swf'
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+## EXAMPLE OF URL RECEIVED: http://api.radio-canada.ca/validationMedia/v1/Validation.html?appCode=thePlatform&deviceType=ipad&connectionType=wifi&idMedia=1234567&output=json&emissionId=1234567
+##      Parameter emissionID in URL is used to retrieve the metadata
+
+def MetadataObjectForURL(url):
+
+	emissionID = GetEmissionID(url)
+	jsonMetadata = JSON.ObjectFromURL(EMISSION_URL % str(emissionID))
+	allEpisodes = jsonMetadata["d"]["Episodes"]
+	episodePid = GetPID(url)
+
+	for oneEpisode in allEpisodes :
+
+		if oneEpisode["PID"] == episodePid :
+
+			title = oneEpisode["Title"]
+			summary = oneEpisode["Description"]
+			duration = int(oneEpisode["Length"])
+
+			thumb = oneEpisode["ImagePlayerLargeA"]
+			if thumb is None:
+				thumb = ""
+
+			try:
+				show_title = oneEpisode["Show"]
+				season = int(oneEpisode["SeasonNumber"])
+				episode = int(oneEpisode["EpisodeNumber"])
+				#date = Datetime.ParseDate(details.get('OriginalAirDate')).date()
+
+				try:
+					directors = oneEpisode["PeopleDirector"]
+					if directors:
+						directors = directors.split(', ')
+					else:
+						directors = []
+				except:
+					directors = []
+
+				try:
+					writers = oneEpisode["PeopleWriter"]
+					if writers:
+						writers = writers.split(', ')
+					else:
+						writers = []
+				except:
+					writers = []
+
+				return EpisodeObject(
+					title = title,
+					summary = summary,
+					duration = duration,
+					show = show_title,
+					season = season, 
+					index = episode,
+					#originally_available_at = date,
+					#directors = directors,
+					#writers = writers,
+					thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+				)
+			except:
+				pass
+
+			return VideoClipObject(
+				title = title,
+				summary = summary,
+				duration = duration,
+				thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+			)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	Log(' --> Client platform: %s' % Client.Platform)
+	Log(' --> Client product: %s' % Client.Product)
+	Log(' --> Media URL: %s' % url)
+
+	if Client.Platform in CLIENT_COMPAT_EHLS:
+		Log(' --> Client can play encrypted HLS!')
+
+		return [
+			MediaObject(
+				parts = [
+					PartObject(key=HTTPLiveStreamURL(Callback(PlayVideo, url=url, stream_type='HLS')))
+				],
+				protocol = 'hls',
+				optimized_for_streaming = True
+			)
+		]
+	else:
+		Log(' --> Client can\'t play encrypted HLS. Switching to RTMP.')
+		return [
+			MediaObject(
+				parts = [
+					PartObject(key = Callback(PlayVideo, url=url, stream_type='RTMP'))
+				],
+				protocol = 'rtmp'
+			)
+		]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, stream_type, **kwargs):
+
+	# Get the cookie and movie Url
+	json = JSON.ObjectFromURL(url)
+	movieUrl = json['url']
+	#HTTP.Request(url=movieUrl).load()
+
+	if not movieUrl:
+		if 'message' in json and "n'est pas disponible dans votre pays" in json['message']:
+			raise Ex.MediaGeoblocked
+		else:
+			raise Ex.MediaNotAvailable
+
+	if stream_type == 'HLS':
+		#return GetPlaylist(movieUrl, 'iPad')
+		return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(url=movieUrl))
+	else:
+		### TODO: Allow non-hls to play
+		playlist = GetPlaylist(url, 'flash').split('?',1)
+		auth = playlist[1]
+		rtmp_parts = playlist[0].split('/ondemand/',1)
+		rtmp_url = rtmp_parts[0] + '/ondemand?ovpfv=2.1.4&' + auth
+		clip = rtmp_parts[1].rsplit('.mp4',1)[0]
+
+		return IndirectResponse(VideoClipObject, key=RTMPVideoURL(url=rtmp_url, clip=clip, swf_url=SWF_URL))
+
+####################################################################################################
+def GetPID(url):
+
+	regex = re.compile(RE_MEDIA_ID, re.IGNORECASE)
+	match = regex.match(url)
+	return match.group(1)
+
+####################################################################################################
+def GetEmissionID(url):
+
+	regex = re.compile(RE_MEDIA_ID, re.IGNORECASE)
+	match = regex.match(url)
+	return match.group(2)
+
+####################################################################################################
+def GetPlaylist(url, device):
+
+	pID = GetPID(url)
+	json = JSON.ObjectFromURL(MEDIA_URL % (device, pID))
+
+	if device == 'flash':
+		return json['url']
+	else:
+		m3u8_url = json['url']
+		return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(url=m3u8_url))

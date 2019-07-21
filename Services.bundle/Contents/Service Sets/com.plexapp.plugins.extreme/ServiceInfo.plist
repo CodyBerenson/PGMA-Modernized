@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>extreme</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.extreme.com/fmx/1018711/red-bull-x-fighters-2011-season-review</string>
+				<string>http://www.extreme.com/skate/1020308/matix-x-krooked-mike-anderson</string>
+				<string>http://www.extreme.com/fmx/1016664/thats-the-way-dany-torres-trailer</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://(www\.)?extreme.com/.+/[0-9]+/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

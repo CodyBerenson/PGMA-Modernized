@@ -1,0 +1,117 @@
+BASE_URL = 'https://www.vice.com%s'
+PLAYER_URL = 'https://player.ooyala.com/player.js?embedCode=%s'
+MOBILE_PLAYER_URL = 'https://player.ooyala.com/mobile_player.js?%s'
+
+RE_EMBED_CODE = Regex('embedCode=([^&]+)')
+RE_PLAYER_ARGS = Regex('var mobile_player_url="https?://player.ooyala.com/mobile_player.js\?([^"]+)"')
+RE_STREAM = Regex('var streams=window.oo_testEnv\?\[\]:eval\("\((?P<json>.+?)\)"\);', Regex.DOTALL)
+
+RE_CONTROL_CHARS = Regex(u'[\u0000-\u001F]')
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	data = GetData(url)
+	html = HTML.ElementFromString(data)
+
+	video = html.xpath('//*[contains(@class,"video-container")]/iframe/@src')
+
+	if len(video) < 1:
+		# Check for Youtube
+		youtube_link = html.xpath('//*[@class="youtube-video"]/@data-youtube-id')
+		
+		if youtube_link:
+			youtube_url = 'https://www.youtube.com/watch?v=%s' % youtube_link[0]
+			return URLService.MetadataObjectForURL(youtube_url)
+		else:
+			raise Ex.MediaNotAvailable
+
+	if not 'embedcode' in video[0].lower():
+		raise Ex.MediaNotAvailable
+
+	# Extract the available information from the page
+	title = html.xpath('//meta[@property="og:title"]/@content')[0]
+	description = html.xpath('//meta[@name="description"]/@content')[0]
+	thumb = html.xpath('//meta[@property="og:image"]/@content')[0].split('?')[0].replace('https://', 'http://')
+
+	try:
+		show_name = title.split('|')[1].strip()
+		ep_name = title.split('|')[0].strip()
+
+		return EpisodeObject(
+			title = ep_name,
+			show = show_name,
+			summary = description,
+			thumb = Resource.ContentsOfURLWithFallback(thumb)
+		)
+	except:
+		return VideoClipObject(
+			title = title,
+			summary = description,
+			thumb = Resource.ContentsOfURLWithFallback(thumb)
+		)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			video_resolution = 720,
+			optimized_for_streaming = True,
+			audio_channels = 2,
+			parts = [
+				PartObject(key=HTTPLiveStreamURL(Callback(PlayVideo, url=url)))
+			]
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	data = GetData(url)
+	html = HTML.ElementFromString(data)
+
+	video = html.xpath('//*[contains(@class,"video-container")]/iframe/@src')
+
+	if len(video) < 1:
+		raise Ex.MediaNotAvailable
+
+	if not 'embedcode' in video[0].lower():
+		raise Ex.MediaNotAvailable
+
+	embed_code = RE_EMBED_CODE.search(video[0]).group(1)
+
+	# Once we've got this, we can then request the main JS page to do with the actual player. Since it
+	# only actually contains JS source, we simply obtain the content.
+	player_page = HTTP.Request(PLAYER_URL % embed_code, cacheTime=0).content
+
+	# The player page will contain a reference to the mobile JS page (including all required parameters).
+	# We therefore search for the known url.
+	mobile_player_page_args = RE_PLAYER_ARGS.search(player_page).group(1) + 'ipad'
+	mobile_player_page = HTTP.Request(MOBILE_PLAYER_URL % mobile_player_page_args, cacheTime=0).content
+
+	# We now have the mobile JS player page.
+	try:
+		stream_json = RE_STREAM.search(mobile_player_page).group('json')
+		stream_json = stream_json.decode('unicode_escape')[1:-1]
+		stream_details = JSON.ObjectFromString(stream_json)
+
+		return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(stream_details['ipad_url']))
+	except:
+		raise Ex.MediaNotAvailable
+
+####################################################################################################
+def GetData(url):
+
+	try:
+		data = HTTP.Request(url).content
+		data = RE_CONTROL_CHARS.sub('', data)
+		return data
+	except:
+		raise Ex.MediaNotAvailable

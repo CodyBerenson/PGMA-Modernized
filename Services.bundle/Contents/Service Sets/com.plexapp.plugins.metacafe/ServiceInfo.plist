@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<dict>
+		<key>Metacafe</key>
+		<dict>
+			<key>TestURLs</key>
+			<array>
+				<string>http://www.metacafe.com/watch/6735283/conan_the_barbarian_international_trailer/</string>
+				<string>http://www.metacafe.com/watch/9256517/game_time_play_time_10_19_2012/</string>
+				<string>http://www.metacafe.com/watch/7052772/deus_ex_stealth_sessions_part_2_transhumanism/</string>
+			</array>
+			<key>URLPatterns</key>
+			<array>
+				<string>^http://www.metacafe.com/watch/\d+/.+</string>
+			</array>
+		</dict>
+	</dict>
+</dict>
+</plist>

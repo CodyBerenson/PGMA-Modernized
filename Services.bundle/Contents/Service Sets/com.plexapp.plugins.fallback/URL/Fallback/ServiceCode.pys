@@ -1,0 +1,433 @@
+import urlparse
+
+# Allow any length for these content types
+VALID_TYPES = ['text/html', 'application/xhtml+xml']
+
+# Only allow response sizes below a certain length for arbitrary types
+MAX_LENGTH = 1024
+
+EMBEDDED_VIDEO = [
+	'//iframe/@src|//pagespeed_iframe/@src',
+	'//embed/@src',
+	'//object/@data',
+	'//param[@name="flashvars"]/@value',
+	'//meta[@property="og:video"]/@content',
+	'//meta[@property="og:video:url"]/@content',
+	'//@*[starts-with(name(), "data-")]',
+	'//script/@src'
+]
+
+# Use the iPad user agent to try to make websites give us <video> instead of Flash
+HTTP_IPAD_UA = {'User-Agent':'Mozilla/5.0 (iPad; CPU OS 6_0_1 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A523 Safari/8536.25'}
+HTTP_DESKTOP_UA = {'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/536.26.14 (KHTML, like Gecko) Version/6.0.1 Safari/536.26.14'}
+
+RE_IPV4_PRIVATE = Regex('(^127\.)|(^10\.)|(^172\.1[6-9]\.)|(^172\.2[0-9]\.)|(^172\.3[0-1]\.)|(^192\.168\.)|(^169\.254\.)|(^localhost$)|(\.local$)')
+RE_PATTERN = Regex('(\\\*"|\'|&quot;|%22)(?P<vid>(https?(:|%3A)(\\*?/|%2F){2}|(/|%2F))[^{}"\']+?\.(m3u8|mov|mp(e)?g|avi|mkv|mp4|m4v|flv|webm)((\?|%3F).+?)?)(\\\*"|\'|&quot;|%22)', Regex.IGNORECASE)
+RE_SUB_PATTERN = Regex('=(http[^&]+\.(mp4|m4v|flv)[^&]*)')
+RE_UNWANTED = Regex('promo|commercial', Regex.IGNORECASE)
+RE_YOUTUBE = Regex('("|\'|&quot;|%22)(?P<vid>(https?:)?((\\\+)?/){2}(www\.)?youtu((be\.com|be\.googleapis\.com)(\\\+)?/(v(\\\+)?/|watch\?v=|e(mbed)?(\\\+)?/)(?!__videoid__)|\.be(\\\+)?/)([a-z0-9_\-]){11}).*?("|\'|&quot;|%22)', Regex.IGNORECASE)
+RE_BC_CUSTOM = Regex('customBC\.createVideo\((.+)\);') # Custom BrightCove JS
+RE_CODECS = Regex('codecs="([^"]+)"')
+RE_WHITESPACE = Regex('\s*,\s*')
+RE_META_REFRESH = Regex('<meta.+?http-equiv=.refresh.+?content=.([0-9]+;url=)?(?P<url>https?://[^"\']+)', Regex.IGNORECASE)
+
+####################################################################################################
+def FixUrl(parent_url, url):
+
+	parent_url = urlparse.urlparse(parent_url)
+
+	if url[0:2] == '//':
+		# Protocol-less url, assumes same protocol as parent_url
+		final_url = '%s:%s' % (parent_url.scheme, url)
+	elif url[0] == '/':
+		# Absolute path
+		final_url = '%s://%s%s' % (parent_url.scheme, parent_url.netloc, url)
+	elif url.find('://') == -1:
+		# Relative path
+		final_url = '%s://%s%s/%s' % (parent_url.scheme, parent_url.netloc, parent_url.path.rsplit('/',1)[0], url)
+	else:
+		final_url = url
+
+	final_url = final_url.replace('&amp;', '&').replace('&amp;', '&') # Twice in case we have &amp;amp;
+
+	return final_url
+
+####################################################################################################
+def ValidURL(url):
+
+	if not isinstance(url, basestring):
+		return False
+
+	if url.startswith('ipad:'):
+		url = url.lstrip('ipad:')
+
+	url = urlparse.urlparse(url)
+
+	for host in ('hulu.com', 'netflix.com', 'plex.tv', 'plexapp.com'):
+		if host in url.hostname:
+			return False
+
+	if url.scheme not in ('http', 'https'):
+		return False
+
+	if RE_IPV4_PRIVATE.search(url.hostname):
+		return False
+
+	return True
+
+####################################################################################################
+def ShouldParse(req):
+
+	# Check the content type and content length headers
+	try:
+		content_type = req.headers['content-type'].split(';')[0].strip()
+	except:
+		content_type = 'Unknown'
+	try:
+		content_length = int(req.headers['content-length'])
+	except:
+		content_length = 0
+
+	Log("Length: %d  Type: %s", content_length, content_type)
+	if (content_length <= 0 or content_length > MAX_LENGTH) and content_type not in VALID_TYPES:
+		Log("Content length for unknown type %s is invalid - aborting", content_type)
+		return False
+
+	return True
+
+####################################################################################################
+def FindExternalSource(req):
+
+	doc = HTML.ElementFromString(req.content)
+
+	# We're going to search through the HTML for known embedded video types. If we find any, 
+	# then we can check their validity using the currently supported regular expressions.
+	for select in EMBEDDED_VIDEO:
+		for node_url in doc.xpath(select):
+			try:
+				if isinstance(node_url, basestring) and (node_url.startswith('http://') or node_url.startswith('https://') or node_url.startswith('//')):
+					for sources_check in URLService.AllPatterns:
+						try:
+							if len(Regex(sources_check).findall(node_url)) > 0:
+								return node_url
+						except: pass
+			except: pass
+
+	return None
+
+####################################################################################################
+def CodecsForVideoTypeValue(value):
+
+	if not value:
+		return None
+
+	match = RE_CODECS.search(value)
+	if match:
+		return RE_WHITESPACE.split(match.groups()[0])
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		if not ValidURL(url):
+			return None
+
+		is_ipad_url = url.startswith('ipad:')
+		url = url.lstrip('ipad:')
+		headers = HTTP_IPAD_UA if is_ipad_url else HTTP_DESKTOP_UA
+		req = HTTP.Request(url, cacheTime=0, headers=headers, sleep=1.0, follow_redirects=False)
+
+		try:
+			req.headers
+		except Ex.HTTPError, e:
+			if e.code == 405 or e.code == 501:
+				req.content
+		except Ex.RedirectError, e:
+			if 'Location' in e.headers:
+				if '://' not in e.headers['Location']:
+					e.headers['Location'] = FixUrl(url, e.headers['Location'])
+
+				if e.headers['Location'].split('://',1)[1] != url.split('://',1)[1]:
+					Log.Debug(' --> [Metadata] Found an HTTP redirect to a new URL: %s' % e.headers['Location'])
+					location = e.headers['Location']
+
+					# Make sure we stay in "iPad mode" if necessary.
+					if is_ipad_url:
+						location = 'ipad:' + location
+
+					return URLService.MetadataObjectForURL(location)
+
+				return None
+
+		if ShouldParse(req):
+
+			# Embedded Video
+			source_url = FindExternalSource(req)
+			if source_url is not None and source_url.split('://',1)[-1] != url.split('://',1)[-1]:
+				Log.Debug(' --> [Metadata] Found an embedded video: %s' % source_url)
+				return URLService.MetadataObjectForURL(source_url)
+
+			doc = HTML.ElementFromString(req.content)
+
+			# HTML5 Video
+			videos = doc.xpath('//video[@src and not(@src="")]|//video/source/parent::video')
+
+			if len(videos) > 0:
+				Log.Debug(' --> [Metadata] Found an HTML5 video')
+				tag = videos[0]
+				title = tag.get('title')
+
+				if not title:
+					try:
+						title = doc.xpath('//meta[@property="og:title"]/@content')[0].strip()
+					except:
+						title = doc.xpath('//title/text()')[0].strip()
+
+				try:
+					summary = doc.xpath('//meta[@property="og:description"]/@content')[0].strip()
+				except:
+					try:
+						summary = doc.xpath('//meta[@name="description"]/@content')[0].strip()
+					except:
+						summary = None
+
+				try:
+					thumb = FixUrl(url, tag.get('poster'))
+				except:
+					thumb = None
+
+				try:
+					source_title = doc.xpath('//meta[@property="og:site_name"]/@content')[0]
+				except:
+					source_title = url.split('/')[2].replace('www.', '')
+
+				return VideoClipObject(
+					title = title,
+					summary = summary,
+					thumb = thumb,
+					source_title = source_title
+				)
+
+			# Meta tag refresh
+			refresh = RE_META_REFRESH.search(req.content)
+
+			if refresh:
+				if refresh.group('url').split('://',1)[1] != url.split('://',1)[1]:
+					Log.Debug(' --> [Metadata] Found a meta refresh tag with a new URL: %s' % refresh.group('url'))
+					return URLService.MetadataObjectForURL(refresh.group('url'))
+
+			# BC HTML5 Video
+			bc = doc.xpath('//object[contains(@class, "Brightcove")]/param[@name="playerKey" or @name="playerID"]/parent::object')
+
+			if len(bc) > 0:
+				Log.Debug(' --> [Metadata] Found a BC video')
+
+				video_player = bc[0].xpath('./param[@name="@videoPlayer"]/@value')[0]
+				player_key = bc[0].xpath('./param[@name="playerKey"]/@value')
+
+				# If we don't have a playerKey, use the playerID and let the BC URL Service figure out the playerKey
+				if len(player_key) < 1:
+					player_id = bc[0].xpath('./param[@name="playerID"]/@value')[0]
+					bc_url = 'http://c.brightcove.com/services/viewer/htmlFederated?playerID=%s&dynamicStreaming=true&%%40videoPlayer=%s' % (player_id, video_player)
+				else:
+					bc_url = 'http://c.brightcove.com/services/viewer/htmlFederated?playerKey=%s&dynamicStreaming=true&%%40videoPlayer=%s' % (player_key[0], video_player)
+
+				return URLService.MetadataObjectForURL(bc_url)
+
+			# BC Custom JS
+			custom_bc = RE_BC_CUSTOM.search(req.content)
+
+			if custom_bc:
+				Log.Debug(' --> [Metadata] Found a BrightCove video using the BrightCove custom js regex')
+				custom_bc = custom_bc.group(1).strip('"').split('","')
+				player_key = custom_bc[3]
+				video_player = custom_bc[4]
+
+				bc_url = 'http://c.brightcove.com/services/viewer/htmlFederated?playerKey=%s&dynamicStreaming=true&%%40videoPlayer=%s' % (player_key, video_player)
+
+				return URLService.MetadataObjectForURL(bc_url)
+
+			# Regex Video
+			video = RE_PATTERN.search(req.content)
+
+			if video:
+				Log.Debug(' --> [Metadata] Found a video using the regex')
+
+				try:
+					title = doc.xpath('//meta[@property="og:title"]/@content')[0].strip()
+				except:
+					title = doc.xpath('//title/text()')[0].strip()
+
+				try:
+					summary = doc.xpath('//meta[@property="og:description"]/@content')[0].strip()
+				except:
+					try:
+						summary = doc.xpath('//meta[@name="description"]/@content')[0].strip()
+					except:
+						summary = None
+
+				try:
+					thumb = doc.xpath('//link[@rel="image_src"]/@href')[0]
+				except:
+					try:
+						thumb = doc.xpath('//meta[@property="og:image"]/@content')[0]
+					except:
+						thumb = None
+
+				try:
+					source_title = doc.xpath('//meta[@property="og:site_name"]/@content')[0]
+				except:
+					source_title = url.split('/')[2].replace('www.', '')
+
+				return VideoClipObject(
+					title = title,
+					summary = summary,
+					thumb = thumb,
+					source_title = source_title
+				)
+
+			# Regex Video YouTube
+			youtube = RE_YOUTUBE.search(req.content)
+
+			if youtube:
+				youtube_url = youtube.group('vid').replace('\\', '')
+				Log.Debug(' --> [Metadata] Found a YouTube video using the YouTube regex: %s' % youtube_url)
+				return URLService.MetadataObjectForURL(youtube_url)
+
+		if not is_ipad_url:
+			return URLService.MetadataObjectForURL('ipad:%s' % url)
+
+	except:
+		return None
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	try:
+		if not ValidURL(url):
+			return None
+
+		is_ipad_url = url.startswith('ipad:')
+		url = url.lstrip('ipad:')
+		headers = HTTP_IPAD_UA if is_ipad_url else HTTP_DESKTOP_UA
+		req = HTTP.Request(url, cacheTime=0, headers=headers, sleep=1.0, follow_redirects=False)
+
+		try:
+			req.headers
+		except Ex.HTTPError, e:
+			if e.code == 405 or e.code == 501:
+				req.content
+		except Ex.RedirectError, e:
+			if 'Location' in e.headers:
+				if '://' not in e.headers['Location']:
+					e.headers['Location'] = FixUrl(url, e.headers['Location'])
+
+				if e.headers['Location'].split('://',1)[1] != url.split('://',1)[1]:
+					Log.Debug(' --> [Media] Found an HTTP redirect to a new URL: %s' % e.headers['Location'])
+					location = e.headers['Location']
+
+					# Make sure we stay in "iPad mode" if necessary.
+					if is_ipad_url:
+						location = 'ipad:' + location
+
+					return URLService.MediaObjectsForURL(location)
+
+				return None
+
+		if ShouldParse(req):
+
+			doc = HTML.ElementFromString(req.content)
+
+			# HTML5 Video
+			videos = doc.xpath('//video[@src and not(@src="")]|//video/source/parent::video')
+
+			if len(videos) > 0:
+				Log.Debug(' --> [Media] Found an HTML5 video')
+				tag = videos[0]
+
+				result = []
+				sources = tag.xpath('./source')
+				sources.insert(0, tag)
+
+				for source in sources:
+					src = source.get('src')
+
+					if src == None:
+						continue
+
+					src = FixUrl(url, src)
+					Log.Debug(' --> %s' % src)
+					videoType = source.get('type')
+					codecs = CodecsForVideoTypeValue(videoType)
+
+					attrs = {
+						'parts': [PartObject(key=src)]
+					}
+
+					if codecs and len(codecs) > 0:
+						attrs['video_codec'] = codecs[0]
+
+					if codecs and len(codecs) > 1:
+						attrs['audio_codec'] = codecs[1]
+
+					result.append(MediaObject(**attrs))
+
+				return result
+
+			# Regex Video
+			video = RE_PATTERN.findall(req.content)
+			result = []
+
+			if len(video) > 0:
+				for match in video:
+					score = 0
+
+					if RE_UNWANTED.search(match[1]):
+						score = score - 1
+
+					result.append([score, match[1]])
+
+				result.sort(key=lambda result: result[0], reverse=True)
+				src = result[0][1].replace('\/', '/')
+
+				sub = RE_SUB_PATTERN.findall(src)
+
+				if len(sub) > 0:
+					src = sub[-1][0]
+
+				src = String.Unquote(src)
+				src = FixUrl(url, src)
+				Log.Debug(' --> [Media] Found a video using the regex: %s' % src)
+
+				if src.find('.m3u8') != -1:
+					return [
+						MediaObject(
+							parts = [PartObject(key=HTTPLiveStreamURL(src))]
+						)
+					]
+				elif src.split('?')[0].endswith('.mp4'):
+					return [
+						MediaObject(
+							container = Container.MP4,
+							video_codec = VideoCodec.H264,
+							audio_codec = AudioCodec.AAC,
+							parts = [PartObject(key=src)]
+						)
+					]
+				else:
+					return [
+						MediaObject(
+							parts = [PartObject(key=src)]
+						)
+					]
+
+		if not is_ipad_url:
+			return URLService.MediaObjectsForURL('ipad:%s' % url)
+
+	except:
+		return None

@@ -1,0 +1,96 @@
+TOKEN_URL = 'https://ida.omroep.nl/app.php/auth'
+STREAM_URL = 'https://ida.omroep.nl/app.php/%s?adaptive=yes&token=%s'
+RE_VARIANTS = Regex('RESOLUTION=\d+x(\d+).*\n(.+\.m3u8)')
+
+HTTP_HEADERS = {
+	'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/602.3.12 (KHTML, like Gecko) Version/10.0.2 Safari/602.3.12',
+	'Cookie': 'npo_cc=30'
+}
+
+####################################################################################################
+def NormalizeURL(url):
+
+	return url.split('#')[0].split('?')[0]
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+	try:
+		html = HTML.ElementFromURL(url, headers=HTTP_HEADERS, cacheTime=CACHE_1WEEK)
+	except Ex.HTTPError, e:
+		raise Ex.MediaNotAvailable
+
+	player_id = GetPlayerId(url)
+
+	if not player_id:
+		raise Ex.MediaNotAvailable
+
+	title = html.xpath('//span[@itemprop="title"]/text()')[0]
+	summary = html.xpath('//meta[@name="description"]/@content')[0]
+
+	if summary.startswith('Geen omschrijving'):
+		summary = None
+
+	try:
+		thumb = 'https://%s' % (html.xpath('//div[@class="header-fallback"]/@style')[0].split('background-image: url("')[-1].split('")')[0].split('//')[-1])
+	except:
+		thumb = ''
+
+	return VideoClipObject(
+		title = title,
+		summary = summary,
+		thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+	)
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+	return [
+		MediaObject(
+			parts = [
+				PartObject(key=Callback(PlayVideo, url=url, url=url))
+			],
+			container = Container.MP4,
+			video_codec = VideoCodec.H264,
+			video_resolution = '540',
+			audio_codec = AudioCodec.AAC,
+			audio_channels = 2,
+			optimized_for_streaming = True
+		)
+	]
+
+####################################################################################################
+@indirect
+def PlayVideo(url, **kwargs):
+
+	player_id = GetPlayerId(url)
+
+	if not player_id:
+		raise Ex.MediaNotAvailable
+
+	json_obj = JSON.ObjectFromURL(TOKEN_URL, headers=HTTP_HEADERS, cacheTime=0)
+
+	if not 'token' in json_obj:
+		raise Ex.MediaNotAvailable
+
+	json_obj = JSON.ObjectFromURL(STREAM_URL % (player_id, json_obj['token']), cacheTime=0)
+
+	for version in json_obj['items'][0]:
+
+		if version['label'] != 'Hoog':
+			continue
+
+		url = version['url'].split('?')[0]
+		json_obj = JSON.ObjectFromURL(url)
+
+		return IndirectResponse(VideoClipObject, key=json_obj['url'].split('?')[0])
+
+	raise Ex.MediaNotAvailable
+
+####################################################################################################
+def GetPlayerId(url):
+
+	if 'npo.nl' in url:
+		return url.split('/')[-1]
+
+	return None
