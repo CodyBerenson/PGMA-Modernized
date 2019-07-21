@@ -137,7 +137,7 @@ class EightTeenBoy(Agent.Movies):
 		# Member 	https://cdn.helixstudios.com/img/250w/media/stills/hx109_scene52_001.jpg
 
 		i = 0
-		video_image_list = html.xpath("//a/img")
+		video_image_list = html.xpath("//a[@class='jg-entry entry-visible']/img")
 		Log(video_image_list)
 		try:
 			coverPrefs = Prefs['cover']
