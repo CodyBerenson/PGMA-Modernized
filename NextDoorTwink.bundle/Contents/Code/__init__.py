@@ -186,19 +186,19 @@ class NextDoorTwink(Agent.Movies):
 		actions = list()
 		try:
 			if gevi_scene_url is not "":
-				gevi_episode = HTML.ElementFromURL(gevi_scene_url, sleep=REQUEST_DELAY)
+				gevi_episode = HTML.ElementFromURL(gevi_scene_url)
 				actors_tmp = gevi_episode.xpath('//table[@class="d"]/tbody/tr/td[1]/a/nobr/text()')
 				for actor in actors_tmp:
 					actors.append(actor)
-				actor_urls_tmp = gevi_episode.xpath('//table[@class="d"]/tbody/tr/td[1]/a/@href')
+					self.Log("actor found: %s", actor)
+				actor_urls_tmp = gevi_episode.xpath('//table[@class="d"]/tbody/tr/td[1]/a')
 				for actor_url in actor_urls_tmp:
-					actor_urls.append(actor_url)
-				self.Log("UPDATE - (GEVI) Actors: %s", ",".join(actors))
-				self.Log("UPDATE - (GEVI) Actor URLs: %s", ",".join(actor_urls))
+					actor_urls.append(actor_url.get("href"))
+					self.Log("actor href found: %s", actor_url)
 				actions_tmp = gevi_episode.xpath('//table[@class="d"]/tbody/tr[position()>1]/td[2]/text()')
 				for action in actions_tmp:
 					actions.append(action)
-				self.Log("UPDATE - (GEVI) Actions: %s", ",".join(actions))
+					self.Log("actor action found: %s", action)
 		except Exception as e:
 			self.Log("UPDATE - (GEVI) Error getting cast extras: %s", e)
 
