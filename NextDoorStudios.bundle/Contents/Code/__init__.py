@@ -182,12 +182,10 @@ class NextDoorStudios(Agent.Movies):
 			self.Log(e)
 
 		#get rating
-		try:
-			tu = html.xpath("//span[@class='value']/text()")[0]
-			td = html.xpath("//span[@class='value']/text()")[1]
-			metadata.rating = (int(tu) / int(td)) * 10;
-		except Exception as e:
-			self.Log(e)
+		tu = html.xpath("//span[@class='value']/text()")[0]
+		td = html.xpath("//span[@class='value']/text()")[1]
+		self.Log("%s - %s", tu, td)
+		metadata.rating = float(int(tu) / int(td));
 
 		try:
 			release_date = html.xpath("//div[@class='updatedDate']/text()")[1]
