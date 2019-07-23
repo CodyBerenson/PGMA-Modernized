@@ -5,12 +5,12 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>NextDoorTwink</string>
+	<string>NextDoorStudios</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.plexapp.agents.nextdoortwink</string>
+	<string>com.plexapp.agents.nextdoorstudios</string>
 	<key>PlexAgentAttributionText</key>
 	<string>
-		&lt;a href=&quot;https://github.com/acvigue/pgma&quot;&gt;PGMA&lt;/a&gt; is a free agent for NextDoorTwink.&lt;br/&gt;
+		&lt;a href=&quot;https://github.com/acvigue/pgma&quot;&gt;PGMA&lt;/a&gt; is a free agent for NextDoorStudios.&lt;br/&gt;
 	</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>

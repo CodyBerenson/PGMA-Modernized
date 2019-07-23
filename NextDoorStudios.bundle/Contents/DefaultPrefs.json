@@ -3,7 +3,7 @@
 		"id": "folders",
 		"label": "Folders where these items might be found (comma-separated list) or all folders use *",
 		"type": "text",
-		"default": "NextDoorTwink"
+		"default": "NextDoorStudios"
 	},
 	{
     "id": "regex",
