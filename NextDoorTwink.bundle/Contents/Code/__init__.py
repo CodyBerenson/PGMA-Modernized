@@ -127,9 +127,7 @@ class NextDoorTwink(Agent.Movies):
 
 		# Try to get description text
 		try:
-			raw_about_text = html.xpath("//div[@class='left']/div[@class='more always-visible']/text()[2]")[0]
-			if "a" not in raw_about_text:
-				raw_about_text = html.xpath("//div[@class='left']/div[@class='more always-visible']/p/text()")[0]
+			raw_about_text = html.xpath("//p[@class='sceneDesc showMore']/text()")[0]
 			self.Log('UPDATE - Description: %s', raw_about_text)
 			metadata.summary=raw_about_text
 		except Exception as e:
@@ -141,7 +139,7 @@ class NextDoorTwink(Agent.Movies):
 			metadata.roles.clear()
 			htmlcast = html.xpath("//div[@class='sceneCol sceneColActors']/span[not(@class)]/text()")
 			for cast in htmlcast:
-				if (len(cname) > 0):
+				if (len(cast) > 0):
 					role = metadata.roles.new()
 					role.name = cast
 					actors.append(cast)
