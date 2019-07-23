@@ -165,6 +165,7 @@ class NextDoorTwink(Agent.Movies):
 				self.Log(",".join(actor_episodes))
 				indexx = 1
 				for episode in actor_episodes:
+					self.log("%s ::: %s", episode, actor_episodes)
 					if episode == video_title:
 						self.Log("UPDATE - Matched with GEVI!")
 						release_date = gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[2]/text()')[0]
