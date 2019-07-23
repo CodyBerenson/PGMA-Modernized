@@ -162,11 +162,10 @@ class NextDoorTwink(Agent.Movies):
 				self.Log(actor_link);
 				gevi_actor_result = HTML.ElementFromURL(actor_link, sleep=REQUEST_DELAY)
 				actor_episodes = gevi_actor_result.xpath('//tr[@class="er"]/td[1]/a/text()')
-				self.Log(",".join(actor_episodes))
 				indexx = 1
 				for episode in actor_episodes:
 					self.log("%s ::: %s", episode, actor_episodes)
-					if episode == video_title:
+					if lower(episode) == lower(video_title):
 						self.Log("UPDATE - Matched with GEVI!")
 						release_date = gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[2]/text()')[0]
 						gevi_scene_url = "https://www.gayeroticvideoindex.com" + gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[1]/a')[0].get("href")
