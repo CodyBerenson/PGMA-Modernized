@@ -161,6 +161,7 @@ class NextDoorTwink(Agent.Movies):
 				self.Log(actor_link);
 				gevi_actor_result = HTML.ElementFromURL(actor_link, sleep=REQUEST_DELAY)
 				actor_episodes = gevi_actor_result.xpath('//tr[@class="er"]/td[1]/a/text()')
+				self.Log(",".join(actor_episodes))
 				indexx = 1
 				for episode in actor_episodes:
 					if episode == metadata.title:
