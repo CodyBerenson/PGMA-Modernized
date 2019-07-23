@@ -63,7 +63,7 @@ class NextDoorTwink(Agent.Movies):
 		self.Log('SEARCH - media.filename - %s', media.filename)
 		self.Log('SEARCH - lang - %s', lang)
 		self.Log('SEARCH - manual - %s', manual)
-		
+
 		if not media.items[0].parts[0].file:
 			return
 
@@ -199,7 +199,7 @@ class NextDoorTwink(Agent.Movies):
 		
 
 		metadata.collections.add("NextDoorTwink")
-		metadata.posters.validate_keys(valid_image_names)
+		#metadata.posters.validate_keys(valid_image_names)
 		metadata.content_rating = 'X'
 		metadata.studio = "NextDoorStudios"
 
