@@ -51,6 +51,12 @@ class HelixStudios(Agent.Movies):
 		if Prefs['debug']:
 			Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
 
+	def noNegative(self, value):
+		if(value < 0):
+			return 0
+		else:
+			return value
+
 	def intTest(self, s):
 		try:
 			int(s)
@@ -263,20 +269,14 @@ class HelixStudios(Agent.Movies):
 				headshot_url_lo_res = headshot_obj.get("src")
 				headshot_url_hi_res = headshot_url_lo_res.replace("150w","480w")
 
-				#Ask facebox to query image for face bounding boxes
 				result = requests.post('https://neural.vigue.me/facebox/check', json={"url": headshot_url_hi_res}, verify=certifi.where())
-				box = {}
-				try:
+				Log(result.json()["facesCount"])
+				if result.json()["facesCount"] == 1:
 					box = result.json()["faces"][0]["rect"]
-				except Exception as e:
-					headshot_url_hi_res = headshot_url_lo_res.replace("480w","320w")
-					result = requests.post('https://neural.vigue.me/facebox/check', json={"url": headshot_url_hi_res}, verify=certifi.where())
-					box = result.json()["faces"][0]["rect"]
-					pass
+					cropped_headshot = "https://cdn.vigue.me/unsafe/" + str(self.noNegative(box["left"] - 100)) + "x" + str(self.noNegative(box["top"] - 100)) + ":" + str(self.noNegative((box["left"]+box["width"])+100)) + "x" + str(self.noNegative((box["top"]+box["height"])+100)) + "/" + headshot_url_hi_res
+				else:
+					cropped_headshot = headshot_url_hi_res
 
-				#Create new image url from Thumbor CDN with facial bounding box
-				cropped_headshot = "https://cdn.vigue.me/unsafe/" + str(abs(box["left"] - 50)) + "x" + str(abs(box["top"] - 50)) + ":" + str(abs((box["left"]+box["width"])+50)) + "x" + str(abs((box["top"]+box["height"])+50)) + "/" + headshot_url_hi_res
-				self.Log("Cropped - %s", cropped_headshot)
 				rolethumbs.append(cropped_headshot)
 			index = 0
 
@@ -317,7 +317,8 @@ class HelixStudios(Agent.Movies):
 					if poster_url not in metadata.posters:
 						try:
 							metadata.posters[poster_url]=Proxy.Preview(HTTP.Request(thumb_url), sort_order = i)
-						except: pass
+						except Exception as e: 
+							pass
 		except Exception as e:
 			self.Log('UPDATE - Error getting posters: %s', e)
 			pass
