@@ -118,9 +118,10 @@ class NextDoorTwink(Agent.Movies):
 
 		# Set tagline to URL
 		metadata.tagline = url
-
+		video_title = ""
 		try:
 			metadata.title = html.xpath("//h1[@class='title']/text()")[0]
+			video_title = html.xpath("//h1[@class='title']/text()")[0]
 			self.Log('UPDATE - video_title: "%s"', metadata.title)
 		except Exception as e:
 			self.log("UPDATE - error getting title: %s", e)
@@ -164,7 +165,8 @@ class NextDoorTwink(Agent.Movies):
 				self.Log(",".join(actor_episodes))
 				indexx = 1
 				for episode in actor_episodes:
-					if episode == metadata.title:
+					if episode == video_title:
+						self.Log("UPDATE - Matched with GEVI!")
 						release_date = gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[2]/text()')[0]
 						gevi_scene_url = "https://www.gayeroticvideoindex.com" + gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[1]/a')[0].get("href")
 						self.Log('UPDATE - Release Date - New: %s', release_date)
