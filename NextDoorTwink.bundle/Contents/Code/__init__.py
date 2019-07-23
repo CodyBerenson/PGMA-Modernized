@@ -63,10 +63,7 @@ class NextDoorTwink(Agent.Movies):
 		self.Log('SEARCH - media.filename - %s', media.filename)
 		self.Log('SEARCH - lang - %s', lang)
 		self.Log('SEARCH - manual - %s', manual)
-		self.Log('SEARCH - Prefs->cover - %s', Prefs['cover'])
-		self.Log('SEARCH - Prefs->folders - %s', Prefs['folders'])
-		self.Log('SEARCH - Prefs->regex - %s', Prefs['regex'])
-
+		
 		if not media.items[0].parts[0].file:
 			return
 
