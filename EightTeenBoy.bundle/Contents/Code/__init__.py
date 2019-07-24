@@ -7,7 +7,7 @@ import requests
 
 PLUGIN_LOG_TITLE = '8TeenBoy'	# Log Title
 
-VERSION_NO = '2019.07.20.1'
+VERSION_NO = '2019.07.23.11'
 
 # Delay used when requesting HTML, may be good to have to prevent being
 # banned from the site
@@ -27,11 +27,6 @@ BASE_SEARCH_URL = 'https://www.helixstudios.net/videos/?q=%s'
 
 # File names to match for this agent
 file_name_pattern = re.compile(Prefs['regex'])
-
-# Example File Name:
-# https://media.helixstudios.com/scenes/hx111_scene2/hx111_scene2_member_1080p.mp4
-# FILENAME_PATTERN = re.compile("")
-# TITLE_PATTERN = re.compile("")
 
 def Start():
 	HTTP.CacheTime = CACHE_1WEEK
@@ -107,16 +102,24 @@ class EightTeenBoy(Agent.Movies):
 		groups = m.groupdict()
 		clip_name = groups['clip_name']
 		movie_url_name = re.sub('\s+', '+', clip_name)
-		movie_url = BASE_VIDEO_DETAILS_URL % movie_url_name
-		search_query_raw = list()
-		for piece in clip_name.split(' '):
-			if re.search('^[0-9A-Za-z]*$', piece.replace('!', '')) is not None:
-				search_query_raw.append(piece)
-
-		self.Log('SEARCH - Video URL: %s', movie_url)
-		html = HTML.ElementFromURL(movie_url, sleep=REQUEST_DELAY)
-		video_title = html.xpath('//h2[@class="pull-left"]/text()')
-		results.Append(MetadataSearchResult(id = movie_url, name = video_title, score = 100, lang = lang))
+		if movie_url_name.isdigit() == True:
+			movie_url = BASE_VIDEO_DETAILS_URL % movie_url_name
+			self.Log('SEARCH - Video URL: %s', movie_url)
+			html = HTML.ElementFromURL(movie_url, sleep=REQUEST_DELAY)
+			video_title = html.xpath('//h2[@class="pull-left"]/text()')
+			results.Append(MetadataSearchResult(id = movie_url, name = video_title, score = 100, lang = lang))
+		else:
+			#search Google
+			query = urllib.quote_plus("site:8teenboy.com " + movie_url_name)
+			google = HTML.ElementFromURL("https://google.com/search?q="+query, sleep=REQUEST_DELAY)
+			first_result = gsearch.xpath("//a[contains(@href, '8teenboy.com')][contains(@href, '" + actors[0].split(" ")[0].lower() + "')]")[0].get("href")
+			first_result = first_result.split("=")[1]
+			first_result = first_result.split("&")[0]
+			movie_url = first_result
+			self.Log('SEARCH - Video URL: %s', movie_url)
+			html = HTML.ElementFromURL(movie_url, sleep=REQUEST_DELAY)
+			video_title = html.xpath('//h2[@class="pull-left"]/text()')
+			results.Append(MetadataSearchResult(id = movie_url, name = video_title, score = 100, lang = lang))
 
 	def update(self, metadata, media, lang, force=False):
 		self.Log('UPDATE CALLED')
@@ -183,10 +186,13 @@ class EightTeenBoy(Agent.Movies):
 			self.Log('UPDATE - Error getting description text: %s', e)
 			pass
 
-		# Try to get and process the video cast
+		# Try to get and process the cast headshots
 		metadata.roles.clear()
 		rolethumbs = list();
 		actors = list();
+		actor_list = html.xpath('//div[@class="thumbnail-title title-two-lines"]/text()')
+		for actor in actor_list:
+			actors.append(actor)
 		cast_img_list = html.xpath('//div[@class="pure-u-1-3"]/div[@class="grid-item-wrapper"]/a/div/img')
 		for cast_img in cast_img_list:
 			thumb_url = cast_img.get('src')
@@ -204,17 +210,6 @@ class EightTeenBoy(Agent.Movies):
 			#Create new image url from Thumbor CDN with facial bounding box
 			self.Log("UPDATE - Cropped headshot: %s", cropped_headshot)
 			rolethumbs.append(cropped_headshot)
-		htmlcast = html.xpath('//div[@class="pure-u-1-3"]/div[@class="grid-item-wrapper"]/a/div[@class="thumbnail-bottom-text"]/div/text()')
-		self.Log('UPDATE - cast: "%s"', htmlcast)
-		index = 0
-		for cast in htmlcast:
-			cname = cast.strip()
-			if (len(cname) > 0):
-				role = metadata.roles.new()
-				role.name = cname
-				actors.append(cname);
-				role.photo = rolethumbs[index]
-			index += 1
 
 		#fucking lardballs don't post the date, grab from GEVI
 		gevi_scene_url = ""
@@ -225,7 +220,6 @@ class EightTeenBoy(Agent.Movies):
 			gevi_search = HTML.ElementFromURL("https://www.gayeroticvideoindex.com/search.php?type=s&where=b&query=" + actor + "&Search=Search&page=1", sleep=REQUEST_DELAY)
 
 			try:
-				index = 3
 				actor_link = gevi_search.xpath('//*[@class="cd"]/a')[0];
 				actor_link = "https://www.gayeroticvideoindex.com" + actor_link.get("href");
 				self.Log(actor_link);
@@ -233,13 +227,36 @@ class EightTeenBoy(Agent.Movies):
 				actor_episodes = gevi_actor_result.xpath('//tr[@class="er"]/td[1]/a/text()')
 				indexx = 1
 				for episode in actor_episodes:
-					if episode == metadata.title:
+					if episode.lower() == metadata.title.lower():
 						release_date = gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[2]/text()')[0]
 						gevi_scene_url = "https://www.gayeroticvideoindex.com" + gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[1]/a')[0].get("href")
 						self.Log('UPDATE - Release Date - New: %s', release_date)
 						metadata.originally_available_at = Datetime.ParseDate(release_date).date()
 						metadata.year = metadata.originally_available_at.year
 					indexx += 1
+				if gevi_scene_url == "":
+					#try Google method
+					actorSearchString = "";
+					for actor in actors:
+						actorSearchString = actorSearchString + "\"" + actor + "\" ";
+					query = urllib.quote_plus("site:gayeroticvideoindex.com \"" + metadata.title.lower() + "\" \"8teenboy\" " + actorSearchString)
+					google = HTML.ElementFromURL("https://google.com/search?q=" + query, sleep=REQUEST_DELAY)
+
+					first_result = gsearch.xpath("//a[contains(@href, 'gayeroticvideoindex.com/S')]")[0].get("href")
+					first_result = first_result.split("=")[1]
+					actor_link = first_result.split("&")[0]
+					self.Log(actor_link);
+					gevi_actor_result = HTML.ElementFromURL(actor_link, sleep=REQUEST_DELAY)
+					actor_episodes = gevi_actor_result.xpath('//tr[@class="er"]/td[1]/a/text()')
+					indexx = 1
+					for episode in actor_episodes:
+						if episode.lower() == metadata.title.lower():
+							release_date = gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[2]/text()')[0]
+							gevi_scene_url = "https://www.gayeroticvideoindex.com" + gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[1]/a')[0].get("href")
+							self.Log('UPDATE - Release Date - New: %s', release_date)
+							metadata.originally_available_at = Datetime.ParseDate(release_date).date()
+							metadata.year = metadata.originally_available_at.year
+						indexx += 1
 			except Exception as e:
 				self.Log("Exception getting release date: %s", e)
 				pass
@@ -248,26 +265,61 @@ class EightTeenBoy(Agent.Movies):
 			self.Log("Exception getting release date: %s", e)
 			pass
 
-		#label bottom / top
+		#get cast extrainfo
+		actors = list()
+		actions = list()
 		try:
-			gevi_actors = list();
-			gevi_positions = list();
 			if gevi_scene_url is not "":
-				episode = HTML.ElementFromURL(gevi_scene_url)
-				actors = episode.xpath('//tbody/tr/td[1]/a/text()')
-				Log(actors)
-				for actor in actors:
-					self.Log(actor)
-					gevi_actors.append(actor);
-				positions = episode.xpath('//table[@class="d"]/tbody/tr/td[2]/text()')
-				for position in positions:
-					if position is not "action":
-						gevi_positions.append(position.strip());
-				Log(gevi_actors)
-				Log(gevi_positions)
+				gevi_episode = HTML.ElementFromURL(gevi_scene_url, sleep=REQUEST_DELAY)
+				actors_tmp = gevi_episode.xpath('//a/nobr/text()')
+				for actor in actors_tmp:
+					actors.append(actor)
+				actor_urls_tmp = gevi_episode.xpath('//td[@class="pd"]/a')
+				actions_tmp = gevi_episode.xpath('//td[2][@class="pd"]/text()')
+				for action in actions_tmp:
+					actions.append(action)
+					self.Log("actor action found: %s", action)
+				if actors != [] and actor_urls != [] and actions != []:
+					metadata.roles.clear()
+					index = 0
+					for actor in actors:
+						url = actor_urls[index]
+						action = actions[index]
+
+						actionText = ""
+						if "Atb" in action:
+							actionText = "1st Top"
+						elif "Abt" in action:
+							actionText = "1st Bottom"
+						elif "At" in action:
+							actionText = "Top"
+						elif "Ab" in action:
+							actionText = "Bottom"
+						elif "Org" in action:
+							actionText = "1st Receiver"
+						elif "Ogr" in action:
+							actionText = "1st Giver"
+						elif "Og" in action:
+							actionText = "Giver"
+						elif "Or" in action:
+							actionText = "Receiver"
+
+						role = metadata.roles.new()
+						role.name = actor
+						role.role = actionText
+
+						#get picture of actor
+						result = requests.post('https://neural.vigue.me/facebox/check', json={"url": rolethumbs[index]}, verify=certifi.where())
+						Log(result.json()["facesCount"])
+						if result.json()["facesCount"] == 1:
+							box = result.json()["faces"][0]["rect"]
+							cropped_headshot = "https://cdn.vigue.me/unsafe/" + str(self.noNegative(box["left"] - 100)) + "x" + str(self.noNegative(box["top"] - 100)) + ":" + str(self.noNegative((box["left"]+box["width"])+100)) + "x" + str(self.noNegative((box["top"]+box["height"])+100)) + "/" + rolethumbs[index]
+						else:
+							cropped_headshot = rolethumbs[index]
+						role.photo = cropped_headshot
+						index += 1;
 		except Exception as e:
-			self.Log("Exception getting Ab/At: %s", e)
-			pass
+			self.Log("UPDATE - (GEVI) Error getting cast extras: %s", e)
 
 		metadata.posters.validate_keys(valid_image_names)
 		metadata.collections.add("8TeenBoy")
