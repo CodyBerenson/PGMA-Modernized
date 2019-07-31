@@ -10,9 +10,9 @@ VERSION_NO = '2017.07.26.0'
 REQUEST_DELAY = 0
 
 # URLS
-BASE_URL='http://gay.theater.aebn.net'
+BASE_URL='https://gay.theater.aebn.net'
 BASE_VIDEO_DETAILS_URL=BASE_URL + '%s'
-BASE_SEARCH_URL='http://gay.theater.aebn.net/dispatcher/fts?userQuery=%s&searchType=movie&imageType=Small'
+BASE_SEARCH_URL='https://gay.theater.aebn.net/dispatcher/fts?userQuery=%s&searchType=movie&imageType=Small'
 
 # File names to match for this agent
 file_name_pattern = re.compile(Prefs['regex'])
