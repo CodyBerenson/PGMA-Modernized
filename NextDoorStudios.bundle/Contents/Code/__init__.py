@@ -242,30 +242,23 @@ class NextDoorStudios(Agent.Movies):
 		valid_image_names = list()
 		try:
 			if actors != []:
-				actorSearchString = "";
-				for actor in actors:
-					actorSearchString = actorSearchString + "\"" + actor + "\" "
-				gsearch = HTML.ElementFromURL("https://google.com/search?q=" + urllib.quote_plus("site:bananaguide.com nextdoorstudios " + actorSearchString), sleep=REQUEST_DELAY)
-				first_result = gsearch.xpath("//a[contains(@href, 'bananaguide.com')][contains(@href, '" + actors[0].split(" ")[0].lower() + "')]")[0].get("href")
-				first_result = first_result.split("=")[1]
-				first_result = first_result.split("&")[0]
-				if "bananaguide" in first_result:
-					#jackpot!
-					bananaguide_gallery = HTML.ElementFromURL(first_result, sleep=REQUEST_DELAY)
-					images = bananaguide_gallery.xpath('//div[@class="grid-item-wrapper-2"]/a')
-					i = 0
-					for image in images:
-						if i > 1:
-							#self.Log(image.get("href"))
-							poster_url = "https://bananaguide.com" + image.get("href")
+				gsearch = HTML.ElementFromURL("https://bananaguide.com/searchModels/" + actors[0], sleep=REQUEST_DELAY)
+				first_result = gsearch.xpath("//div/div/p[2]/a")[0].get("href")
+				bananaguide_gallery = HTML.ElementFromURL(first_result, sleep=REQUEST_DELAY)
+				images = bananaguide_gallery.xpath('//div[@class="grid-item-wrapper-2"]/a')
+				i = 0
+				for image in images:
+					if i > 1:
+						#self.Log(image.get("href"))
+						poster_url = "https://bananaguide.com" + image.get("href")
 
-							valid_image_names.append(poster_url)
-							if poster_url not in metadata.posters:
-								try:
-									metadata.posters[poster_url]=Proxy.Media(HTTP.Request(poster_url), sort_order = i-2)
-								except Exception as e: 
-									pass
-						i += 1
+						valid_image_names.append(poster_url)
+						if poster_url not in metadata.posters:
+							try:
+								metadata.posters[poster_url]=Proxy.Media(HTTP.Request(poster_url), sort_order = i-2)
+							except Exception as e: 
+								pass
+					i += 1
 		except Exception as e:
 			Log(e)
 
