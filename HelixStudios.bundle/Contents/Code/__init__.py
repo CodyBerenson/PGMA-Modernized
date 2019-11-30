@@ -1,4 +1,9 @@
 # HelixStudios
+# Matches Scenes, Unsearchable Scenes, and DVDs (dvd's not the same)
+#| Sk8 Boys.mp4 | 3392.mp4           | HXM087.mp4                  |
+
+#All metadata imported, with HD stills (yippee!)
+
 import re, os, platform, urllib
 from difflib import SequenceMatcher
 
@@ -8,7 +13,7 @@ import requests
 
 PLUGIN_LOG_TITLE = 'Helix Studios'	# Log Title
 
-VERSION_NO = '2019.03.11.1'
+VERSION_NO = '2019.11.03.107'
 
 # Delay used when requesting HTML, may be good to have to prevent being
 # banned from the site
@@ -236,6 +241,7 @@ class HelixStudios(Agent.Movies):
 		valid_image_names = list()
 		valid_art_names = list()
 		if "HXM" in url:
+			#movie logic
 
 			#movie title
 			metadata.title = html.xpath('//*[@id="rightcolumn"]/div/div/h3/text()')[0]
@@ -302,7 +308,7 @@ class HelixStudios(Agent.Movies):
 		metadata.title = video_title
 
 		# External 	https://cdn.helixstudios.com/img/300h/media/stills/hx109_scene52_001.jpg
-		# Member 	https://cdn.helixstudios.com/img/250w/media/stills/hx109_scene52_001.jpg
+		# Member 	https://cdn.helixstudios.com/img/1920w/media/stills/hx109_scene52_001.jpg
 		i = 0
 		video_image_list = html.xpath('//*[@id="scene-just-gallery"]/a/img')
 		# self.Log('UPDATE - video_image_list: "%s"', video_image_list)

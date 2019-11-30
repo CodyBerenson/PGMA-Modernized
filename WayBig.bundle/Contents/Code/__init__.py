@@ -132,7 +132,7 @@ class WAYBIGAgent(Agent.Movies):
         self.log('SEARCH:: Original Group Title: %s', saveTitle)
 
         # WayBig displays its movies as Studio: Title 
-        searchTitle = group_studio + ' ' + saveTitle
+        searchTitle = group_studio + ' ' + saveTitle.split("‘")[0]
         compareTitle = self.NormaliseComparisonString(searchTitle)
 
         searchTitle = String.StripDiacritics(searchTitle).lower()

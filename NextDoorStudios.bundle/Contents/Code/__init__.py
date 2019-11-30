@@ -1,4 +1,7 @@
 #NDS Plex Agent
+#Matches ALL subsites!
+#Matches with <video ID>.mp4 OR title.mp4!
+
 import re, os, platform, urllib
 from difflib import SequenceMatcher
 
@@ -6,12 +9,12 @@ from difflib import SequenceMatcher
 import certifi
 import requests
 
-
 PLUGIN_LOG_TITLE = 'NextDoorStudios'	# Log Title
 
-VERSION_NO = '2019.07.22.166'
+VERSION_NO = '2019.11.30.166'
 REQUEST_DELAY = 0
 BASE_VIDEO_DETAILS_URL = 'https://www.nextdoorstudios.com/en/show/nextdoorworld/%s'
+BASE_VIDEO_SEARCH_URL = 'https://www.nextdoorstudios.com/en/search/%s'
 
 # File names to match for this agent
 file_name_pattern = re.compile(Prefs['regex'])
@@ -84,20 +87,105 @@ class NextDoorStudios(Agent.Movies):
 			return
 
 		self.Log('SEARCH - File Name: %s', basename)
+		if basename.isdigit():
+			groups = m.groupdict()
+			clip_name = groups['clip_name']
+			movie_url_name = re.sub('\s+', '+', clip_name)
+			movie_url = BASE_VIDEO_DETAILS_URL % movie_url_name
+			search_query_raw = list()
+			for piece in clip_name.split(' '):
+				if re.search('^[0-9A-Za-z]*$', piece.replace('!', '')) is not None:
+					search_query_raw.append(piece)
 
-		groups = m.groupdict()
-		clip_name = groups['clip_name']
-		movie_url_name = re.sub('\s+', '+', clip_name)
-		movie_url = BASE_VIDEO_DETAILS_URL % movie_url_name
-		search_query_raw = list()
-		for piece in clip_name.split(' '):
-			if re.search('^[0-9A-Za-z]*$', piece.replace('!', '')) is not None:
-				search_query_raw.append(piece)
+			self.Log('SEARCH - Video URL: %s', movie_url)
+			html = HTML.ElementFromURL(movie_url, sleep=REQUEST_DELAY)
+			video_title = html.xpath("//h1[@class='title']/text()")[0]
+			results.Append(MetadataSearchResult(id = movie_url, name = video_title, score = 100, lang = lang))
+			return
+		else:
+			groups = m.groupdict()
+			clip_name = groups['clip_name']
+			movie_url_name = re.sub('\s+', '+', clip_name)
+			movie_url = BASE_VIDEO_SEARCH_URL % movie_url_name
+			search_query_raw = list()
+			for piece in clip_name.split(' '):
+				if re.search('^[0-9A-Za-z]*$', piece.replace('!', '')) is not None:
+					search_query_raw.append(piece)
 
-		self.Log('SEARCH - Video URL: %s', movie_url)
-		html = HTML.ElementFromURL(movie_url, sleep=REQUEST_DELAY)
-		video_title = html.xpath("//h1[@class='title']/text()")[0]
-		results.Append(MetadataSearchResult(id = movie_url, name = video_title, score = 100, lang = lang))
+			self.Log('SEARCH - Video URL: %s', movie_url)
+			html = HTML.ElementFromURL(movie_url, sleep=REQUEST_DELAY)
+
+			search_results = html.xpath("//*[contains(concat(' ',normalize-space(@class),' '),' tlcContentPage ')]/div")
+			score=10
+			# Enumerate the search results looking for an exact match. The hope is that by eliminating special character words from the title and searching the remainder that we will get the expected video in the results.
+			if search_results:
+				for result in search_results:
+					video_title = result.xpath("//div[@class='tlcDetails']/div[1]/a").text
+					video_title = re.sub("[\:\?\|]", '', video_title)
+					video_title = re.sub("\s{2,4}", ' ', video_title)
+					video_title = video_title.rstrip(' ')
+
+					self.Log('SEARCH - video title percentage: %s', self.similar(video_title.lower(), clip_name.lower()))
+
+					self.Log('SEARCH - video title: %s', video_title)
+					if self.similar(video_title.lower(), clip_name.lower()) > 0.90:
+						video_url=result.find('a')[0].get('href')
+						self.Log('SEARCH - video url: %s', video_url)
+						self.Log('SEARCH - rating: %s', self.rating)
+						self.Log('SEARCH - Exact Match "' + clip_name.lower() + '" == "%s"', video_title.lower())
+						results.Append(MetadataSearchResult(id = video_url, name = video_title, score = 100, lang = lang))
+						return
+					else:
+						self.Log('SEARCH - Title not found "' + clip_name.lower() + '" != "%s"', video_title.lower())
+						score=score-1
+						results.Append(MetadataSearchResult(id = '', name = media.filename, score = score, lang = lang))
+			else:
+				search_query="+".join(search_query_raw[-2:])
+				self.Log('SEARCH - Search Query: %s', search_query)
+				html=HTML.ElementFromURL(BASE_VIDEO_SEARCH_URL % search_query, sleep=REQUEST_DELAY)
+				search_results = html.xpath("//*[contains(concat(' ',normalize-space(@class),' '),' tlcContentPage ')]/div")
+				if search_results:
+					for result in search_results:
+						video_title = result.xpath("//div[@class='tlcDetails']/div[1]/a").text
+						video_title = re.sub("[\:\?\|]", '', video_title)
+						video_title = video_title.rstrip(' ')
+						self.Log('SEARCH - video title: %s', video_title)
+						if video_title.lower() == clip_name.lower():
+							video_url=result.find('a')[0].get('href')
+							self.Log('SEARCH - video url: %s', video_url)
+							self.Log('SEARCH - rating: %s', self.rating)
+							self.Log('SEARCH - Exact Match "' + clip_name.lower() + '" == "%s"', video_title.lower())
+							results.Append(MetadataSearchResult(id = video_url, name = video_title, score = 100, lang = lang))
+							return
+						else:
+							self.Log('SEARCH - Title not found "' + clip_name.lower() + '" != "%s"', video_title.lower())
+							score=score-1
+							results.Append(MetadataSearchResult(id = '', name = media.filename, score = score, lang = lang))
+				else:
+					search_query="+".join(search_query_raw[:2])
+					self.Log('SEARCH - Search Query: %s', search_query)
+					html=HTML.ElementFromURL(BASE_VIDEO_SEARCH_URL % search_query, sleep=REQUEST_DELAY)
+					search_results = html.xpath("//*[contains(concat(' ',normalize-space(@class),' '),' tlcContentPage ')]/div")
+					if search_results:
+						for result in search_results:
+							video_title = result.xpath("//div[@class='tlcDetails']/div[1]/a").text
+							video_title = re.sub("[\:\?\|]", '', video_title)
+							video_title = video_title.rstrip(' ')
+							self.Log('SEARCH - video title: %s', video_title)
+							if video_title.lower() == clip_name.lower():
+								video_url=result.find('a')[1].get('href')
+								self.Log('SEARCH - video url: %s', video_url)
+								self.Log('SEARCH - rating: %s', self.rating)
+								self.Log('SEARCH - Exact Match "' + clip_name.lower() + '" == "%s"', video_title.lower())
+								results.Append(MetadataSearchResult(id = video_url, name = video_title, score = 100, lang = lang))
+								return
+							else:
+								self.Log('SEARCH - Title not found "' + clip_name.lower() + '" != "%s"', video_title.lower())
+								results.Append(MetadataSearchResult(id = '', name = media.filename, score = 1, lang = lang))
+					else:
+						score=1
+						self.Log('SEARCH - Title not found "' + clip_name.lower() + '" != "%s"', video_title.lower())
+						return
 
 	def update(self, metadata, media, lang, force=False):
 		self.Log('UPDATE CALLED')
@@ -263,21 +351,13 @@ class NextDoorStudios(Agent.Movies):
 
 						actionText = ""
 						if "Atb" in action:
-							actionText = "1st Top"
+							actionText = "Flip Top"
 						elif "Abt" in action:
-							actionText = "1st Bottom"
+							actionText = "Flip Bottom"
 						elif "At" in action:
 							actionText = "Top"
 						elif "Ab" in action:
 							actionText = "Bottom"
-						elif "Org" in action:
-							actionText = "1st Receiver"
-						elif "Ogr" in action:
-							actionText = "1st Giver"
-						elif "Og" in action:
-							actionText = "Giver"
-						elif "Or" in action:
-							actionText = "Receiver"
 
 						role = metadata.roles.new()
 						role.name = actor
