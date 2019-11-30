@@ -256,7 +256,7 @@ class NextDoorStudios(Agent.Movies):
 					i = 0
 					for image in images:
 						if i > 1:
-							self.Log(image.get("href"))
+							#self.Log(image.get("href"))
 							poster_url = "https://bananaguide.com" + image.get("href")
 
 							valid_image_names.append(poster_url)
@@ -267,7 +267,7 @@ class NextDoorStudios(Agent.Movies):
 									pass
 						i += 1
 		except Exception as e:
-			self.Log(e)
+			Log(e)
 
 		#get rating
 		tu = html.xpath("//span[@class='value']/text()")[0]
@@ -302,11 +302,12 @@ class NextDoorStudios(Agent.Movies):
 						studio_logo = see_at_studio.get("src");
 						if studio_logo == "../../images/NextDoorVideo.png":
 							#valid actor, exit loop
+							Log("Found Actor!")
+							Log(actor_link)
 							valid = 1
 							break
 					if valid == 1:
 						break
-
 				actor_episodes = gevi_actor_result.xpath('//tr[@class="er"]/td[1]/a/text()')
 				indexx = 1
 				for episode in actor_episodes:
@@ -315,10 +316,10 @@ class NextDoorStudios(Agent.Movies):
 						gevi_scene_url = "https://www.gayeroticvideoindex.com" + gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[1]/a')[0].get("href")
 					indexx += 1
 			except Exception as e:
-				self.Log("Exception getting GEVI match: %s", e)
+				self.Log(e)
 				pass
 		except Exception as e:
-			self.Log("Exception getting GEVI match: %s", e)
+			self.Log(e)
 			pass
 
 		try:
@@ -329,7 +330,7 @@ class NextDoorStudios(Agent.Movies):
 				if (len(genre) > 0):
 					metadata.genres.add(genre)
 		except Exception as e:
-			self.Log('UPDATE - Error getting video genres: %s', e)
+			Log(e)
 			pass
 
 		#get cast extrainfo
@@ -389,7 +390,7 @@ class NextDoorStudios(Agent.Movies):
 						role.photo = cropped_headshot
 						index += 1;
 		except Exception as e:
-			self.Log("UPDATE - (GEVI) Error getting cast extras: %s", e)
+			self.Log(e)
 
 		
 		metadata.posters.validate_keys(valid_image_names)
