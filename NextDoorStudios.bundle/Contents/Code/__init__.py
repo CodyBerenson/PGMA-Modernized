@@ -258,7 +258,7 @@ class NextDoorStudios(Agent.Movies):
 				images = bananaguide_gallery.xpath('//div[@class="grid-item-wrapper-2"]/a')
 				i = 0
 				for image in images:
-					if i > 1:
+					if i > 1 and image.get("href") is not False:
 						#self.Log(image.get("href"))
 						poster_url = "https://bananaguide.com" + image.get("href")
 
