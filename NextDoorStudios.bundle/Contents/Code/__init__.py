@@ -275,7 +275,7 @@ class NextDoorStudios(Agent.Movies):
 		#get rating
 		tu = html.xpath("//span[@class='value']/text()")[0]
 		td = html.xpath("//span[@class='value']/text()")[1]
-		metadata.rating = int(100 - (int(td) / int(tu)));
+		metadata.rating = float((tu / (tu + td) * 100)/10)
 
 		try:
 			release_date = html.xpath("//div[@class='updatedDate']/text()")[1]
