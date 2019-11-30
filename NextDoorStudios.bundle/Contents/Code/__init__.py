@@ -209,7 +209,8 @@ class NextDoorStudios(Agent.Movies):
 			video_title = html.xpath("//h1[@class='title']/text()")[0]
 			self.Log('UPDATE - video_title: "%s"', metadata.title)
 		except Exception as e:
-			self.log("UPDATE - error getting title: %s", e)
+			Log(e)
+			pass
 
 		# Try to get description text
 		try:
@@ -218,7 +219,7 @@ class NextDoorStudios(Agent.Movies):
 			self.Log('UPDATE - Description: %s', descx)
 			metadata.summary=descx
 		except Exception as e:
-			self.Log('UPDATE - Error getting description text: %s', e)
+			Log(e)
 			pass
 
 		#get the measly ONE poster
@@ -236,7 +237,7 @@ class NextDoorStudios(Agent.Movies):
 			for url in html_urls:
 				actor_urls.append("https://www.nextdoorstudios.com" + url.get("href"))
 		except Exception as e:
-			self.Log('UPDATE - Error getting video cast: %s', e)
+			Log(e)
 			pass
 
 		valid_image_names = list()
@@ -394,6 +395,7 @@ class NextDoorStudios(Agent.Movies):
 						index += 1;
 		except Exception as e:
 			Log(e)
+			pass
 
 		
 		metadata.posters.validate_keys(valid_image_names)
