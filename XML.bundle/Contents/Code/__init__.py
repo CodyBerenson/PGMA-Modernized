@@ -81,9 +81,9 @@ class XML(Agent.Movies):
 
 		filetitle = path_and_file.split("/")[-1];
 		filetitle = filetitle.split(".")[0];
-		metadatafile = "/data/media/drive-encrypt/Videos/Videos/XML/metadata/" + filetitle + ".xml";
+		metadatafile = "/home15/aidenvigue/mount/Videos/Videos/XML/metadata/" + filetitle + ".xml";
 		Log(metadatafile)
-		Log(os.path.exists("/data/media/drive-encrypt/Videos/Videos/XML/" + filetitle + ".xml"))
+		#Log(os.path.exists("/mnt/googledrive/Videos/Videos/XML/" + filetitle + ".xml"))
 		self.Log('SEARCH - Found existing metadata');
 		results.Append(MetadataSearchResult(id = metadatafile, name = metadatafile, score = 100, lang = lang))
 		return
@@ -111,34 +111,41 @@ class XML(Agent.Movies):
 		mov_cover_hires = mov_cover_hires.replace("%26","&");
 		if "," in mov_cover_hires:
 			mov_covers_hires = mov_cover_hires.split(",")
+			i = 0
 			for cover in mov_covers_hires:
+				i = i + 1
+				#cover = cover.replace("https://cdn.vigue.me", "http://thumbor.thumborize.me")
 				if cover != None:
 					try:
+						metadata.posters[cover]=Proxy.Media(HTTP.Request(cover), sort_order = i)
 						valid_image_names.append(cover)
-						metadata.posters[cover]=Proxy.Media(HTTP.Request(cover), sort_order = 1)
 						metadata.posters.validate_keys(valid_image_names)
 					except Exception as e:
+						Log(e)
 						pass
 		else:
 			valid_image_names.append(mov_cover_hires)
-			metadata.posters[mov_cover_hires]=Proxy.Media(HTTP.Request(mov_cover_hires), sort_order = 1)
+			metadata.posters[mov_cover_hires]=Proxy.Media(HTTP.Request(mov_cover_hires), sort_order = 2)
 			metadata.posters.validate_keys(valid_image_names)
 
 		art_url = root.findall("Background")[0].text
 		art_url = art_url.replace("%26","&")
 		if "," in art_url:
 			art_urls = art_url.split(",")
+			i = 0
 			for art in art_urls:
+				i = i + 1
+				#art = art.replace("https://cdn.vigue.me", "http://thumbor.thumborize.me")
 				if cover != None:
 					try:
 						valid_art_names.append(art)
-						metadata.art[art] = Proxy.Media(HTTP.Request(art), sort_order=1)
+						metadata.art[art] = Proxy.Media(HTTP.Request(art), sort_order=i)
 						metadata.art.validate_keys(valid_art_names)
 					except Exception as e:
 						pass
 		else:
 			valid_art_names.append(art_url)
-			metadata.art[art_url] = Proxy.Media(HTTP.Request(art_url), sort_order=1)
+			metadata.art[art_url] = Proxy.Media(HTTP.Request(art_url), sort_order=2)
 			metadata.art.validate_keys(valid_art_names)
 
 		raw_date = root.findall('ReleaseDate')[0].text

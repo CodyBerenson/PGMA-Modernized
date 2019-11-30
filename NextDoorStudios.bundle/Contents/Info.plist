@@ -5,12 +5,12 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>CockyBoys</string>
+	<string>NextDoorStudios</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.plexapp.agents.cockyboys</string>
+	<string>com.plexapp.agents.nextdoorstudios</string>
 	<key>PlexAgentAttributionText</key>
 	<string>
-		A Plex Metadata agent for CockyBoys
+		&lt;a href=&quot;https://github.com/acvigue/pgma&quot;&gt;PGMA&lt;/a&gt; is a free agent for NextDoorStudios.&lt;br/&gt;
 	</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
