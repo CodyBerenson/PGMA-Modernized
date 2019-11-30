@@ -291,10 +291,22 @@ class NextDoorStudios(Agent.Movies):
 			gevi_search = HTML.ElementFromURL("https://www.gayeroticvideoindex.com/search.php?type=s&where=b&query=" + actor + "&Search=Search&page=1", sleep=REQUEST_DELAY)
 			try:
 				index = 3
-				actor_link = gevi_search.xpath('//*[@class="cd"]/a')[0];
-				actor_link = "https://www.gayeroticvideoindex.com" + actor_link.get("href");
-				self.Log(actor_link);
-				gevi_actor_result = HTML.ElementFromURL(actor_link, sleep=REQUEST_DELAY)
+				actor_links = gevi_search.xpath('//*[@class="cd"]/a');
+				gevi_actor_result = ""
+				for gevi_actor_link in actor_links:
+					valid = 0
+					actor_link = "https://www.gayeroticvideoindex.com" + actor_link.get("href");
+					gevi_actor_result = HTML.ElementFromURL(actor_link, sleep=REQUEST_DELAY)
+					see_at = gevi_actor_result.xpath("//td[@class='gspr']/div/a/img")
+					for see_at_studio in see_at:
+						studio_logo = see_at_studio.get("src");
+						if studio_logo == "../../images/NextDoorVideo.png":
+							#valid actor, exit loop
+							valid = 1
+							break
+					if valid == 1:
+						break
+
 				actor_episodes = gevi_actor_result.xpath('//tr[@class="er"]/td[1]/a/text()')
 				indexx = 1
 				for episode in actor_episodes:
