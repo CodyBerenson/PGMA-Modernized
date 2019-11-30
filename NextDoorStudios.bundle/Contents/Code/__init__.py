@@ -244,7 +244,16 @@ class NextDoorStudios(Agent.Movies):
 			if actors != []:
 				gsearch = HTML.ElementFromURL("https://bananaguide.com/searchModels/" + actors[0].replace(" ", "%20"), sleep=REQUEST_DELAY)
 				first_result = "https://bananaguide.com/" + gsearch.xpath("//div/div/p[2]/a")[0].get("href")
-				bananaguide_gallery = HTML.ElementFromURL(first_result, sleep=REQUEST_DELAY)
+				episodes_html = HTML.ElementFromURL(first_result, sleep=REQUEST_DELAY)
+				episodes = episodes_html.xpath("//div[@class='grid-text-area-all-padded']/h2/a")
+				bananaguide_gallery_link = ""
+				for episode in episodes:
+					if actors[1].lower() in episode.text.lower():
+						#match
+						Log("BananaGuide Stills found!")
+						bananaguide_gallery = episode.get("href")
+						break
+				bananaguide_gallery = HTML.ElementFromURL(bananaguide_gallery_link, sleep=REQUEST_DELAY)
 				images = bananaguide_gallery.xpath('//div[@class="grid-item-wrapper-2"]/a')
 				i = 0
 				for image in images:
@@ -266,7 +275,7 @@ class NextDoorStudios(Agent.Movies):
 		#get rating
 		tu = html.xpath("//span[@class='value']/text()")[0]
 		td = html.xpath("//span[@class='value']/text()")[1]
-		metadata.rating = float(int(tu) / int(td));
+		metadata.rating = int(100 - (int(td) / int(tu)));
 
 		try:
 			release_date = html.xpath("//div[@class='updatedDate']/text()")[1]
