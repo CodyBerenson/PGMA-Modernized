@@ -1,0 +1,21 @@
+
+[
+  {
+    "id": "regex",
+    "label": "Regular expression to match files by. Must contain named groups for Studio, Movie Title and Release Year.",
+    "type": "text",
+    "default": "^\\((?P<studio>.+)\\) - (?P<title>.+) \\((?P<year>\\d{4})\\)"
+  },
+  {
+    "id":"debug",
+    "label":"Enable debug logging",
+    "type":"bool",
+    "default":"false"
+  },
+  {
+    "id":"rename",
+    "label":"Match Movie File to WayBig entry and rename",
+    "type":"bool",
+    "default":"false"
+  }
+]
