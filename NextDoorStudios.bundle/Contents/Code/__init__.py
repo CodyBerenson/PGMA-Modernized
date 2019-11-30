@@ -289,7 +289,7 @@ class NextDoorStudios(Agent.Movies):
 				gevi_actor_result = ""
 				for gevi_actor_link in actor_links:
 					valid = 0
-					actor_link = "https://www.gayeroticvideoindex.com" + actor_link.get("href");
+					actor_link = "https://www.gayeroticvideoindex.com" + gevi_actor_link.get("href");
 					gevi_actor_result = HTML.ElementFromURL(actor_link, sleep=REQUEST_DELAY)
 					see_at = gevi_actor_result.xpath("//td[@class='gspr']/div/a/img")
 					for see_at_studio in see_at:
