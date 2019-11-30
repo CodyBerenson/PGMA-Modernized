@@ -251,7 +251,7 @@ class NextDoorStudios(Agent.Movies):
 					if actors[1].lower() in episode.text.lower():
 						#match
 						Log("BananaGuide Stills found!")
-						bananaguide_gallery = episode.get("href")
+						bananaguide_gallery_link = episode.get("href")
 						break
 				bananaguide_gallery = HTML.ElementFromURL(bananaguide_gallery_link, sleep=REQUEST_DELAY)
 				images = bananaguide_gallery.xpath('//div[@class="grid-item-wrapper-2"]/a')
