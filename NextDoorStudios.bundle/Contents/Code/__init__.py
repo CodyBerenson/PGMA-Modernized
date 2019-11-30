@@ -242,7 +242,7 @@ class NextDoorStudios(Agent.Movies):
 		valid_image_names = list()
 		try:
 			if actors != []:
-				gsearch = HTML.ElementFromURL("https://bananaguide.com/searchModels/" + actors[0], sleep=REQUEST_DELAY)
+				gsearch = HTML.ElementFromURL("https://bananaguide.com/searchModels/" + actors[0].replace(" ", "%20"), sleep=REQUEST_DELAY)
 				first_result = gsearch.xpath("//div/div/p[2]/a")[0].get("href")
 				bananaguide_gallery = HTML.ElementFromURL(first_result, sleep=REQUEST_DELAY)
 				images = bananaguide_gallery.xpath('//div[@class="grid-item-wrapper-2"]/a')
