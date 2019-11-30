@@ -243,7 +243,7 @@ class NextDoorStudios(Agent.Movies):
 		try:
 			if actors != []:
 				gsearch = HTML.ElementFromURL("https://bananaguide.com/searchModels/" + actors[0].replace(" ", "%20"), sleep=REQUEST_DELAY)
-				first_result = gsearch.xpath("//div/div/p[2]/a")[0].get("href")
+				first_result = "https://bananaguide.com/" + gsearch.xpath("//div/div/p[2]/a")[0].get("href")
 				bananaguide_gallery = HTML.ElementFromURL(first_result, sleep=REQUEST_DELAY)
 				images = bananaguide_gallery.xpath('//div[@class="grid-item-wrapper-2"]/a')
 				i = 0
@@ -261,11 +261,11 @@ class NextDoorStudios(Agent.Movies):
 					i += 1
 		except Exception as e:
 			Log(e)
+			pass
 
 		#get rating
 		tu = html.xpath("//span[@class='value']/text()")[0]
 		td = html.xpath("//span[@class='value']/text()")[1]
-		self.Log("%s - %s", tu, td)
 		metadata.rating = float(int(tu) / int(td));
 
 		try:
@@ -274,7 +274,8 @@ class NextDoorStudios(Agent.Movies):
 			metadata.year = metadata.originally_available_at.year
 			self.Log('UPDATE - Release Date - New: %s', release_date)
 		except Exception as e:
-			self.Log("UPDATE - Error release_date: %s", e)
+			Log(e)
+			pass
 
 		gevi_scene_url = "";
 		try:
@@ -309,10 +310,10 @@ class NextDoorStudios(Agent.Movies):
 						gevi_scene_url = "https://www.gayeroticvideoindex.com" + gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[1]/a')[0].get("href")
 					indexx += 1
 			except Exception as e:
-				self.Log(e)
+				Log(e)
 				pass
 		except Exception as e:
-			self.Log(e)
+			Log(e)
 			pass
 
 		try:
@@ -383,7 +384,7 @@ class NextDoorStudios(Agent.Movies):
 						role.photo = cropped_headshot
 						index += 1;
 		except Exception as e:
-			self.Log(e)
+			Log(e)
 
 		
 		metadata.posters.validate_keys(valid_image_names)
