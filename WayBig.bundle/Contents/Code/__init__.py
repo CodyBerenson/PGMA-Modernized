@@ -1,8 +1,13 @@
 ﻿# WayBig (IAFD)
 import datetime, linecache, platform, os, re, string, sys, urllib
+from difflib import SequenceMatcher
+
+#Fix HTTPS errors when connecting to Facebox (neural.vigue.me) and Thumbor CDN (cdn.vigue.me)
+import certifi
+import requests
 
 # Version / Log Title 
-VERSION_NO = '2019.12.22.5'
+VERSION_NO = '2019.1.18.1'
 PLUGIN_LOG_TITLE = 'WayBig'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -107,7 +112,15 @@ class WAYBIGAgent(Agent.Movies):
                 photourl = photourl.replace('headshots/', 'headshots/thumbs/th_')
                 if 'nophoto340.jpg' in photourl:
                     photourl = None
-                return photourl
+                
+                #Try auto cropping
+                result = requests.post('https://neural.vigue.me/facebox/check', json={"url": photourl}, verify=certifi.where())
+				Log(result.json()["facesCount"])
+				if result.json()["facesCount"] == 1:
+					box = result.json()["faces"][0]["rect"]
+					return "https://cdn.vigue.me/unsafe/" + str(self.noNegative(box["left"] - 100)) + "x" + str(self.noNegative(box["top"] - 100)) + ":" + str(self.noNegative((box["left"]+box["width"])+100)) + "x" + str(self.noNegative((box["top"]+box["height"])+100)) + "/" + photourl
+				else:
+                    return photourl
             except: 
                 self.log('SELF:: NO IAFD Actor Page')
 
@@ -323,8 +336,8 @@ class WAYBIGAgent(Agent.Movies):
                 role = metadata.roles.new()
                 role.name = key
                 role.photo = castdict[key]
-        except:
-            self.log('UPDATE:: Error getting Cast')
+        except Exception as e:
+            self.log('UPDATE:: Error getting Cast: %s', e)
             pass
 
         # 2c.   Poster
@@ -336,11 +349,11 @@ class WAYBIGAgent(Agent.Movies):
                 try:
                     self.log('UPDATE:: Movie Thumbnail Found: %s', posterurl)
                     metadata.posters[posterurl] = Proxy.Preview(HTTP.Request(posterurl).content, sort_order = 1)
-                except:
-                    self.log('UPDATE:: Error getting Poster') 
+                except Exception as e:
+                    self.log('UPDATE:: Error getting Poster: %s', e) 
                     pass
             #  clean up and only keep the poster we have added
             metadata.posters.validate_keys(validPosterList)
-        except:
-            self.log('UPDATE:: Error getting Poster Art:')
+        except Exception as e:
+            self.log('UPDATE:: Error getting Poster Art: %s', e)
             pass
