@@ -2,7 +2,7 @@
 import datetime, linecache, platform, os, re, string, sys, urllib
 
 # Version / Log Title 
-VERSION_NO = '2019.08.12.0'
+VERSION_NO = '2019.12.22.5'
 PLUGIN_LOG_TITLE = 'WayBig'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -71,19 +71,36 @@ class WAYBIGAgent(Agent.Movies):
         regex = re.compile(r'\W+')
         return regex.sub('', myString)
 
-    # check IAFD web site for better quality siteActor thumbnails irrespective of whether we have a thumbnail or not
-    def getIAFDsiteActorImage(self, siteActor):
-        IAFD_siteActor_URL = 'http://www.iafd.com/person.rme/perfid=FULLNAME/gender=SEX/FULL_NAME.htm'
-        photourl = None
-        siteActor = siteActor.lower()
-        fullname = siteActor.replace(' ','').replace("'", '').replace(".", '')
-        full_name = siteActor.replace(' ','-').replace("'", '&apos;')
+    # clean search string before searching on WayBig
+    def CleanSearchString(self, myString):
+        # Waybig seems to fail to find Titles which have aN apostrophe in them split at first incident and take first split, just to search but not compare
+        invalidCharacters = ["'", "‘"]
+        for Char in invalidCharacters:
+            if Char in myString:
+                myString = myString.split(Char)[0]
+                self.log('SEARCH:: "%s" found - Amended Search Title "%s"', Char, myString)
 
-        # siteActors are categorised on iafd as male or director in order of likelihood
+        # for titles with colons in them
+        if " - " in myString:
+            myString = myString.replace(' - ',': ')
+            self.log('SEARCH:: Hyphen found - Amended Search Title "%s"', myString)
+
+        # Search Query - for use to search the internet
+        return String.StripDiacritics(myString).lower()        
+
+    # check IAFD web site for better quality Actor thumbnails irrespective of whether we have a thumbnail or not
+    def getIAFDActorImage(self, Actor):
+        IAFD_Actor_URL = 'http://www.iafd.com/person.rme/perfid=FULLNAME/gender=SEX/FULL_NAME.htm'
+        photourl = None
+        Actor = Actor.lower()
+        fullname = Actor.replace(' ','').replace("'", '').replace(".", '')
+        full_name = Actor.replace(' ','-').replace("'", '&apos;')
+
+        # Actors are categorised on iafd as male or director in order of likelihood
         for gender in ['m', 'd']:
-            iafd_url = IAFD_siteActor_URL.replace("FULLNAME", fullname).replace("FULL_NAME", full_name).replace("SEX", gender)
-            self.log('SELF:: siteActor  %s - IAFD url: %s', siteActor, iafd_url)
-            # Check URL exists and get siteActors thumbnail
+            iafd_url = IAFD_Actor_URL.replace("FULLNAME", fullname).replace("FULL_NAME", full_name).replace("SEX", gender)
+            self.log('SELF:: Actor  %s - IAFD url: %s', Actor, iafd_url)
+            # Check URL exists and get Actors thumbnail
             try:
                 html = HTML.ElementFromURL(iafd_url)
                 photourl = html.xpath('//*[@id="headshot"]/img')[0].get('src')
@@ -92,7 +109,7 @@ class WAYBIGAgent(Agent.Movies):
                     photourl = None
                 return photourl
             except: 
-                self.log('SELF:: NO IAFD siteActor Page')
+                self.log('SELF:: NO IAFD Actor Page')
 
     def log(self, message, *args):
         if Prefs['debug']:
@@ -124,94 +141,80 @@ class WAYBIGAgent(Agent.Movies):
         group_studio, group_title, group_year = self.getFilenameGroups(file)
         self.log('SEARCH:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
 
-        #  Release date default to december 31st of Filename value compare against release date on website
+        #  Release date default to December 31st of Filename value compare against release date on website
         compareReleaseDate = datetime.datetime(int(group_year), 12, 31)
 
         # saveTitle corresponds to the real title of the movie.
         saveTitle = group_title
         self.log('SEARCH:: Original Group Title: %s', saveTitle)
 
-        # WayBig displays its movies as Studio: Title 
-        searchTitle = group_studio + ' ' + saveTitle.split("‘")[0]
-        compareTitle = self.NormaliseComparisonString(searchTitle)
+        # WayBig displays its movies as Studio: Title or Studio:Title (at Studio) or Title at Studio
+        # compareTitle will be used to search against the titles on the website, remove all umlauts, accents and ligatures
+        searchTitleList = []
+        compareTitleList = []
 
-        searchTitle = String.StripDiacritics(searchTitle).lower()
-        
-        # Search Query - for use to search the internet
-        searchQuery = WAYBIG_SEARCH_MOVIES % String.URLEncode(searchTitle)
-        self.log('SEARCH:: Search Query: %s', searchQuery) 
+        searchTitle = group_studio + ': ' + saveTitle
+        compareTitleList.append(self.NormaliseComparisonString(searchTitle))
+        searchTitleList.append(self.CleanSearchString(searchTitle))
 
-        html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore')
-        titleList = html.xpath('.//div[contains(@class,"main-blog-content")]/div[contains(@class,"content")]')
-        for title in titleList:
-            # if set it will enable the process to change the filename on disk to correspond to the waybig entry
-            # files still need to be named in correct format e.g (Timtales) - XXXX plays ith YYYY (1900)
-            # this code finds the actors in the title and matches them to the entry on waybig
-            if Prefs['rename']:
-                siteTitle = title.xpath('.//h2[contains (@class,"entry-title") and (@id)]/a/text()')[0]
-                self.log('Title = %s', siteTitle)
-                if group_studio in siteTitle:
-                    siteURL = title.xpath('.//h2[contains(@class,"entry-title") and (@id)]/a/@href')[0]
+        searchTitle = group_studio + ': ' + saveTitle + ' at ' + group_studio
+        compareTitleList.append(self.NormaliseComparisonString(searchTitle))
+        searchTitleList.append(self.CleanSearchString(searchTitle))
+
+        searchTitle = saveTitle + ' at ' + group_studio
+        compareTitleList.append(self.NormaliseComparisonString(searchTitle))
+        searchTitleList.append(self.CleanSearchString(searchTitle))
+
+        for searchTitle in searchTitleList:
+            compareTitle = compareTitleList[searchTitleList.index(searchTitle)]
+            searchQuery = WAYBIG_SEARCH_MOVIES % String.URLEncode(searchTitle)
+            self.log('SEARCH:: Search Query: %s', searchQuery) 
+
+            html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore')
+            titleList = html.xpath('.//div[contains(@class,"row")]/div[contains(@class,"content-col col")]/article')
+            self.log('SEARCH:: Titles List: %s Found', len(titleList))
+
+            for title in titleList:
+                siteTitle = title.xpath('.//h2[contains (@class, "entry-title")]')[0].text_content().strip()
+                self.log('SEARCH:: Site Title "%s"', siteTitle)
+                siteTitle = self.NormaliseComparisonString(siteTitle)
+                self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
+                if siteTitle != compareTitle:
+                    if siteTitle.replace(group_studio.lower(),'') != compareTitle.replace(group_studio.lower(),''):
+                        continue
+
+                # curID = the ID portion of the href in 'movie'
+                siteURL = title.xpath('.//a[contains(@rel, "bookmark")]/@href')[0]
+                self.log('SEARCH:: Site Title URL: %s' % str(siteURL))
+
+                # Get thumbnail image - store it with the CURID for use during updating
+                siteImageURL = ''
+                try:
+                    siteImageURL = title.xpath('.//img/@src')[0]
+                    self.log('SEARCH:: Site Thumbnail Image URL: %s' % str(siteImageURL))
+                except:
+                    self.log('SEARCH:: Error Site Thumbnail Image')
+                    pass
+
+                # Site Released Date Check - default to filename year
+                try:
                     siteReleaseDate = datetime.datetime(int(siteURL.split('/')[4]), int(siteURL.split('/')[5]), int(siteURL.split('/')[6]))
-                    siteCastList = title.xpath('.//div[contains(@class,"entry-meta")]/ul/li[2]/a[contains(@href,"https://www.waybig.com/blog/tag/")]/text()')
-                    self.log('Actors Listed = %s', siteCastList)
+                except:
+                    siteReleaseDate = compareReleaseDate
+                    self.log('SEARCH:: Error getting Site Release Date')
+                    pass
 
-                    if len(siteCastList) > 1:
-                        allPresent = True
-                        for siteActor in siteCastList:
-                            if not siteActor.lower() in file.lower():
-                                allPresent = False
-
-                        if allPresent == True:
-                            movie = siteTitle
-                            if ':' in movie:
-                                movie = movie.split(':')[1].strip()
-                            nfolder, ext = os.path.split(os.path.splitext(media.items[0].parts[0].file)[1])
-                            newname = '%s\(%s) - %s (%s)%s' % (folder, group_studio, movie, siteReleaseDate.year, ext)
-                            self.log('New File Name = %s', newname)
-                            if media.items[0].parts[0].file != newname:
-                                os.rename(media.items[0].parts[0].file, newname)
-                continue
-
-            siteTitle = title.xpath('.//h2[contains (@class, "entry-title") and (@id)]/a/text()')[0]
-            siteTitle = self.NormaliseComparisonString(siteTitle)
-            self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
-            if siteTitle != compareTitle:
-                if siteTitle.replace(group_studio.lower(),'') != compareTitle.replace(group_studio.lower(),''):
+                timedelta = siteReleaseDate - compareReleaseDate
+                self.log('SEARCH:: Compare Release Date - %s Site Date - %s : Dx [%s] days"', compareReleaseDate, siteReleaseDate, timedelta.days)
+                if abs(timedelta.days) > 366:
+                    self.log('SEARCH:: Difference of more than a year between file date and %s date from Website')
                     continue
 
-            # curID = the ID portion of the href in 'movie'
-            siteURL = title.xpath('.//h2[contains(@class,"entry-title") and (@id)]/a/@href')[0]
-            self.log('SEARCH:: Site Title URL: %s' % str(siteURL))
+                # we should have a match on both studio and title now
+                results.Append(MetadataSearchResult(id = siteURL + '|' + siteImageURL, name = saveTitle, score = 100, lang = lang))
 
-            # Get thumbnail image - store it with the CURID for use during updating
-            siteImageURL = ''
-            try:
-                siteImageURL = title.xpath('.//img/@src')[0]
-                self.log('SEARCH:: Site Thumbnail Image URL: %s' % str(siteImageURL))
-            except:
-                self.log('SEARCH:: Error Site Thumbnail Image')
-                pass
-
-            # Site Released Date Check - default to filename year
-            try:
-                siteReleaseDate = datetime.datetime(int(siteURL.split('/')[4]), int(siteURL.split('/')[5]), int(siteURL.split('/')[6]))
-            except:
-                siteReleaseDate = compareReleaseDate
-                self.log('SEARCH:: Error getting Site Release Date')
-                pass
-
-            timedelta = siteReleaseDate - compareReleaseDate
-            self.log('SEARCH:: Compare Release Date - %s Site Date - %s : Dx [%s] days"', compareReleaseDate, siteReleaseDate, timedelta.days)
-            if abs(timedelta.days) > 366:
-                self.log('SEARCH:: Difference of more than a year between file date and %s date from Website')
-                continue
-
-            # we should have a match on both studio and title now
-            results.Append(MetadataSearchResult(id = siteURL + '|' + siteImageURL, name = saveTitle, score = 100, lang = lang))
-
-            # we have found a title that matches quit loop
-            return
+                # we have found a title that matches quit loop
+                return
 
     def update(self, metadata, media, lang, force=True):
         folder, file = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
@@ -243,7 +246,7 @@ class WAYBIGAgent(Agent.Movies):
         #        f. background Art       : retrieved from metadata.id split
         #    2.  Metadata retrieved from website
         #        a. Summary 
-        #        b. Cast                 : List of siteActors and Photos (alphabetic order) - Photos sourced from IAFD
+        #        b. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
         #        c. Poster
 
         # 1a.   Studio
@@ -312,7 +315,7 @@ class WAYBIGAgent(Agent.Movies):
             for castname in htmlcast:
                 cast = castname.replace(u'\u2019s','').strip()
                 if (len(cast) > 0):
-                    castdict[cast] = self.getIAFDsiteActorImage(cast)
+                    castdict[cast] = self.getIAFDActorImage(cast)
 
             # sort the dictionary and add kv to metadata
             metadata.roles.clear()
@@ -326,7 +329,8 @@ class WAYBIGAgent(Agent.Movies):
 
         # 2c.   Poster
         try:
-            posterurl = html.xpath('//div[@class="entry-content"]/p/a[@target="_self" or @target="_blank"]/img/@src')[0]
+            #posterurl = html.xpath('//div[@class="entry-content"]/p/a[@target="_self" or @target="_blank"]/img/@src|//div[@class="entry-content"]/div/a[@target="_blank"]/img/@src')[0]
+            posterurl = html.xpath('//a[@target="_self" or @target="_blank"]/img[@src and @height and @width and @alt]/@src')[0]
             validPosterList = [posterurl]
             if posterurl not in metadata.posters:
                 try:

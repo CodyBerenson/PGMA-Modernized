@@ -11,11 +11,5 @@
     "label":"Enable debug logging",
     "type":"bool",
     "default":"false"
-  },
-  {
-    "id":"rename",
-    "label":"Match Movie File to WayBig entry and rename",
-    "type":"bool",
-    "default":"false"
   }
 ]
