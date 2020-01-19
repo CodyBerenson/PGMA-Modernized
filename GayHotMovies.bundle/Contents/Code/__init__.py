@@ -62,7 +62,7 @@ class GHMAgent(Agent.Movies):
             myString = 'a ' + myString.replace(', a', '', 1)
 
         # remove vol/volume/part and vol.1 etc wording as filenames dont have these to maintain a uniform search across all websites and remove all non alphanumeric characters
-        myString = myString.replace('&', 'and').replace(' 1', '').replace(' vol.', '').replace(' volume', '').replace(' part','')
+        myString = myString.replace('&', 'and').replace(' 1', '').replace(' vol.', '').replace(' volume', '').replace(' part ','')
 
         # strip diacritics
         myString = String.StripDiacritics(myString)
@@ -127,27 +127,26 @@ class GHMAgent(Agent.Movies):
         # compare Studio - used to check against the studio name on website
         compareStudio = self.NormaliseComparisonString(group_studio)
 
-        #  Release date default to December 31st of Filename value compare against release date on Website
-        compareReleaseDate = datetime.datetime(int(group_year), 12, 31)
+        #  Release date default to January 1st of Filename value compare against release date on Website
+        compareReleaseDate = datetime.datetime(int(group_year), 1, 1)
 
         # saveTitle corresponds to the real title of the movie.
         saveTitle = group_title
         self.log('SEARCH:: Original Group Title: %s', saveTitle)
 
-        # compareTitle will be used to search against the titles on the website, remove all umlauts, accents and ligatures
-        compareTitle = self.NormaliseComparisonString(saveTitle)
-
-        # Search Query - for use to search the internet
+        # in case the website colons in the titles and hyphens, convert hyphens to columns and em-dash to hyphens
         searchTitle = String.StripDiacritics(saveTitle.lower())
-        searchTitle = searchTitle.replace(' -', ':').replace('–', '-').replace('& ', '')
+        searchTitle = searchTitle.replace(' -', ':').replace('–', '-')
+        
+        # Search Query - for use to search the internet
         searchQuery = GHM_SEARCH_MOVIES.format(String.URLEncode(searchTitle))
         self.log('SEARCH:: Search Query: %s', searchQuery)
 
+        compareTitle = self.NormaliseComparisonString(saveTitle)
 
         # Finds the entire media enclosure <DIV> elements then steps through them
         titleList = HTML.ElementFromURL(searchQuery).xpath('//div[contains(@class,"medium-8 cell title maintitle")]/a')
-        self.log('SEARCH:: Titles List: %s Found', len(titleList))
-
+        self.log('SEARCH:: Titles Found: %s', len(titleList))
         for title in titleList:
             siteTitle = title.text_content()
             siteTitle = self.NormaliseComparisonString(siteTitle)
@@ -173,12 +172,12 @@ class GHMAgent(Agent.Movies):
             else:
                 continue
 
-            # Search Website for date and reset if available to 1st of month (Website only gives yyyy)
+            # Search Website for date and reset if available to 1st of month (Website only gives mm/yyyy)
             # there can not be a difference more than 365 days
             siteReleaseDate = 1900
             try: 
                 siteReleaseDate = html.xpath('//span[contains(@itemprop,"copyrightYear")]')[0].text_content().strip()
-                siteReleaseDate = datetime.datetime(int(siteReleaseDate), 12, 31)
+                siteReleaseDate = datetime.datetime(int(siteReleaseDate), 1, 1)
             except:
                 siteReleaseDate = compareReleaseDate
                 self.log('SEARCH:: Error getting Site Release Date')
@@ -247,11 +246,11 @@ class GHMAgent(Agent.Movies):
         self.log('UPDATE:: Content Rating: X')
 
         # 1e.   Originally Available At: Website lists date released as Year Value
-        metadata.originally_available_at = datetime.datetime(int(group_year), 12, 31)
+        metadata.originally_available_at = datetime.datetime(int(group_year), 1, 1)
         metadata.year = metadata.originally_available_at.year
         try:
             siteReleaseDate = html.xpath('//span[@itemprop="copyrightYear"]/text()')[0]
-            metadata.originally_available_at = datetime.datetime(int(siteReleaseDate), 12, 31).date()
+            metadata.originally_available_at = datetime.datetime(int(siteReleaseDate), 1, 1).date()
             metadata.year = metadata.originally_available_at.year
         except: 
             self.log('UPDATE:: Error setting Originally Available At')

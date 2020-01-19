@@ -1,4 +1,7 @@
 #NDS Plex Agent
+#Matches ALL subsites!
+#Matches with <video ID>.mp4 OR title.mp4!
+
 import re, os, platform, urllib
 from difflib import SequenceMatcher
 
@@ -6,12 +9,12 @@ from difflib import SequenceMatcher
 import certifi
 import requests
 
-
 PLUGIN_LOG_TITLE = 'NextDoorStudios'	# Log Title
 
-VERSION_NO = '2019.07.22.166'
+VERSION_NO = '2019.11.30.166'
 REQUEST_DELAY = 0
 BASE_VIDEO_DETAILS_URL = 'https://www.nextdoorstudios.com/en/show/nextdoorworld/%s'
+BASE_VIDEO_SEARCH_URL = 'https://www.nextdoorstudios.com/en/search/%s'
 
 # File names to match for this agent
 file_name_pattern = re.compile(Prefs['regex'])
@@ -84,20 +87,105 @@ class NextDoorStudios(Agent.Movies):
 			return
 
 		self.Log('SEARCH - File Name: %s', basename)
+		if basename.isdigit():
+			groups = m.groupdict()
+			clip_name = groups['clip_name']
+			movie_url_name = re.sub('\s+', '+', clip_name)
+			movie_url = BASE_VIDEO_DETAILS_URL % movie_url_name
+			search_query_raw = list()
+			for piece in clip_name.split(' '):
+				if re.search('^[0-9A-Za-z]*$', piece.replace('!', '')) is not None:
+					search_query_raw.append(piece)
 
-		groups = m.groupdict()
-		clip_name = groups['clip_name']
-		movie_url_name = re.sub('\s+', '+', clip_name)
-		movie_url = BASE_VIDEO_DETAILS_URL % movie_url_name
-		search_query_raw = list()
-		for piece in clip_name.split(' '):
-			if re.search('^[0-9A-Za-z]*$', piece.replace('!', '')) is not None:
-				search_query_raw.append(piece)
+			self.Log('SEARCH - Video URL: %s', movie_url)
+			html = HTML.ElementFromURL(movie_url, sleep=REQUEST_DELAY)
+			video_title = html.xpath("//h1[@class='title']/text()")[0]
+			results.Append(MetadataSearchResult(id = movie_url, name = video_title, score = 100, lang = lang))
+			return
+		else:
+			groups = m.groupdict()
+			clip_name = groups['clip_name']
+			movie_url_name = re.sub('\s+', '+', clip_name)
+			movie_url = BASE_VIDEO_SEARCH_URL % movie_url_name
+			search_query_raw = list()
+			for piece in clip_name.split(' '):
+				if re.search('^[0-9A-Za-z]*$', piece.replace('!', '')) is not None:
+					search_query_raw.append(piece)
 
-		self.Log('SEARCH - Video URL: %s', movie_url)
-		html = HTML.ElementFromURL(movie_url, sleep=REQUEST_DELAY)
-		video_title = html.xpath("//h1[@class='title']/text()")[0]
-		results.Append(MetadataSearchResult(id = movie_url, name = video_title, score = 100, lang = lang))
+			self.Log('SEARCH - Video URL: %s', movie_url)
+			html = HTML.ElementFromURL(movie_url, sleep=REQUEST_DELAY)
+
+			search_results = html.xpath("//*[contains(concat(' ',normalize-space(@class),' '),' tlcContentPage ')]/div")
+			score=10
+			# Enumerate the search results looking for an exact match. The hope is that by eliminating special character words from the title and searching the remainder that we will get the expected video in the results.
+			if search_results:
+				for result in search_results:
+					video_title = result.xpath("//div[@class='tlcDetails']/div[1]/a").text
+					video_title = re.sub("[\:\?\|]", '', video_title)
+					video_title = re.sub("\s{2,4}", ' ', video_title)
+					video_title = video_title.rstrip(' ')
+
+					self.Log('SEARCH - video title percentage: %s', self.similar(video_title.lower(), clip_name.lower()))
+
+					self.Log('SEARCH - video title: %s', video_title)
+					if self.similar(video_title.lower(), clip_name.lower()) > 0.90:
+						video_url=result.find('a')[0].get('href')
+						self.Log('SEARCH - video url: %s', video_url)
+						self.Log('SEARCH - rating: %s', self.rating)
+						self.Log('SEARCH - Exact Match "' + clip_name.lower() + '" == "%s"', video_title.lower())
+						results.Append(MetadataSearchResult(id = video_url, name = video_title, score = 100, lang = lang))
+						return
+					else:
+						self.Log('SEARCH - Title not found "' + clip_name.lower() + '" != "%s"', video_title.lower())
+						score=score-1
+						results.Append(MetadataSearchResult(id = '', name = media.filename, score = score, lang = lang))
+			else:
+				search_query="+".join(search_query_raw[-2:])
+				self.Log('SEARCH - Search Query: %s', search_query)
+				html=HTML.ElementFromURL(BASE_VIDEO_SEARCH_URL % search_query, sleep=REQUEST_DELAY)
+				search_results = html.xpath("//*[contains(concat(' ',normalize-space(@class),' '),' tlcContentPage ')]/div")
+				if search_results:
+					for result in search_results:
+						video_title = result.xpath("//div[@class='tlcDetails']/div[1]/a").text
+						video_title = re.sub("[\:\?\|]", '', video_title)
+						video_title = video_title.rstrip(' ')
+						self.Log('SEARCH - video title: %s', video_title)
+						if video_title.lower() == clip_name.lower():
+							video_url=result.find('a')[0].get('href')
+							self.Log('SEARCH - video url: %s', video_url)
+							self.Log('SEARCH - rating: %s', self.rating)
+							self.Log('SEARCH - Exact Match "' + clip_name.lower() + '" == "%s"', video_title.lower())
+							results.Append(MetadataSearchResult(id = video_url, name = video_title, score = 100, lang = lang))
+							return
+						else:
+							self.Log('SEARCH - Title not found "' + clip_name.lower() + '" != "%s"', video_title.lower())
+							score=score-1
+							results.Append(MetadataSearchResult(id = '', name = media.filename, score = score, lang = lang))
+				else:
+					search_query="+".join(search_query_raw[:2])
+					self.Log('SEARCH - Search Query: %s', search_query)
+					html=HTML.ElementFromURL(BASE_VIDEO_SEARCH_URL % search_query, sleep=REQUEST_DELAY)
+					search_results = html.xpath("//*[contains(concat(' ',normalize-space(@class),' '),' tlcContentPage ')]/div")
+					if search_results:
+						for result in search_results:
+							video_title = result.xpath("//div[@class='tlcDetails']/div[1]/a").text
+							video_title = re.sub("[\:\?\|]", '', video_title)
+							video_title = video_title.rstrip(' ')
+							self.Log('SEARCH - video title: %s', video_title)
+							if video_title.lower() == clip_name.lower():
+								video_url=result.find('a')[1].get('href')
+								self.Log('SEARCH - video url: %s', video_url)
+								self.Log('SEARCH - rating: %s', self.rating)
+								self.Log('SEARCH - Exact Match "' + clip_name.lower() + '" == "%s"', video_title.lower())
+								results.Append(MetadataSearchResult(id = video_url, name = video_title, score = 100, lang = lang))
+								return
+							else:
+								self.Log('SEARCH - Title not found "' + clip_name.lower() + '" != "%s"', video_title.lower())
+								results.Append(MetadataSearchResult(id = '', name = media.filename, score = 1, lang = lang))
+					else:
+						score=1
+						self.Log('SEARCH - Title not found "' + clip_name.lower() + '" != "%s"', video_title.lower())
+						return
 
 	def update(self, metadata, media, lang, force=False):
 		self.Log('UPDATE CALLED')
@@ -121,7 +209,8 @@ class NextDoorStudios(Agent.Movies):
 			video_title = html.xpath("//h1[@class='title']/text()")[0]
 			self.Log('UPDATE - video_title: "%s"', metadata.title)
 		except Exception as e:
-			self.log("UPDATE - error getting title: %s", e)
+			Log(e)
+			pass
 
 		# Try to get description text
 		try:
@@ -130,7 +219,7 @@ class NextDoorStudios(Agent.Movies):
 			self.Log('UPDATE - Description: %s', descx)
 			metadata.summary=descx
 		except Exception as e:
-			self.Log('UPDATE - Error getting description text: %s', e)
+			Log(e)
 			pass
 
 		#get the measly ONE poster
@@ -148,44 +237,46 @@ class NextDoorStudios(Agent.Movies):
 			for url in html_urls:
 				actor_urls.append("https://www.nextdoorstudios.com" + url.get("href"))
 		except Exception as e:
-			self.Log('UPDATE - Error getting video cast: %s', e)
+			Log(e)
 			pass
 
 		valid_image_names = list()
 		try:
 			if actors != []:
-				actorSearchString = "";
-				for actor in actors:
-					actorSearchString = actorSearchString + "\"" + actor + "\" "
-				gsearch = HTML.ElementFromURL("https://google.com/search?q=" + urllib.quote_plus("site:bananaguide.com nextdoorstudios " + actorSearchString), sleep=REQUEST_DELAY)
-				first_result = gsearch.xpath("//a[contains(@href, 'bananaguide.com')][contains(@href, '" + actors[0].split(" ")[0].lower() + "')]")[0].get("href")
-				first_result = first_result.split("=")[1]
-				first_result = first_result.split("&")[0]
-				if "bananaguide" in first_result:
-					#jackpot!
-					bananaguide_gallery = HTML.ElementFromURL(first_result, sleep=REQUEST_DELAY)
-					images = bananaguide_gallery.xpath('//div[@class="grid-item-wrapper-2"]/a')
-					i = 0
-					for image in images:
-						if i > 1:
-							self.Log(image.get("href"))
-							poster_url = "https://bananaguide.com" + image.get("href")
+				gsearch = HTML.ElementFromURL("https://bananaguide.com/searchModels/" + actors[0].replace(" ", "%20"), sleep=REQUEST_DELAY)
+				first_result = "https://bananaguide.com" + gsearch.xpath("//div/div/p[2]/a")[0].get("href")
+				episodes_html = HTML.ElementFromURL(first_result, sleep=REQUEST_DELAY)
+				episodes = episodes_html.xpath("//div[@class='grid-text-area-all-padded']/h2/a")
+				bananaguide_gallery_link = ""
+				for episode in episodes:
+					if actors[1].lower() in episode.text.lower():
+						#match
+						Log("BananaGuide Stills found!")
+						bananaguide_gallery_link = "https://bananaguide.com" + episode.get("href")
+						break
+				bananaguide_gallery = HTML.ElementFromURL(bananaguide_gallery_link, sleep=REQUEST_DELAY)
+				images = bananaguide_gallery.xpath('//div[@class="grid-item-wrapper-2"]/a')
+				i = 0
+				for image in images:
+					if i > 1 and image.get("href") is not False:
+						#self.Log(image.get("href"))
+						poster_url = "https://bananaguide.com" + image.get("href")
 
-							valid_image_names.append(poster_url)
-							if poster_url not in metadata.posters:
-								try:
-									metadata.posters[poster_url]=Proxy.Media(HTTP.Request(poster_url), sort_order = i-2)
-								except Exception as e: 
-									pass
-						i += 1
+						valid_image_names.append(poster_url)
+						if poster_url not in metadata.posters:
+							try:
+								metadata.posters[poster_url]=Proxy.Media(HTTP.Request(poster_url), sort_order = i-2)
+							except Exception as e: 
+								pass
+					i += 1
 		except Exception as e:
-			self.Log(e)
+			Log(e)
+			pass
 
 		#get rating
 		tu = html.xpath("//span[@class='value']/text()")[0]
 		td = html.xpath("//span[@class='value']/text()")[1]
-		self.Log("%s - %s", tu, td)
-		metadata.rating = float(int(tu) / int(td));
+		metadata.rating = float((int(tu) / (int(tu) + int(td)) * 100)/10)
 
 		try:
 			release_date = html.xpath("//div[@class='updatedDate']/text()")[1]
@@ -193,7 +284,8 @@ class NextDoorStudios(Agent.Movies):
 			metadata.year = metadata.originally_available_at.year
 			self.Log('UPDATE - Release Date - New: %s', release_date)
 		except Exception as e:
-			self.Log("UPDATE - Error release_date: %s", e)
+			Log(e)
+			pass
 
 		gevi_scene_url = "";
 		try:
@@ -203,10 +295,23 @@ class NextDoorStudios(Agent.Movies):
 			gevi_search = HTML.ElementFromURL("https://www.gayeroticvideoindex.com/search.php?type=s&where=b&query=" + actor + "&Search=Search&page=1", sleep=REQUEST_DELAY)
 			try:
 				index = 3
-				actor_link = gevi_search.xpath('//*[@class="cd"]/a')[0];
-				actor_link = "https://www.gayeroticvideoindex.com" + actor_link.get("href");
-				self.Log(actor_link);
-				gevi_actor_result = HTML.ElementFromURL(actor_link, sleep=REQUEST_DELAY)
+				actor_links = gevi_search.xpath('//*[@class="cd"]/a');
+				gevi_actor_result = ""
+				for gevi_actor_link in actor_links:
+					valid = 0
+					actor_link = "https://www.gayeroticvideoindex.com" + gevi_actor_link.get("href");
+					gevi_actor_result = HTML.ElementFromURL(actor_link, sleep=REQUEST_DELAY)
+					see_at = gevi_actor_result.xpath("//td[@class='gspr']/div/a/img")
+					for see_at_studio in see_at:
+						studio_logo = see_at_studio.get("src");
+						if studio_logo == "../../images/NextDoorVideo.png":
+							#valid actor, exit loop
+							Log("Found Actor!")
+							Log(actor_link)
+							valid = 1
+							break
+					if valid == 1:
+						break
 				actor_episodes = gevi_actor_result.xpath('//tr[@class="er"]/td[1]/a/text()')
 				indexx = 1
 				for episode in actor_episodes:
@@ -215,10 +320,10 @@ class NextDoorStudios(Agent.Movies):
 						gevi_scene_url = "https://www.gayeroticvideoindex.com" + gevi_actor_result.xpath('//*[@id="episodes"]/tr[' + str(indexx) + ']/td[1]/a')[0].get("href")
 					indexx += 1
 			except Exception as e:
-				self.Log("Exception getting GEVI match: %s", e)
+				Log(e)
 				pass
 		except Exception as e:
-			self.Log("Exception getting GEVI match: %s", e)
+			Log(e)
 			pass
 
 		try:
@@ -229,7 +334,7 @@ class NextDoorStudios(Agent.Movies):
 				if (len(genre) > 0):
 					metadata.genres.add(genre)
 		except Exception as e:
-			self.Log('UPDATE - Error getting video genres: %s', e)
+			Log(e)
 			pass
 
 		#get cast extrainfo
@@ -263,21 +368,13 @@ class NextDoorStudios(Agent.Movies):
 
 						actionText = ""
 						if "Atb" in action:
-							actionText = "1st Top"
+							actionText = "Flip Top"
 						elif "Abt" in action:
-							actionText = "1st Bottom"
+							actionText = "Flip Bottom"
 						elif "At" in action:
 							actionText = "Top"
 						elif "Ab" in action:
 							actionText = "Bottom"
-						elif "Org" in action:
-							actionText = "1st Receiver"
-						elif "Ogr" in action:
-							actionText = "1st Giver"
-						elif "Og" in action:
-							actionText = "Giver"
-						elif "Or" in action:
-							actionText = "Receiver"
 
 						role = metadata.roles.new()
 						role.name = actor
@@ -297,7 +394,8 @@ class NextDoorStudios(Agent.Movies):
 						role.photo = cropped_headshot
 						index += 1;
 		except Exception as e:
-			self.Log("UPDATE - (GEVI) Error getting cast extras: %s", e)
+			Log(e)
+			pass
 
 		
 		metadata.posters.validate_keys(valid_image_names)

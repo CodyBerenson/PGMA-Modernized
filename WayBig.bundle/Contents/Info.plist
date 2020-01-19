@@ -5,13 +5,9 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>AEBN</string>
+	<string>WayBig</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.plexapp.agents.aebn</string>
-	<key>PlexAgentAttributionText</key>
-	<string>
-		&lt;a href=&quot;https://github.com/iklier/plex-gay-metadata-agent&quot;&gt;CockPorn&lt;/a&gt; is a free adgent for AEBN.&lt;br/&gt;
-	</string>
+	<string>com.plexapp.agents.WayBig</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleShortVersionString</key>
@@ -24,7 +20,20 @@
 	<string>2</string>
 	<key>PlexPluginClass</key>
 	<string>Agent</string>
+	<key>PlexPluginCodePolicy</key>
+	<string>Elevated</string>
 	<key>PlexPluginMode</key>
 	<string>AlwaysOn</string>
+	<key>PlexAgentAttributionText</key>
+	<string>
+<![CDATA[
+WayBig Agent [IAFD] (v2019-12-22)
+<br /><br />
+is an agent to scrape related metadata from the great site, WayBig and Actor thumbnails from IAFD
+If gay adult content is your thing, it's highly recommended that you give them a look!
+This agent is completely unafilliated with with either website in any way.  
+If you have problems neither of them will help you.
+]]>
+	</string>    
 </dict>
 </plist>
