@@ -1,0 +1,27 @@
+
+[
+  {
+    "id": "regex",
+    "label": "Regular expression to match files by. Must contain named groups for Studio, Movie Title and Release Year.",
+    "type": "text",
+    "default": "^\\((?P<studio>.+)\\) - (?P<title>.+) \\((?P<year>\\d{4})\\)"
+  },
+  {
+    "id":"debug",
+    "label":"Enable debug logging",
+    "type":"bool",
+    "default":"false"
+  },
+  {
+    "id":"ignoregenres",
+    "label":"Genres/Categories to ignore, case insensitive (entries separated by | character)",
+    "type":"text",
+    "default":"Sale|4K Ultra HD"
+  },
+  {
+    "id":"useproductiondate",
+    "label":"If the 'Production Year' is less than the 'Release Date Year', then use Production Year instead with Jan 1st appended for the date (YYYY-01-01)",
+    "type":"bool",
+    "default":"true"
+  }
+]
