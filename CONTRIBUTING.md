@@ -23,22 +23,22 @@ Let's start by defining a few terms specific to Git.
 ## Getting Started
 
 Fork this repository by logging into your GitHub account. Then, click the fork button.
-![](2020-01-20-12-57-28.png)
+![](https://raw.githubusercontent.com/acvigue/pgma/master/images/2020-01-20-12-57-28.png)
 
 Wait, and you will be brought to your own copy of this repository. Open Github Desktop and sign-in if required.
 
-![](2020-01-20-13-00-27.png)
+![](https://raw.githubusercontent.com/acvigue/pgma/master/images/2020-01-20-13-00-27.png)
 
 You will be brought to the main page of Github Desktop. Click your fork in the list of your repositories. Click 'clone'
 
 ## Syncing Your Fork
 This next section describes how to keep your fork's master branch synced with the master branch of the 'upstream repository.' This eliminates incompatibilities and makes merging pull requests 100x easier.
 
-![](2020-01-20-13-04-30.png)
+![](https://raw.githubusercontent.com/acvigue/pgma/master/images/2020-01-20-13-04-30.png)
 
 First, be sure that the current branch is set to *master*,**not upstream/master or dev, etc.** Next, press the fetch origin button. Then click the *current branch* button.
 
-![](2020-01-20-13-07-40.png)
+![](https://raw.githubusercontent.com/acvigue/pgma/master/images/2020-01-20-13-07-40.png)
 
 Select the *choose a branch to merge into master* button at the bottom. Select *upstream/master* and select **Merge** if Git detects that your fork is out of date.  
 
@@ -59,11 +59,11 @@ If you have VS Code as your editor, simpily push the **Open in Visual Studio Cod
 
 When you are ready to push your changes, save your files and go back to Github Desktop.
 
-![](2020-01-20-13-13-56.png)
+![](https://raw.githubusercontent.com/acvigue/pgma/master/images/2020-01-20-13-13-56.png)
 
 The left hand sidebar will show that you have modifed the repository. Make sure the changes you want are selected, add a summary, and click **Commit to master**
 
-![](2020-01-20-13-17-16.png)
+![](https://raw.githubusercontent.com/acvigue/pgma/master/images/2020-01-20-13-17-16.png)
 
 You have just made changes to your *local repository*. To push these changes to your online GitHub Fork, press the **Push Origin** button.
 
@@ -76,15 +76,15 @@ Now, to see your changes go live in this *upstream repository*, you can submit a
 
 Go to the [repository homepage](https://github.com/acvigue/pgma) and click Pull Requests.
 
-![](2020-01-20-13-20-07.png)
+![](https://raw.githubusercontent.com/acvigue/pgma/master/images/2020-01-20-13-20-07.png)
 
 Click **new pull request**
 
-![](2020-01-20-13-21-01.png)
+![](https://raw.githubusercontent.com/acvigue/pgma/master/images/2020-01-20-13-21-01.png)
 
 Click **compare across forks** This will allow you to select the changes you have committed to your forked copy.
 
-![](2020-01-20-13-21-48.png)
+![](https://raw.githubusercontent.com/acvigue/pgma/master/images/2020-01-20-13-21-48.png)
 
 Change **head repository** to your forked copy. Make sure the changes are what you expected, and click **create pull request**
 
