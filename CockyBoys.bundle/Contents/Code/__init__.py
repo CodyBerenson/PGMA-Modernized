@@ -1,4 +1,4 @@
-# HelixStudios
+# CockyBoys
 import re, os, platform, urllib
 from difflib import SequenceMatcher
 
@@ -8,7 +8,7 @@ import requests
 
 PLUGIN_LOG_TITLE = 'CockyBoys'	# Log Title
 
-VERSION_NO = '2019.03.11.1'
+VERSION_NO = '2020.01.21.01'
 
 # Delay used when requesting HTML, may be good to have to prevent being
 # banned from the site
@@ -16,22 +16,11 @@ REQUEST_DELAY = 0
 
 # URLS
 BASE_URL = 'https://cockyboys.com%s'
-
-# Example Video Details URL
-# https://www.helixstudios.net/video/3437/hosing-him-down.html
 BASE_VIDEO_DETAILS_URL = 'https://cockyboys.com/scenes/%s?type=vids'
-
-# Example Search URL:
-# https://www.helixstudios.net/videos/?q=Hosing+Him+Down
 BASE_SEARCH_URL = 'https://cockyboys.com/search.php?query=%s'
 
 # File names to match for this agent
 file_name_pattern = re.compile(Prefs['regex'])
-
-# Example File Name:
-# https://media.helixstudios.com/scenes/hx111_scene2/hx111_scene2_member_1080p.mp4
-# FILENAME_PATTERN = re.compile("")
-# TITLE_PATTERN = re.compile("")
 
 def Start():
 	HTTP.CacheTime = CACHE_1WEEK
@@ -108,7 +97,6 @@ class CockyBoys(Agent.Movies):
 		html = HTML.ElementFromURL(movie_url, sleep=REQUEST_DELAY)
 
 		search_results = html.xpath('//div[@class="sceneList newReleases responsive"]/div[@class="previewThumb "]')
-		Log(search_results)
 		score=10
 		# Enumerate the search results looking for an exact match. The hope is that by eliminating special character words from the title and searching the remainder that we will get the expected video in the results.
 		if search_results:
@@ -119,8 +107,8 @@ class CockyBoys(Agent.Movies):
 				# Check the alt tag which includes the full title with special characters against the video title. If we match we nominate the result as the proper metadata. If we don't match we reply with a low score.
 				#if video_title.lower() == clip_name.lower():
 				if self.similar(video_title.lower(), clip_name.lower()) > 0.50:
-					video_url=result.find('a').get('href')
-					poster_url=result.find('video').get('poster')
+					video_url=result.find('em').find('a').get('href')
+					poster_url=result.find('video').find('img').get('src')
 					self.Log('SEARCH - video url: %s', video_url)
 					self.Log('SEARCH - Exact Match "' + clip_name.lower() + '" == "%s"', video_title.lower())
 					results.Append(MetadataSearchResult(id = video_url + ":::" + poster_url, name = video_title, score = 100, lang = lang))
