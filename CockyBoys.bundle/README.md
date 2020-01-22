@@ -1,8 +1,11 @@
 # CockyBoys Metadata Agent
 
-Plex metadata agent for fetching metadata for CockyBoys scenes.
+![](https://cockyboys.com/images_v4/logo.png)
 
-Name files: "exact name as on CB website".mp4 --> Liam Riley and Sven Basquiat.mp4
+Plex metadata agent for fetching metadata for CockyBoys scenes.
 
 KNOWN ISSUES:
 - None!
+
+## File naming convention
+- &lt;scene title&gt;.mp4 -> Sven and Liam.mp4
