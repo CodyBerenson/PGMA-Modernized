@@ -120,6 +120,10 @@ class CockyBoys(Agent.Movies):
 		else:
 			score=1
 			self.Log('SEARCH - Title not found "' + clip_name.lower())
+			video_url=BASE_VIDEO_DETAILS_URL % clip_name
+			self.Log('SEARCH - video url: %s', video_url)
+			self.Log('SEARCH - Exact Match "' + clip_name.lower() + '" == "%s"', video_title.lower())
+			results.Append(MetadataSearchResult(id = video_url + ":::" + "no_poster", name = video_title, score = 100, lang = lang))
 			return
 
 	def update(self, metadata, media, lang, force=False):
@@ -168,9 +172,12 @@ class CockyBoys(Agent.Movies):
 		#Try to get scene background art
 		try:
 			bg_image = metadata.id.split(":::")[1]
-			valid_art_names.append(bg_image)
-			metadata.art[bg_image] = Proxy.Media(HTTP.Request(bg_image), sort_order=1)
-			self.Log("UPDATE- Art: %s", bg_image)
+			if bg_image is not "no_poster":
+				valid_art_names.append(bg_image)
+				metadata.art[bg_image] = Proxy.Media(HTTP.Request(bg_image), sort_order=1)
+				self.Log("UPDATE- Art: %s", bg_image)
+			else:
+				self.Log("UPDATE- Art: No poster (DIRECT)")
 		except Exception as e:
 			self.Log('UPDATE - Error getting art: %s', e)
 			pass
