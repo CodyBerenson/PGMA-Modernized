@@ -1,18 +1,20 @@
-# GayHotMovies (IAFD)
+﻿# HomoActive - (IAFD)
 import datetime, linecache, platform, os, re, string, sys, urllib
 
 # Version / Log Title 
 VERSION_NO = '2019.08.12.0'
-PLUGIN_LOG_TITLE = 'GayHotMovies'
+PLUGIN_LOG_TITLE = 'HomoActive'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
 # if title on website has a hyphen in its title that does not correspond to a colon replace it with an em dash in the corresponding position
 FILEPATTERN = Prefs['regex']
  
+# Delay used when requesting HTML, may be good to have to prevent being banned from the site
+REQUEST_DELAY = 0
+
 # URLS
-GHM_BASEURL = 'https://www.gayhotmovies.com'
-GHM_SEARCH_MOVIES = GHM_BASEURL + '/search.php?search_string={0}&find_with=all_ordered&searchtype_value=video_title&view_style=scenes'
-#GHM_SEARCH_MOVIES = GHM_BASEURL + '/search.php?num_per_page=48&&search_string={0}&search_exclude=&search_within=&find_with=all_ordered&search_in=video_title%2Cvideo_description%2Cstudio_name%2Cdirector_name%2Cstar_name%2Ccategory_name%2Crental_package_name%2Cseries_name%2Cupc&show_only=&category_ids=&category_find_with=&studio_ids=&use_studio_id=&director_ids=&star_ids=&package_ids='
+BASE_URL = 'https://www.homoactive.com'
+BASE_SEARCH_URL = BASE_URL + '/catalogsearch/result/?q=%s'
 
 def Start():
     HTTP.CacheTime = CACHE_1WEEK
@@ -21,9 +23,9 @@ def Start():
 def ValidatePrefs():
     pass
 
-class GHMAgent(Agent.Movies):
-    name = 'GayHotMovies (IAFD)'
-    languages = [Locale.Language.NoLanguage, Locale.Language.English]
+class HomoActive(Agent.Movies):
+    name = 'HomoActive (IAFD)'
+    languages = [Locale.Language.English]
     primary_provider = True
     preference = True
     media_types = ['Movie']
@@ -32,6 +34,7 @@ class GHMAgent(Agent.Movies):
 
     def matchedFilename(self, file):
         # match file name to regex
+        self.log ("PATTERN = %s", FILEPATTERN) 
         pattern = re.compile(FILEPATTERN)
         return pattern.search(file)
 
@@ -112,10 +115,13 @@ class GHMAgent(Agent.Movies):
         self.log('SEARCH:: manual - %s', manual)
         self.log('-----------------------------------------------------------------------')
 
+        if not media.items[0].parts[0].file:
+            return
+
         folder, file = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
         self.log('SEARCH:: File Name: %s', file)
         self.log('SEARCH:: Enclosing Folder: %s', folder)
- 
+
         # Check filename format
         if not self.matchedFilename(file):
             self.log('SEARCH:: Skipping %s because the file name is not in the expected format: (Studio) - Title (Year)', file)
@@ -130,6 +136,7 @@ class GHMAgent(Agent.Movies):
         #  Release date default to December 31st of Filename value compare against release date on Website
         compareReleaseDate = datetime.datetime(int(group_year), 12, 31)
 
+        # replace en-dash with hyphen as film in aebn has a hyphen in its title in corresponding position
         # saveTitle corresponds to the real title of the movie.
         saveTitle = group_title
         self.log('SEARCH:: Original Group Title: %s', saveTitle)
@@ -139,163 +146,176 @@ class GHMAgent(Agent.Movies):
 
         # Search Query - for use to search the internet
         searchTitle = String.StripDiacritics(saveTitle.lower())
-        searchTitle = searchTitle.replace(' -', ':').replace('–', '-').replace('& ', '')
-        searchQuery = GHM_SEARCH_MOVIES.format(String.URLEncode(searchTitle))
+        searchTitle = searchTitle.replace('-', '').replace('–', '-')
+        searchQuery = BASE_SEARCH_URL % String.URLEncode(searchTitle)
         self.log('SEARCH:: Search Query: %s', searchQuery)
 
 
         # Finds the entire media enclosure <DIV> elements then steps through them
-        titleList = HTML.ElementFromURL(searchQuery).xpath('//div[contains(@class,"medium-8 cell title maintitle")]/a')
+        titleList = HTML.ElementFromURL(searchQuery, sleep=REQUEST_DELAY).xpath('//*[@class="item"]')
         self.log('SEARCH:: Titles List: %s Found', len(titleList))
 
         for title in titleList:
-            siteTitle = title.text_content()
+            self.log('SEARCH:: Title : %s', title)
+            siteTitle = title.findall('div/a')[0].get('title')
             siteTitle = self.NormaliseComparisonString(siteTitle)
-            siteURL = title.get('href')
-
-            self.log('SEARCH:: Title Match: [{0}] Compare Title - Site Title "{1} - {2}"'.format((compareTitle == siteTitle), compareTitle, siteTitle))
+            foundAt = siteTitle.find('dvd')
+            if foundAt > -1:
+                siteTitle = siteTitle[:foundAt]
+            foundAt = siteTitle.find('download')
+            if foundAt > -1:
+                siteTitle = siteTitle[:foundAt]
+            self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
             if siteTitle != compareTitle:
                 continue
+            
+            siteURL = title.findall("div/a")[0].get('href')
+            if BASE_URL not in siteURL:
+                siteURL = BASE_URL + siteURL
+            self.log('SEARCH:: Title url: %s', siteURL)
 
             # need to check that the studio name of this title matches to the filename's studio
-            html = HTML.ElementFromURL(siteURL)
-
-            # Site Studio Check
-            siteStudio = html.xpath('//a[contains(@href,"https://www.gayhotmovies.com/studio") and (@title) and (@rel)]')[0].text_content()
+            html = HTML.ElementFromURL(siteURL, sleep=REQUEST_DELAY)
+            siteStudio = html.xpath('//div[@class="product-name"]/span/dd/a/text()')[0]
+            self.log('SEARCH:: Site Studio: %s', siteStudio)
             siteStudio = self.NormaliseComparisonString(siteStudio)
-            self.log('SEARCH:: Studio Match: [{0}] Compare Studio - Site Studio "{1} - {2}"'.format((compareStudio == siteStudio), compareStudio, siteStudio))
             if siteStudio == compareStudio:
-                self.log('SEARCH:: Studio: Full Word Match: Filename: {0} = Website: {1}'.format(compareStudio, siteStudio))
+                self.log('SEARCH:: Studio: Full Word Match: Filename: %s = Website: %s', compareStudio, siteStudio)
             elif siteStudio in compareStudio:
-                self.log('SEARCH:: Studio: Part Word Match: Website: {0} IN Filename: {1}'.format(siteStudio, compareStudio))
+                self.log('SEARCH:: Studio: Part Word Match: Website: %s IN Filename: %s', siteStudio, compareStudio)
             elif compareStudio in siteStudio:
-                self.log('SEARCH:: Studio: Part Word Match: Filename: {0} IN Website: {1}'.format(compareStudio, siteStudio))
+                self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
             else:
                 continue
 
-            # Search Website for date and reset if available to 1st of month (Website only gives yyyy)
-            # there can not be a difference more than 365 days
-            siteReleaseDate = 1900
-            try: 
-                siteReleaseDate = html.xpath('//span[contains(@itemprop,"copyrightYear")]')[0].text_content().strip()
-                siteReleaseDate = datetime.datetime(int(siteReleaseDate), 12, 31)
+            # Search Website for date - date is in format dd-mm-yyyy
+            try:
+                siteReleaseDate = html.xpath('//*[contains(self::dt|self::dd/preceding-sibling::dt[1],"Release Date:")]/text()')[1].strip()
+                self.log('SEARCH:: Release Date: %s', siteReleaseDate)
+                siteReleaseDate = siteReleaseDate.split("-")
+                siteReleaseDate = datetime.datetime(int(siteReleaseDate[2]), int(siteReleaseDate[1]), int(siteReleaseDate[0]))
             except:
                 siteReleaseDate = compareReleaseDate
                 self.log('SEARCH:: Error getting Site Release Date')
                 pass
 
+            # there can not be a difference more than 365 days
             timedelta = siteReleaseDate - compareReleaseDate
             self.log('SEARCH:: Compare Release Date - %s Site Date - %s : Dx [%s] days"', compareReleaseDate, siteReleaseDate, timedelta.days)
             if abs(timedelta.days) > 366:
                 self.log('SEARCH:: Difference of more than a year between file date and %s date from Website')
                 continue
 
-            # we should have a match on both studio, title and date now
+            # we should have a match on studio, title and year now
             results.Append(MetadataSearchResult(id = siteURL, name = saveTitle, score = 100, lang = lang))
-
-            # we have found a title that matches quit loop
             return
 
     def update(self, metadata, media, lang, force=True):
         folder, file = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
         self.log('-----------------------------------------------------------------------')
-        self.log('UPDATE:: Version - v.%s', VERSION_NO)
-        self.log('UPDATE:: Platform - %s %s', platform.system(), platform.release())
+        self.log('UPDATE:: CALLED v.%s', VERSION_NO)
         self.log('UPDATE:: File Name: %s', file)
         self.log('UPDATE:: Enclosing Folder: %s', folder)
         self.log('-----------------------------------------------------------------------')
 
         # Check filename format
         if not self.matchedFilename(file):
-            self.log('UPDATE:: Skipping %s because the file name is not in the expected format: (Studio) - Title (Year)', file)
+            self.log('SEARCH:: Skipping %s because the file name is not in the expected format: (Studio) - Title (Year)', file)
             return
 
         group_studio, group_title, group_year = self.getFilenameGroups(file)
         self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
 
-        html = HTML.ElementFromURL(metadata.id)
+        # Fetch HTML.
+        html = HTML.ElementFromURL(metadata.id, sleep=REQUEST_DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
         #    1.  Metadata that is set by Agent as default
         #        a. Studio               : From studio group of filename - no need to process this as above
         #        b. Title                : From title group of filename - no need to process this as is used to find it on website
-        #        c. Content Rating       : Always X
-        #        d. Tag line             : Corresponds to the url of movie, as Website does not show Tag lines
-        #        e. Originally Available : GayHotMovies only displays the Release Year, so use studio year
+        #        c. Tag line             : Corresponds to the url of movie
+        #        d. Content Rating       : Always X
         #    2.  Metadata retrieved from website
-        #        a. Summary 
-        #        b. Directors            : List of Drectors (alphabetic order)
-        #        c. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
-        #        d. Genres
-        #        e. Collections
-        #        f. Posters/Background 
+        #        a. Originally Available : Initially set from year group value + 1st Jan
+        #                                  if value found on website, replace this initial setting
+        #        b. Summary 
+        #        c. Directors            : List of Drectors (alphabetic order)
+        #        d. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
+        #        e. Country
+        #        f. Language
+        #        g. Posters/Background 
 
-        # 1a.   Studio
+        # 1a.   Studio - straight of the file name
         metadata.studio = group_studio
         self.log('UPDATE:: Studio: "%s"' % metadata.studio)
 
-        # 1b.   Title
+        # 1b.   Set Title
         metadata.title = group_title
         self.log('UPDATE:: Video Title: "%s"' % metadata.title)
 
-        # 1c.   Tagline
+        # 1c.   Set Tagline to URL.
         metadata.tagline = metadata.id
         self.log('UPDATE:: Tagline: %s', metadata.id)
 
-        # 1d.   Content Rating: Set to Adult
+        # 1d.   Set Content Rating to Adult
         metadata.content_rating = 'X'
         self.log('UPDATE:: Content Rating: X')
 
-        # 1e.   Originally Available At: Website lists date released as Year Value
-        metadata.originally_available_at = datetime.datetime(int(group_year), 12, 31)
+        # 2a.   Originally Available - default to December 31st of Filename value, then update with website value if found
+        metadata.originally_available_at = datetime.datetime(int(group_year), 12, 31).date()
         metadata.year = metadata.originally_available_at.year
+        self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)    
+
+        #       Search HomoActive Website for date and reset if available
         try:
-            siteReleaseDate = html.xpath('//span[@itemprop="copyrightYear"]/text()')[0]
-            metadata.originally_available_at = datetime.datetime(int(siteReleaseDate), 12, 31).date()
+            datepublished = html.xpath('//*[contains(self::dt|self::dd/preceding-sibling::dt[1],"Release Date:")]/text()')[1].strip()
+            datepublished = datepublished.split("-")
+            datepublished = datetime.datetime(int(datepublished[2]), int(datepublished[1]), int(datepublished[0]))
+            metadata.originally_available_at = datepublished
             metadata.year = metadata.originally_available_at.year
-        except: 
-            self.log('UPDATE:: Error setting Originally Available At')
+            self.log('UPDATE:: HomoActive - Originally Available Date: %s', metadata.originally_available_at)    
+        except:
+            self.log('UPDATE:: Error getting Date: %s')
             pass
 
-        # 2a.   Summary
+        # 2b.   Summary
         try:
-            summary = html.xpath('//span[contains(@class,"video_description")]')[0].text_content().strip()
-            summary = re.sub('<[^<]+?>', '', summary)
-            self.log('UPDATE:: Summary Found: %s' %str(summary))
+            summary = html.xpath('//div[@class="description"]/div[@class="std"]/text()')
+            summary = " ".join(summary)
+            summary = summary.replace('\n','').replace('\r','').strip()
+            self.log('UPDATE:: Summary Found: %s', summary)
             metadata.summary = summary
         except:
-            self.log('UPDATE:: Error getting Summary')
+            self.log('UPDATE:: Error getting Summary: %s')
             pass
 
-        # 2d.   Directors
+        # 2c.   Directors
         try:
             directordict = {}
-            htmldirector = html.xpath('//a[contains(@href,"https://www.gayhotmovies.com/director/")]/span/text()')
+            htmldirector = html.xpath('//*[contains(self::dt|self::dd/preceding-sibling::dt[1],"Director:")]/text()')
             self.log('UPDATE:: Director List %s', htmldirector)
             for directorname in htmldirector:
                 director = directorname.strip()
                 if (len(director) > 0):
                     directordict[director] = None
+
             # sort the dictionary and add kv to metadata
             metadata.directors.clear()
             for key in sorted (directordict): 
                 director = metadata.directors.new()
                 director.name = key
-        except:
-            self.log('UPDATE:: Error getting Director(s)')
+        except Exception as e:
+            self.log('UPDATE:: Error getting Director(s): %s', e)
+            pass
 
-        # 2e.   Cast
-        #   default to using thumbnails from GayHotMovies as they don't seem to use the same actor names as IAFD, if thumbail has empty gif go to IAFD
+        # 2d.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
         try:
             castdict = {}
-            htmlcast = html.xpath('//a[contains(@href,"https://www.gayhotmovies.com/porn-star/") and (@title) and (@rel)]/img')
-            self.log('UPDATE:: Cast List %s', htmlcast)
+            htmlcast = html.xpath('//*[contains(self::dt|self::dd/preceding-sibling::dt[1],"Actors:")]/a/text()')
             for castname in htmlcast:
-                cast = castname.get('alt').lower().replace('(male)', '').title()
-                image = castname.get('src')
-                self.log('UPDATE:: Cast Name - %s [ %s ]', cast, image)
+                cast = castname.strip()
                 if (len(cast) > 0):
-                    castdict[cast] = image if not 'empty_mal.gif' in image else self.getIAFDActorImage(cast)
+                    castdict[cast] = self.getIAFDActorImage(cast)
 
             # sort the dictionary and add kv to metadata
             metadata.roles.clear()
@@ -303,78 +323,42 @@ class GHMAgent(Agent.Movies):
                 role = metadata.roles.new()
                 role.name = key
                 role.photo = castdict[key]
-        except:
-            self.log('UPDATE:: Error getting Cast')
-
-        # 2f.   Genres
-        try:
-            metadata.genres.clear()
-            htmlgenres = html.xpath('//a[contains(@href,"https://www.gayhotmovies.com/category/")]/span/text()')
-            self.log('UPDATE:: %s Genres Found: "%s"', len(htmlgenres), htmlgenres)
-            for genre in htmlgenres:
-                if '>' in genre:
-                    genre = genre.split('>')[1]
-                genre.strip()
-                if (len(genre) > 0):
-                    metadata.genres.add(genre)
-        except:
-            self.log('UPDATE:: Error getting Genres')
-
-        # 2g.   Collections
-        try:
-            metadata.collections.clear()
-            htmlcollections = html.xpath('//a[contains(@href,"https://www.gayhotmovies.com/series/")]/text()')
-            self.log('UPDATE:: %s Collections Found: "%s"', len(htmlcollections), htmlcollections)
-            for collection in htmlcollections:
-                collection = collection.strip()
-                if (len(collection) > 0):
-                    metadata.collections.add(collection)
-        except:
-            self.log('UPDATE:: Error getting Collections')
+        except Exception as e:
+            self.log('UPDATE - Error getting Cast: %s', e)
             pass
 
-        # 2h.   Poster
+        # 2e.   Country
         try:
-            posterurl = html.xpath('//div[@class="lg_inside_wrap"]/@data-front')[0]
-            self.log('UPDATE:: Movie Front Thumbnail Found: "%s"', posterurl)
-            validPosterList = [posterurl]
-            if posterurl not in metadata.posters:
-                try:
-                    metadata.posters[posterurl] = Proxy.Preview(HTTP.Request(posterurl).content, sort_order = 1)
-                except:
-                    self.log('UPDATE:: Error getting Poster') 
-                    pass
+            country = html.xpath('//*[contains(self::dt|self::dd/preceding-sibling::dt[1],"Country:")]/text()')[1]
+            country = country.replace('\n','').replace('\r','').strip()
+            self.log('UPDATE:: Country: %s', country)
+            metadata.countries = [country]
+        except Exception as e:
+            self.log('UPDATE:: Error getting Country: %s', e)
+            pass
+
+        # 2f.   Posters - Front Cover set to poster
+        try:
+            image = html.xpath('//img[@class="gallery-image"]/@src')[0]
+            self.log('UPDATE:: Movie Poster Found: "%s"', image)
+            validPosterList = [image]
+            if image not in metadata.posters:
+                metadata.posters[image] = Proxy.Preview(HTTP.Request(image).content, sort_order = 1)
             #  clean up and only keep the poster we have added
             metadata.posters.validate_keys(validPosterList)
+        except Exception as e:
+            self.log('UPDATE:: Error getting Poster Art: %s', e)
+            pass     
 
-            arturl = html.xpath('//div[@class="lg_inside_wrap"]/@data-back')[0]
-            self.log('UPDATE:: Movie Backgound Art Thumbnail Found: "%s"', arturl)
-            validArtList = [arturl]
-            if arturl not in metadata.art:
-                try:
-                    metadata.art[arturl] = Proxy.Preview(HTTP.Request(arturl).content, sort_order = 1)
-                except:
-                    self.log('UPDATE:: Error getting Background Art') 
-                    pass
-            #  clean up and only keep the background art we have added
+        # 2g.   Background Art - Back Cover to background art - 2nd image in list is usually back of dvd
+        try:
+            image = html.xpath('//img[@class="gallery-image"]/@src')[1]
+            self.log('UPDATE:: Movie Background Art Found: "%s"', image)
+            validArtList = [image]
+            if image not in metadata.art:
+                metadata.art[image] = Proxy.Preview(HTTP.Request(image).content, sort_order = 1)
+            #  clean up and only keep the Art we have added
             metadata.art.validate_keys(validArtList)
-        except:
-            #       sometimes no back cover exists... on some old movies
-            try:
-                self.log('UPDATE:: Movie Cover Picture Found: OLD')
-                posterurl = html.xpath('//img[contains(@itemprop,"image") and contains(@id,"cover") and contains(@class,"cover")]')[0]
-                posterurl = posterurl.get('src')
-                self.log('UPDATE:: Movie Cover Picture Found: "%s"', posterurl)
-                validPosterList = [posterurl]
-                if posterurl not in metadata.posters:
-                    try:
-                        metadata.posters[posterurl] = Proxy.Preview(HTTP.Request(posterurl).content, sort_order = 1)
-                    except:
-                        self.log('UPDATE:: Error getting Poster') 
-                        pass
-                #  clean up and only keep the poster we have added
-                metadata.posters.validate_keys(validPosterList)
-            except:
-                self.log('UPDATE:: Error getting Poster/Background Art:')
-                pass
-
+        except Exception as e:
+            self.log('UPDATE:: Error getting Background Art: %s', e)
+            pass       

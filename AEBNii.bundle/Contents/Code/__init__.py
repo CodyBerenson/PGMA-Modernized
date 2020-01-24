@@ -2,8 +2,8 @@
 import datetime, linecache, platform, os, re, string, sys, urllib
 
 # Version / Log Title 
-VERSION_NO = '2019.08.12.0'
-PLUGIN_LOG_TITLE = 'AEBN ii'
+VERSION_NO = '2019.12.31.0'
+PLUGIN_LOG_TITLE = 'AEBN II'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
 # if title on website has a hyphen in its title that does not correspond to a colon replace it with an em dash in the corresponding position
@@ -65,7 +65,7 @@ class AEBNii(Agent.Movies):
             myString = 'a ' + myString.replace(', a', '', 1)
 
         # remove vol/volume/part and vol.1 etc wording as filenames dont have these to maintain a uniform search across all websites and remove all non alphanumeric characters
-        myString = myString.replace('&', 'and').replace(' 1', '').replace(' vol.', '').replace(' volume', '').replace(' part ','')
+        myString = myString.replace('&', 'and').replace(' 1', '').replace(' vol.', '').replace(' volume', '').replace(' part','')
 
         # strip diacritics
         myString = String.StripDiacritics(myString)
@@ -133,8 +133,8 @@ class AEBNii(Agent.Movies):
         # compare Studio - used to check against the studio name on website
         compareStudio = self.NormaliseComparisonString(group_studio)
 
-        #  Release date default to January 1st of Filename value compare against release date on AEBN
-        compareReleaseDate = datetime.datetime(int(group_year), 1, 1)
+        #  Release date default to December 31st of Filename value compare against release date on AEBN
+        compareReleaseDate = datetime.datetime(int(group_year), 12, 31)
 
         # replace en-dash with hyphen as film in aebn has a hyphen in its title in corresponding position
         # saveTitle corresponds to the real title of the movie.
@@ -142,17 +142,18 @@ class AEBNii(Agent.Movies):
         self.log('SEARCH:: Original Group Title: %s', saveTitle)
 
         # compareTitle will be used to search against the titles on the website, remove all umlauts, accents and ligatures
-        searchTitle = String.StripDiacritics(saveTitle.lower())
-        searchTitle = searchTitle.replace('-', '').replace('–', '-')
+        compareTitle = self.NormaliseComparisonString(saveTitle)
 
         # Search Query - for use to search the internet
+        searchTitle = String.StripDiacritics(saveTitle.lower())
+        searchTitle = searchTitle.replace('-', '').replace('–', '-')
         searchQuery = BASE_SEARCH_URL % String.URLEncode(searchTitle)
         self.log('SEARCH:: Search Query: %s', searchQuery)
 
-        compareTitle = self.NormaliseComparisonString(saveTitle)
-
         # Finds the entire media enclosure <DIV> elements then steps through them
         titleList = HTML.ElementFromURL(searchQuery, sleep=REQUEST_DELAY).xpath('//*[@class="movie"]')
+        self.log('SEARCH:: Titles List: %s Found', len(titleList))
+
         for title in titleList:
             siteTitle = title.findall("div/a")[0].get("title")
             siteTitle = self.NormaliseComparisonString(siteTitle)
@@ -172,11 +173,11 @@ class AEBNii(Agent.Movies):
             for siteStudio in htmlstudio:
                 siteStudio = self.NormaliseComparisonString(siteStudio)
                 if siteStudio == compareStudio:
-                    self.log('SEARCH:: Studio: Full Word Match: Filename: %s = Website: %s', compareStudio, siteStudio)
+                    self.log('SEARCH:: Studio: Full Word Match: Filename: {0} = Website: {1}'.format(compareStudio, siteStudio))
                 elif siteStudio in compareStudio:
-                    self.log('SEARCH:: Studio: Part Word Match: Website: %s IN Filename: %s', siteStudio, compareStudio)
+                    self.log('SEARCH:: Studio: Part Word Match: Website: {0} IN Filename: {1}'.format(siteStudio, compareStudio))
                 elif compareStudio in siteStudio:
-                    self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
+                    self.log('SEARCH:: Studio: Part Word Match: Filename: {0} IN Website: {1}'.format(compareStudio, siteStudio))
                 else:
                     continue
 
@@ -224,7 +225,7 @@ class AEBNii(Agent.Movies):
         #    1.  Metadata that is set by Agent as default
         #        a. Studio               : From studio group of filename - no need to process this as above
         #        b. Title                : From title group of filename - no need to process this as is used to find it on website
-        #        c. Tag line             : Corresponds to the url of movie, as AEBN does not show Tag lines
+        #        c. Tag line             : Corresponds to the url of movie
         #        d. Content Rating       : Always X
         #    2.  Metadata retrieved from website
         #        a. Originally Available : Initially set from year group value + 1st Jan
@@ -252,8 +253,8 @@ class AEBNii(Agent.Movies):
         metadata.content_rating = 'X'
         self.log('UPDATE:: Content Rating: X')
 
-        # 2a.   Originally Available - default to January 1st of Filename value, then update with website value if found
-        metadata.originally_available_at = datetime.datetime(int(group_year), 1, 1).date()
+        # 2a.   Originally Available - default to December 31st of Filename value, then update with website value if found
+        metadata.originally_available_at = datetime.datetime(int(group_year), 12, 31).date()
         metadata.year = metadata.originally_available_at.year
         self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)    
 

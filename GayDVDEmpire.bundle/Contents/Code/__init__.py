@@ -62,7 +62,7 @@ class GDEAgent(Agent.Movies):
             myString = 'a ' + myString.replace(', a', '', 1)
 
         # remove vol/volume/part and vol.1 etc wording as filenames dont have these to maintain a uniform search across all websites and remove all non alphanumeric characters
-        myString = myString.replace('&', 'and').replace(' 1', '').replace(' vol.', '').replace(' volume', '').replace(' part ','')
+        myString = myString.replace('&', 'and').replace(' vol.', '').replace(' volume', '').replace(' part','')
 
         # strip diacritics
         myString = String.StripDiacritics(myString)
@@ -161,25 +161,27 @@ class GDEAgent(Agent.Movies):
         # compare Studio - used to check against the studio name on website
         compareStudio = self.NormaliseComparisonString(group_studio)
 
-        #  Release date default to January 1st of Filename value compare against release date on website
-        compareReleaseDate = datetime.datetime(int(group_year), 1, 1)
+        #  Release date default to December 31st of Filename value compare against release date on website
+        compareReleaseDate = datetime.datetime(int(group_year), 12, 31)
 
         # saveTitle corresponds to the real title of the movie.
         saveTitle = group_title
         self.log('SEARCH:: Original Group Title: %s', saveTitle)
 
-        # gaydvdempire displays colons in the titles and hyphens, so convert hyphens to columns and em-dash to hyphens
-        searchTitle = String.StripDiacritics(saveTitle.lower())
-        searchTitle = searchTitle.replace(' -', ':').replace('–', '-')
+        # compareTitle will be used to search against the titles on the website, remove all umlauts, accents and ligatures
+        compareTitle = self.NormaliseComparisonString(saveTitle)
         
         # Search Query - for use to search the internet
+        searchTitle = String.StripDiacritics(saveTitle.lower())
+        searchTitle = searchTitle.replace(' -', ':').replace('–', '-')
         searchQuery = GDE_SEARCH_MOVIES % String.URLEncode(searchTitle)
         self.log('SEARCH:: Search Query: %s', searchQuery)
 
-        compareTitle = self.NormaliseComparisonString(saveTitle)
 
         # Finds the entire media enclosure <DIV> elements then steps through them
         titleList = HTML.ElementFromURL(searchQuery).xpath('//div[contains(@class,"row list-view-item")]')
+        self.log('SEARCH:: Titles List: %s Found', len(titleList))
+
         for title in titleList:
             # siteTitle = The text in the 'title' - Gay DVDEmpire - displays its titles in SORT order
             titlehref = title.xpath('.//a[contains(@label,"Title")]')[0]
@@ -193,12 +195,13 @@ class GDEAgent(Agent.Movies):
             # Site Studio Check
             siteStudio = title.xpath('.//small[contains(text(),"studio")]/following-sibling::text()[1]')[0]
             siteStudio = self.NormaliseComparisonString(siteStudio)
+            self.log('SEARCH:: Studio:: {0}'.format(siteStudio))
             if siteStudio == compareStudio:
-                self.log('SEARCH:: Studio: Full Word Match: Filename: %s = Website: %s', compareStudio, siteStudio)
+                self.log('SEARCH:: Studio: Full Word Match: Filename: {0} = Website: {1}'.format(compareStudio, siteStudio))
             elif siteStudio in compareStudio:
-                self.log('SEARCH:: Studio: Part Word Match: Website: %s IN Filename: %s', siteStudio, compareStudio)
+                self.log('SEARCH:: Studio: Part Word Match: Website: {0} IN Filename: {1}'.format(siteStudio, compareStudio))
             elif compareStudio in siteStudio:
-                self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
+                self.log('SEARCH:: Studio: Part Word Match: Filename: {0} IN Website: {1}'.format(compareStudio, siteStudio))
             else:
                 continue
 
@@ -206,7 +209,7 @@ class GDEAgent(Agent.Movies):
             whatDate = 'Filename Date'
             found, data = self.getProductInfoData()
             if found:
-                #   Set Originally Available At to Release Date if found else default to default to January 1st of Filename value
+                #   Set Originally Available At to Release Date if found else default to default to December 31st of Filename value
                 if 'Released' in data:
                     try:
                         siteReleaseDate = Datetime.ParseDate(data['Released']).date()
@@ -220,7 +223,7 @@ class GDEAgent(Agent.Movies):
                 if Prefs['useproductiondate']:
                     if 'Production Year' in data:
                         try:
-                            siteReleaseDate = datetime.datetime(int(data['Production Year']), 1, 1).date()
+                            siteReleaseDate = datetime.datetime(int(data['Production Year']), 12, 31).date()
                             whatDate = 'Production Year'
                         except: 
                             siteReleaseDate = compareReleaseDate
@@ -231,7 +234,7 @@ class GDEAgent(Agent.Movies):
                 self.log('SEARCH:: Compare Release Date - %s Site Date - %s : Dx [%s] days"', compareReleaseDate, siteReleaseDate, timedelta.days)
                 if abs(timedelta.days) > 366:
                     self.log('SEARCH:: Difference of more than a year between file date and %s date from Website')
-                    pass
+                    continue
             else:
                 self.log('SEARCH:: Error getting Product Information')
                 pass
