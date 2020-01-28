@@ -2,7 +2,7 @@
 import datetime, linecache, platform, os, re, string, sys, urllib
 
 # Version / Log Title 
-VERSION_NO = '2019.12.22.5'
+VERSION_NO = '2019.12.22.6'
 PLUGIN_LOG_TITLE = 'WayBig'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -10,8 +10,8 @@ PLUGIN_LOG_TITLE = 'WayBig'
 FILEPATTERN = Prefs['regex']
 
 # URLS
-WAYBIG_BASEURL = 'https://www.waybig.com'
-WAYBIG_SEARCH_MOVIES = WAYBIG_BASEURL + '/blog/index.php?s=%s'
+BASE_URL = 'https://www.waybig.com'
+BASE_SEARCH_URL = BASE_URL + '/blog/index.php?s=%s'
 
 def Start():
     HTTP.CacheTime = CACHE_1WEEK
@@ -73,7 +73,7 @@ class WAYBIGAgent(Agent.Movies):
 
     # clean search string before searching on WayBig
     def CleanSearchString(self, myString):
-        # Waybig seems to fail to find Titles which have aN apostrophe in them split at first incident and take first split, just to search but not compare
+        # Waybig seems to fail to find Titles which have an apostrophe in them split at first incident and take first split, just to search but not compare
         invalidCharacters = ["'", "‘"]
         for Char in invalidCharacters:
             if Char in myString:
@@ -167,7 +167,7 @@ class WAYBIGAgent(Agent.Movies):
 
         for searchTitle in searchTitleList:
             compareTitle = compareTitleList[searchTitleList.index(searchTitle)]
-            searchQuery = WAYBIG_SEARCH_MOVIES % String.URLEncode(searchTitle)
+            searchQuery = BASE_SEARCH_URL % String.URLEncode(searchTitle)
             self.log('SEARCH:: Search Query: %s', searchQuery) 
 
             html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore')
@@ -248,6 +248,7 @@ class WAYBIGAgent(Agent.Movies):
         #        a. Summary 
         #        b. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
         #        c. Poster
+        #        d. Background Art
 
         # 1a.   Studio
         metadata.studio = group_studio
@@ -327,20 +328,29 @@ class WAYBIGAgent(Agent.Movies):
             self.log('UPDATE:: Error getting Cast')
             pass
 
-        # 2c.   Poster
+        # 2c/d.   Posters /Background art - Front Cover set to poster
         try:
-            #posterurl = html.xpath('//div[@class="entry-content"]/p/a[@target="_self" or @target="_blank"]/img/@src|//div[@class="entry-content"]/div/a[@target="_blank"]/img/@src')[0]
-            posterurl = html.xpath('//a[@target="_self" or @target="_blank"]/img[@src and @height and @width and @alt]/@src')[0]
-            validPosterList = [posterurl]
-            if posterurl not in metadata.posters:
-                try:
-                    self.log('UPDATE:: Movie Thumbnail Found: %s', posterurl)
-                    metadata.posters[posterurl] = Proxy.Preview(HTTP.Request(posterurl).content, sort_order = 1)
-                except:
-                    self.log('UPDATE:: Error getting Poster') 
-                    pass
+            imageList = html.xpath('//a[@target="_self" or @target="_blank"]/img[@src and (@height or @width) and @alt]/@src')
+            image = imageList[0]
+            self.log('UPDATE:: Movie Poster Found: "%s"', image)
+            validPosterList = [image]
+            if image not in metadata.posters:
+                metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
             #  clean up and only keep the poster we have added
             metadata.posters.validate_keys(validPosterList)
-        except:
-            self.log('UPDATE:: Error getting Poster Art:')
-            pass
+
+        except Exception as e:
+            self.log('UPDATE:: Error getting Poster Art: %s', e)
+            pass     
+
+        try:
+            image = imageList[1]
+            self.log('UPDATE:: Movie Background Art Found: "%s"', image)
+            validArtList = [image]
+            if image not in metadata.art:
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
+            #  clean up and only keep the Art we have added
+            metadata.art.validate_keys(validArtList)
+        except Exception as e:
+            self.log('UPDATE:: Error getting Background Art: %s', e)
+            pass       
