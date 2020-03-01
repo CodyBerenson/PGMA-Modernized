@@ -362,7 +362,7 @@ class HelixStudios(Agent.Movies):
 		# Try to get and process the video cast
 		metadata.roles.clear()
 		rolethumbs = list();
-		cast_list = html.xpath('//*[@id="main"]/div[1]/div[1]/div[2]/table/tr[3]/td/a')
+		cast_list = html.xpath('//*[@Class="scene-info"]/table/tr[1]/td/a')
 		for cast_obj in cast_list:
 				model_href = BASE_URL % cast_obj.get('href')
 				model_page = HTML.ElementFromURL(model_href, sleep=REQUEST_DELAY)
@@ -383,7 +383,7 @@ class HelixStudios(Agent.Movies):
 				rolethumbs.append(cropped_headshot)
 
 		index = 0
-		htmlcast = html.xpath('//*[@id="main"]/div[1]/div[1]/div[2]/table/tr[3]/td/a/text()')
+		htmlcast = html.xpath('//*[@Class="scene-info"]/table/tr[1]/td/a/text()')
 		for cast in htmlcast:
 			cname = cast.strip()
 			if (len(cname) > 0):

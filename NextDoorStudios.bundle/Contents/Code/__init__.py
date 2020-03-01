@@ -13,7 +13,7 @@ PLUGIN_LOG_TITLE = 'NextDoorStudios'	# Log Title
 
 VERSION_NO = '2019.11.30.166'
 REQUEST_DELAY = 0
-BASE_VIDEO_DETAILS_URL = 'https://www.nextdoorstudios.com/en/show/nextdoorworld/%s'
+BASE_VIDEO_DETAILS_URL = 'https://www.nextdoorstudios.com/en/video/ss/%s'
 BASE_VIDEO_SEARCH_URL = 'https://www.nextdoorstudios.com/en/search/%s'
 
 # File names to match for this agent
@@ -99,7 +99,7 @@ class NextDoorStudios(Agent.Movies):
 
 			self.Log('SEARCH - Video URL: %s', movie_url)
 			html = HTML.ElementFromURL(movie_url, sleep=REQUEST_DELAY)
-			video_title = html.xpath("//h1[@class='title']/text()")[0]
+			video_title = html.xpath("//div[@id='playerTitle']/h1/text()")[0]
 			results.Append(MetadataSearchResult(id = movie_url, name = video_title, score = 100, lang = lang))
 			return
 		else:
@@ -205,8 +205,8 @@ class NextDoorStudios(Agent.Movies):
 		metadata.tagline = url
 		video_title = ""
 		try:
-			metadata.title = html.xpath("//h1[@class='title']/text()")[0]
-			video_title = html.xpath("//h1[@class='title']/text()")[0]
+			metadata.title = html.xpath("//div[@id='playerTitle']/h1/text()")[0]
+			video_title = html.xpath("//div[@id='playerTitle']/h1/text()")[0]
 			self.Log('UPDATE - video_title: "%s"', metadata.title)
 		except Exception as e:
 			Log(e)
@@ -214,7 +214,7 @@ class NextDoorStudios(Agent.Movies):
 
 		# Try to get description text
 		try:
-			descx = html.xpath("normalize-space(string(//div[@id='sceneInfo']/div[2]))")
+			descx = html.xpath("normalize-space(string(//p[@class='sceneDesc showMore']))")
 			descx = descx.replace("Video Description: ","")
 			self.Log('UPDATE - Description: %s', descx)
 			metadata.summary=descx
