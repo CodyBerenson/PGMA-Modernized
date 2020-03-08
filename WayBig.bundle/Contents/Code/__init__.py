@@ -2,12 +2,16 @@
 import datetime, linecache, platform, os, re, string, sys, urllib
 
 # Version / Log Title 
-VERSION_NO = '2019.12.22.6'
+VERSION_NO = '2019.12.22.9'
 PLUGIN_LOG_TITLE = 'WayBig'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
 # if title on website has a hyphen in its title that does not correspond to a colon replace it with an em dash in the corresponding position
 FILEPATTERN = Prefs['regex']
+DELAY = int(Prefs['delay'])
+
+# online image cropper
+IMAGECROPPER = "https://cdn.vigue.me/unsafe/0x0:{0}x{1}/{2}"
 
 # URLS
 BASE_URL = 'https://www.waybig.com'
@@ -20,14 +24,13 @@ def Start():
 def ValidatePrefs():
     pass
 
-class WAYBIGAgent(Agent.Movies):
+class WayBig(Agent.Movies):
     name = 'WayBig (IAFD)'
-    languages = [Locale.Language.NoLanguage, Locale.Language.English]
-    fallback_agent = False
+    languages = [Locale.Language.English]
     primary_provider = False
     preference = True
     media_types = ['Movie']
-    contributes_to = ['com.plexapp.agents.cockporn']
+    contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultScenes']
     accepts_from = ['com.plexapp.agents.localmedia']
 
     def matchedFilename(self, file):
@@ -120,6 +123,7 @@ class WAYBIGAgent(Agent.Movies):
         self.log('SEARCH:: Version - v.%s', VERSION_NO)
         self.log('SEARCH:: Platform - %s %s', platform.system(), platform.release())
         self.log('SEARCH:: Prefs->debug - %s', Prefs['debug'])
+        self.log('SEARCH::      ->delay - %s', Prefs['delay'])
         self.log('SEARCH::      ->regex - %s', FILEPATTERN)
         self.log('SEARCH:: media.title - %s', media.title)
         self.log('SEARCH:: media.items[0].parts[0].file - %s', media.items[0].parts[0].file)
@@ -170,7 +174,7 @@ class WAYBIGAgent(Agent.Movies):
             searchQuery = BASE_SEARCH_URL % String.URLEncode(searchTitle)
             self.log('SEARCH:: Search Query: %s', searchQuery) 
 
-            html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore')
+            html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
             titleList = html.xpath('.//div[contains(@class,"row")]/div[contains(@class,"content-col col")]/article')
             self.log('SEARCH:: Titles List: %s Found', len(titleList))
 
@@ -234,7 +238,7 @@ class WAYBIGAgent(Agent.Movies):
         self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
 
         # the ID is composed of the webpage for the video and its thumbnail
-        html = HTML.ElementFromURL(metadata.id.split('|')[0], timeout=60, errors='ignore')
+        html = HTML.ElementFromURL(metadata.id.split('|')[0], timeout=60, errors='ignore', sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
         #    1.  Metadata that is set by Agent as default
@@ -281,7 +285,7 @@ class WAYBIGAgent(Agent.Movies):
             if arturl not in metadata.art:
                 try:
                     self.log('UPDATE:: Background Art URL: %s', arturl)
-                    metadata.art[arturl] = Proxy.Preview(HTTP.Request(arturl).content, sort_order = 1)
+                    metadata.art[arturl] = Proxy.Media(HTTP.Request(arturl).content, sort_order = 1)
                 except:
                     self.log('UPDATE:: Error getting Background Art') 
                     pass
@@ -330,9 +334,15 @@ class WAYBIGAgent(Agent.Movies):
 
         # 2c/d.   Posters /Background art - Front Cover set to poster
         try:
-            imageList = html.xpath('//a[@target="_self" or @target="_blank"]/img[@src and (@height or @width) and @alt]/@src')
-            image = imageList[0]
-            self.log('UPDATE:: Movie Poster Found: "%s"', image)
+            imageList = html.xpath('//a[@target="_self" or @target="_blank"]/img[@src and (@height or @width) and @alt]')
+            image = imageList[0].get('src')
+            width = int(imageList[0].get('width'))
+            height = int(imageList[0].get('height'))
+            desiredHeight = int(width * 1.5)
+            self.log('UPDATE:: Movie Poster Found: size; (%sx%s) address; "%s"', width, height, image)
+            if height > desiredHeight:
+                image = IMAGECROPPER.format(width, desiredHeight, image)                    
+                self.log('UPDATE:: Cropped Image; "%s"', image)
             validPosterList = [image]
             if image not in metadata.posters:
                 metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
@@ -344,8 +354,14 @@ class WAYBIGAgent(Agent.Movies):
             pass     
 
         try:
-            image = imageList[1]
-            self.log('UPDATE:: Movie Background Art Found: "%s"', image)
+            image = imageList[1].get('src')
+            width = int(imageList[1].get('width'))
+            height = int(imageList[1].get('height'))
+            desiredHeight = int(width * 1.5)
+            self.log('UPDATE:: Movie Poster Found: size; (%sx%s) address; "%s"', width, height, image)
+            if height > desiredHeight:
+                image = IMAGECROPPER.format(width, desiredHeight, image)                    
+                self.log('UPDATE:: Cropped Image; "%s"', image)
             validArtList = [image]
             if image not in metadata.art:
                 metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)

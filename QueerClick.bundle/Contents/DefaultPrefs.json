@@ -1,9 +1,9 @@
 [
     {
         "id": "regex",
-        "label": "Regular expression to match files by. Must contain named groups for Studio, Movie Title and Release Year.",
+        "label": "Regular expression to match files by. Must contain named groups for Studio, Movie Title and Release Year, Genre Group is optional.",
         "type": "text",
-        "default": "^\\((?P<studio>.+)\\) - (?P<title>.+) \\((?P<year>\\d{4})\\)"
+        "default": "^\\((?P<studio>.+)\\) - (?P<title>[^-]+)(?:(?P<genres>.+))? \\((?P<year>\\d{4})\\)"
     },
     {
         "id": "debug",

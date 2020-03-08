@@ -10,5 +10,12 @@
         "label": "Enable debug logging",
         "type": "bool",
         "default": "true"
+    },
+    {
+        "id": "delay",
+        "label": "Seconds to pause after a network request was made, ensuring undue burden is not placed on the web server.",
+        "type": "enum",
+        "values": ["0", "10", "20", "30", "40", "50", "60"],
+        "default": "0"
     }
 ]

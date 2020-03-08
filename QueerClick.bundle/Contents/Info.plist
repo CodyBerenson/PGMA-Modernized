@@ -5,9 +5,9 @@
         <key>CFBundleDevelopmentRegion</key>
         <string>English</string>
         <key>CFBundleExecutable</key>
-        <string>Fagalicious</string>
+        <string>CDUniverse</string>
         <key>CFBundleIdentifier</key>
-        <string>com.plexapp.agents.Fagalicious</string>
+        <string>com.plexapp.agents.QueerClick</string>
         <key>CFBundleInfoDictionaryVersion</key>
         <string>6.0</string>
         <key>CFBundleShortVersionString</key>
@@ -20,17 +20,17 @@
         <string>2</string>
         <key>PlexPluginClass</key>
         <string>Agent</string>
-        <key>PlexPluginCodePolicy</key>
-        <string>Elevated</string>
         <key>PlexPluginMode</key>
         <string>AlwaysOn</string>
+        <key>PlexPluginCodePolicy</key>
+        <string>Elevated</string>
         <key>PlexAgentAttributionText</key>
         <string>
             <![CDATA[
-                Fagalicious Agent [IAFD] (v2020-01-18)<br/>
+                QueerClick [IAFD] (v2020-02-08)<br/>
                 <br/>
-                is an agent to scrape related metadata from Fagalicious and Actor thumbnails from IAFD. 
-                If gay adult content is your thing, it's highly recommended that you give them a look!
+                is an agent to scrape related metadata from the great site, QueerClick and Actor thumbnails from IAFD<br/>
+                If gay adult content is your thing, it's highly recommended that you give them a look!<br/>
                 This agent is completely unafilliated with with either website in any way.<br/>
                 If you have problems neither of them will help you.
             ]]>

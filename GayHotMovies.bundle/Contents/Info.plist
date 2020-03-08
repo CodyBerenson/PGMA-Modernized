@@ -26,14 +26,14 @@
 	<string>AlwaysOn</string>
 	<key>PlexAgentAttributionText</key>
 	<string>
-<![CDATA[
-Gay Hot Movies Agent [IAFD] (v2019-08-10)
-<br /><br />
-is an agent to scrape related metadata from the great site, Gay Hot Movies and Actor thumbnails from IAFD
-If gay adult content is your thing, it's highly recommended that you give them a look!
-This agent is completely unafilliated with with either website in any way.  
-If you have problems neither of them will help you.
-]]>
+		<![CDATA[
+			Gay Hot Movies Agent [IAFD] (v2019-08-10)<br/>
+			<br/>
+			is an agent to scrape related metadata from the great site, Gay Hot Movies and Actor thumbnails from IAFD<br/>
+			If gay adult content is your thing, it's highly recommended that you give them a look!<br/>
+			This agent is completely unafilliated with with either website in any way.<br/>
+			If you have problems neither of them will help you.
+		]]>
 	</string>    
 </dict>
 </plist>

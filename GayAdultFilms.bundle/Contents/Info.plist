@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>CFBundleDevelopmentRegion</key>
+        <string>English</string>
+        <key>CFBundleExecutable</key>
+        <string>Gay Adult Films</string>
+        <key>CFBundleIdentifier</key>
+        <string>com.plexapp.agents.GayAdultFilms</string>
+        <key>PlexAgentAttributionText</key>
+        <string>
+            <![CDATA[
+                2020-02-07<br/>
+                <font size="4" color="red"><a href="https://github.com/acvigue/pgma">GAY ADULT FILMS:</a></font><br/><br/>
+                Plex metadata agent for fetching metadata from websites that sell gay adult films. 
+                The metadata that contributes to this agent comes from the following websites:<br/>
+                    1. Adult Entertainment Broadcast Network<br/>
+                    2. CD Universe<br/>
+					3. Gay DVD Empire<br/>
+                    4. Gay Entertainment Video Index<br/>
+                    5. Gay Hot Movies<br/>
+                    6. Homo Active
+            ]]>        
+        </string>
+        <key>CFBundleInfoDictionaryVersion</key>
+        <string>6.0</string>
+        <key>CFBundleShortVersionString</key>
+        <string>1.0</string>
+        <key>CFBundleSignature</key>
+        <string>????</string>
+        <key>CFBundleVersion</key>
+        <string>1.0</string>
+        <key>PlexFrameworkVersion</key>
+        <string>2</string>
+        <key>PlexPluginClass</key>
+        <string>Agent</string>
+        <key>PlexPluginMode</key>
+        <string>AlwaysOn</string>
+        <key>PlexClientPlatforms</key>
+        <string>*</string>
+    </dict>
+</plist>

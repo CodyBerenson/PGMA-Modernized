@@ -5,9 +5,21 @@
         <key>CFBundleDevelopmentRegion</key>
         <string>English</string>
         <key>CFBundleExecutable</key>
-        <string>Fagalicious</string>
+        <string>Gay Adult Scenes</string>
         <key>CFBundleIdentifier</key>
-        <string>com.plexapp.agents.Fagalicious</string>
+        <string>com.plexapp.agents.GayAdultScenes</string>
+        <key>PlexAgentAttributionText</key>
+        <string>
+            <![CDATA[
+                2020-02-07<br/>
+                <font size="4" color="blue"><a href="https://github.com/acvigue/pgma">GAY ADULT SCENES:</a></font><br/><br/>
+                Plex metadata agent for fetching metadata from gay blog sites. 
+                The metadata that contributes to this agent comes from the following websites:<br/>
+                    1. Fagalicious<br/>
+                    2. QueerClick<br/>
+                    3. WayBig<br/>
+            ]]>        
+        </string>
         <key>CFBundleInfoDictionaryVersion</key>
         <string>6.0</string>
         <key>CFBundleShortVersionString</key>
@@ -20,20 +32,9 @@
         <string>2</string>
         <key>PlexPluginClass</key>
         <string>Agent</string>
-        <key>PlexPluginCodePolicy</key>
-        <string>Elevated</string>
         <key>PlexPluginMode</key>
         <string>AlwaysOn</string>
-        <key>PlexAgentAttributionText</key>
-        <string>
-            <![CDATA[
-                Fagalicious Agent [IAFD] (v2020-01-18)<br/>
-                <br/>
-                is an agent to scrape related metadata from Fagalicious and Actor thumbnails from IAFD. 
-                If gay adult content is your thing, it's highly recommended that you give them a look!
-                This agent is completely unafilliated with with either website in any way.<br/>
-                If you have problems neither of them will help you.
-            ]]>
-        </string>
+        <key>PlexClientPlatforms</key>
+        <string>*</string>
     </dict>
 </plist>

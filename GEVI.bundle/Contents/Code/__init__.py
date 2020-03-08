@@ -2,7 +2,7 @@
 import datetime, linecache, platform, os, re, string, sys, urllib, lxml
 
 # Version / Log Title 
-VERSION_NO = '2019.12.25.1'
+VERSION_NO = '2019.12.25.3'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -10,7 +10,7 @@ PLUGIN_LOG_TITLE = 'GEVI'
 FILEPATTERN = Prefs['regex']
  
 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-REQUEST_DELAY = 0
+DELAY = int(Prefs['delay'])
 
 # URLS
 BASE_URL = 'https://www.gayeroticvideoindex.com'
@@ -26,10 +26,10 @@ def ValidatePrefs():
 class GEVI(Agent.Movies):
     name = 'GEVI (IAFD)'
     languages = [Locale.Language.English]
-    primary_provider = True
+    primary_provider = False
     preference = True
     media_types = ['Movie']
-    contributes_to = ['com.plexapp.agents.cockporn']
+    contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultFilms']
     accepts_from = ['com.plexapp.agents.localmedia']
 
     def matchedFilename(self, file):
@@ -106,6 +106,7 @@ class GEVI(Agent.Movies):
         self.log('SEARCH:: Version - v.%s', VERSION_NO)
         self.log('SEARCH:: Platform - %s %s', platform.system(), platform.release())
         self.log('SEARCH:: Prefs->debug - %s', Prefs['debug'])
+        self.log('SEARCH::      ->delay - %s', Prefs['delay'])
         self.log('SEARCH::      ->regex - %s', FILEPATTERN)
         self.log('SEARCH:: media.title - %s', media.title)
         self.log('SEARCH:: media.items[0].parts[0].file - %s', media.items[0].parts[0].file)
@@ -158,7 +159,7 @@ class GEVI(Agent.Movies):
         self.log('SEARCH:: Search Query: %s', searchQuery)
 
         # Finds the entire media enclosure <Table> element then steps through the rows
-        titleList = HTML.ElementFromURL(searchQuery, sleep=REQUEST_DELAY).xpath('//table[contains(@class,"d")]/tr')
+        titleList = HTML.ElementFromURL(searchQuery, sleep=DELAY).xpath('//table[contains(@class,"d")]/tr')
         self.log('SEARCH:: Titles List: %s Found', len(titleList))
 
         for title in titleList:
@@ -220,14 +221,14 @@ class GEVI(Agent.Movies):
 
         # Check filename format
         if not self.matchedFilename(file):
-            self.log('SEARCH:: Skipping %s because the file name is not in the expected format: (Studio) - Title (Year)', file)
+            self.log('UPDATE:: Skipping %s because the file name is not in the expected format: (Studio) - Title (Year)', file)
             return
 
         group_studio, group_title, group_year = self.getFilenameGroups(file)
         self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
 
         # Fetch HTML.
-        html = HTML.ElementFromURL(metadata.id, sleep=REQUEST_DELAY)
+        html = HTML.ElementFromURL(metadata.id, sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
         #    1.  Metadata that is set by Agent as default
@@ -343,7 +344,7 @@ class GEVI(Agent.Movies):
             self.log('UPDATE:: Movie Poster Found: "%s"', image)
             validPosterList = [image]
             if image not in metadata.posters:
-                metadata.posters[image] = Proxy.Preview(HTTP.Request(image).content, sort_order = 1)
+                metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
             #  clean up and only keep the poster we have added
             metadata.posters.validate_keys(validPosterList)
 
@@ -353,7 +354,7 @@ class GEVI(Agent.Movies):
             self.log('UPDATE:: Movie Background Art Found: "%s"', image)
             validArtList = [image]
             if image not in metadata.art:
-                metadata.art[image] = Proxy.Preview(HTTP.Request(image).content, sort_order = 1)
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
             #  clean up and only keep the Art we have added
             metadata.art.validate_keys(validArtList)
         except Exception as e:

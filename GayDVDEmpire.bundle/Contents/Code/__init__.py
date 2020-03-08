@@ -2,17 +2,20 @@
 import datetime, linecache, platform, os, re, string, sys, urllib
 
 # Version / Log Title 
-VERSION_NO = '2019.08.12.0'
+VERSION_NO = '2019.08.12.1'
 PLUGIN_LOG_TITLE = 'GayDVDEmpire'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
 # if title on website has a hyphen in its title that does not correspond to a colon replace it with an em dash in the corresponding position
 FILEPATTERN = Prefs['regex']
 
+# Delay used when requesting HTML, may be good to have to prevent being banned from the site
+DELAY = int(Prefs['delay'])
+
 # URLS
-GDE_BASEURL = 'http://www.gaydvdempire.com'
-GDE_SEARCH_MOVIES = GDE_BASEURL + '/allsearch/search?view=list&q=%s'
-GDE_MOVIE_INFO = GDE_BASEURL + '/%s/'
+BASE_URL = 'http://www.gaydvdempire.com'
+BASE_SEARCH_MOVIES = BASE_URL + '/allsearch/search?view=list&q=%s'
+BASE_MOVIE_INFO = BASE_URL + '/%s/'
 
 def Start():
     HTTP.CacheTime = CACHE_1WEEK
@@ -21,13 +24,13 @@ def Start():
 def ValidatePrefs():
     pass
 
-class GDEAgent(Agent.Movies):
-    name = 'Gay DVD Empire (IAFD)'
-    languages = [Locale.Language.NoLanguage, Locale.Language.English]
-    primary_provider = True
+class GayDVDEmpire(Agent.Movies):
+    name = 'GayDVDEmpire (IAFD)'
+    languages = [Locale.Language.English]
+    primary_provider = False
     preference = True
     media_types = ['Movie']
-    contributes_to = ['com.plexapp.agents.cockporn']
+    contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultFilms']
     accepts_from = ['com.plexapp.agents.localmedia']
 
     def matchedFilename(self, file):
@@ -136,6 +139,7 @@ class GDEAgent(Agent.Movies):
         self.log('SEARCH:: Platform - %s %s', platform.system(), platform.release())
         self.log('SEARCH:: Prefs->debug - %s', Prefs['debug'])
         self.log('SEARCH::      ->regex - %s', FILEPATTERN)
+        self.log('SEARCH::      ->delay - %s', Prefs['delay'])
         self.log('SEARCH::      ->useproductiondate - %s', Prefs['useproductiondate'])
         self.log('SEARCH::      ->ignoregenres - %s', Prefs['ignoregenres'])
         self.log('SEARCH:: media.title - %s', media.title)
@@ -174,12 +178,12 @@ class GDEAgent(Agent.Movies):
         # Search Query - for use to search the internet
         searchTitle = String.StripDiacritics(saveTitle.lower())
         searchTitle = searchTitle.replace(' -', ':').replace('–', '-')
-        searchQuery = GDE_SEARCH_MOVIES % String.URLEncode(searchTitle)
+        searchQuery = BASE_SEARCH_MOVIES % String.URLEncode(searchTitle)
         self.log('SEARCH:: Search Query: %s', searchQuery)
 
 
         # Finds the entire media enclosure <DIV> elements then steps through them
-        titleList = HTML.ElementFromURL(searchQuery).xpath('//div[contains(@class,"row list-view-item")]')
+        titleList = HTML.ElementFromURL(searchQuery, sleep=DELAY).xpath('//div[contains(@class,"row list-view-item")]')
         self.log('SEARCH:: Titles List: %s Found', len(titleList))
 
         for title in titleList:
@@ -240,7 +244,7 @@ class GDEAgent(Agent.Movies):
                 pass
 
             # curID = the ID portion of the href in 'movie'
-            siteURL = GDE_MOVIE_INFO % titlehref.get('href').split('/',2)[1]
+            siteURL = BASE_MOVIE_INFO % titlehref.get('href').split('/',2)[1]
             self.log('SEARCH:: Site Title URL: %s' % str(siteURL))
 
             # we should have a match on both studio and title now
@@ -266,7 +270,7 @@ class GDEAgent(Agent.Movies):
         group_studio, group_title, group_year = self.getFilenameGroups(file)
         self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
 
-        html = HTML.ElementFromURL(metadata.id)
+        html = HTML.ElementFromURL(metadata.id, sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
         #    1.  Metadata that is set by Agent as default
@@ -421,7 +425,7 @@ class GDEAgent(Agent.Movies):
             validPosterList = [posterurl]
             if posterurl not in metadata.posters:
                 try:
-                    metadata.posters[posterurl] = Proxy.Preview(HTTP.Request(posterurl).content, sort_order = 1)
+                    metadata.posters[posterurl] = Proxy.Media(HTTP.Request(posterurl).content, sort_order = 1)
                 except:
                     self.log('UPDATE:: Error getting Poster') 
                     pass
@@ -432,7 +436,7 @@ class GDEAgent(Agent.Movies):
             validArtList = [arturl]
             if arturl not in metadata.art:
                 try:
-                    metadata.art[arturl] = Proxy.Preview(HTTP.Request(arturl).content, sort_order = 1)
+                    metadata.art[arturl] = Proxy.Media(HTTP.Request(arturl).content, sort_order = 1)
                 except:
                     self.log('UPDATE:: Error getting Background Art') 
                     pass

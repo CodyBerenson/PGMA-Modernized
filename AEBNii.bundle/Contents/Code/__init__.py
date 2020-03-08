@@ -2,7 +2,7 @@
 import datetime, linecache, platform, os, re, string, sys, urllib
 
 # Version / Log Title 
-VERSION_NO = '2019.12.31.0'
+VERSION_NO = '2019.12.31.1'
 PLUGIN_LOG_TITLE = 'AEBN II'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -10,7 +10,7 @@ PLUGIN_LOG_TITLE = 'AEBN II'
 FILEPATTERN = Prefs['regex']
  
 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-REQUEST_DELAY = 0
+DELAY = int(Prefs['delay'])
 
 # URLS
 BASE_URL = 'http://gay.theater.aebn.net'
@@ -26,10 +26,10 @@ def ValidatePrefs():
 class AEBNii(Agent.Movies):
     name = 'AEBN ii (IAFD)'
     languages = [Locale.Language.English]
-    primary_provider = True
+    primary_provider = False
     preference = True
     media_types = ['Movie']
-    contributes_to = ['com.plexapp.agents.cockporn']
+    contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultFilms']
     accepts_from = ['com.plexapp.agents.localmedia']
 
     def matchedFilename(self, file):
@@ -65,7 +65,7 @@ class AEBNii(Agent.Movies):
             myString = 'a ' + myString.replace(', a', '', 1)
 
         # remove vol/volume/part and vol.1 etc wording as filenames dont have these to maintain a uniform search across all websites and remove all non alphanumeric characters
-        myString = myString.replace('&', 'and').replace(' 1', '').replace(' vol.', '').replace(' volume', '').replace(' part','')
+        myString = myString.replace('&', 'and').replace(' 1 ', '').replace(' vol. ', '').replace(' volume ', '').replace(' part ','')
 
         # strip diacritics
         myString = String.StripDiacritics(myString)
@@ -106,6 +106,7 @@ class AEBNii(Agent.Movies):
         self.log('SEARCH:: Version - v.%s', VERSION_NO)
         self.log('SEARCH:: Platform - %s %s', platform.system(), platform.release())
         self.log('SEARCH:: Prefs->debug - %s', Prefs['debug'])
+        self.log('SEARCH::      ->delay - %s', Prefs['delay'])
         self.log('SEARCH::      ->regex - %s', FILEPATTERN)
         self.log('SEARCH:: media.title - %s', media.title)
         self.log('SEARCH:: media.items[0].parts[0].file - %s', media.items[0].parts[0].file)
@@ -151,7 +152,7 @@ class AEBNii(Agent.Movies):
         self.log('SEARCH:: Search Query: %s', searchQuery)
 
         # Finds the entire media enclosure <DIV> elements then steps through them
-        titleList = HTML.ElementFromURL(searchQuery, sleep=REQUEST_DELAY).xpath('//*[@class="movie"]')
+        titleList = HTML.ElementFromURL(searchQuery, sleep=DELAY).xpath('//*[@class="movie"]')
         self.log('SEARCH:: Titles List: %s Found', len(titleList))
 
         for title in titleList:
@@ -168,7 +169,7 @@ class AEBNii(Agent.Movies):
             self.log('SEARCH:: Title url: %s', siteURL)
 
             # need to check that the studio name of this title matches to the filename's studio
-            html = HTML.ElementFromURL(siteURL, sleep=REQUEST_DELAY)
+            html = HTML.ElementFromURL(siteURL, sleep=DELAY)
             htmlstudio = html.xpath('//div[@class="md-detailsStudio"]/span[2]/a/text()')
             for siteStudio in htmlstudio:
                 siteStudio = self.NormaliseComparisonString(siteStudio)
@@ -212,14 +213,14 @@ class AEBNii(Agent.Movies):
 
         # Check filename format
         if not self.matchedFilename(file):
-            self.log('SEARCH:: Skipping %s because the file name is not in the expected format: (Studio) - Title (Year)', file)
+            self.log('UPDATE:: Skipping %s because the file name is not in the expected format: (Studio) - Title (Year)', file)
             return
 
         group_studio, group_title, group_year = self.getFilenameGroups(file)
         self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
 
         # Fetch HTML.
-        html = HTML.ElementFromURL(metadata.id, sleep=REQUEST_DELAY)
+        html = HTML.ElementFromURL(metadata.id, sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
         #    1.  Metadata that is set by Agent as default
@@ -266,8 +267,8 @@ class AEBNii(Agent.Movies):
             metadata.originally_available_at = datepublished
             metadata.year = metadata.originally_available_at.year
             self.log('UPDATE:: AEBN - Originally Available Date: %s', metadata.originally_available_at)    
-        except:
-            self.log('UPDATE:: Error getting Date: %s')
+        except Exception as e:
+            self.log('UPDATE:: Error getting Date: %s', e)
             pass
 
         # 2b.   Summary
@@ -277,8 +278,8 @@ class AEBNii(Agent.Movies):
             summary = summary.replace('\r', '').replace('\n', ' ')
             self.log('UPDATE:: Summary Found: %s', summary)
             metadata.summary = summary
-        except:
-            self.log('UPDATE:: Error getting Summary: %s')
+        except Exception as e:
+            self.log('UPDATE:: Error getting Summary: %s', e)
             pass
 
         # 2c.   Directors
@@ -359,7 +360,7 @@ class AEBNii(Agent.Movies):
             validPosterList = [posterurl]
             if posterurl not in metadata.posters:
                 try:
-                    metadata.posters[posterurl] = Proxy.Preview(HTTP.Request(posterurl).content, sort_order = 1)
+                    metadata.posters[posterurl] = Proxy.Media(HTTP.Request(posterurl).content, sort_order = 1)
                 except:
                     self.log('UPDATE:: Error getting Poster') 
                     pass
@@ -371,7 +372,7 @@ class AEBNii(Agent.Movies):
             validArtList.append(arturl)
             if arturl not in metadata.art:
                 try:
-                    metadata.art[arturl] = Proxy.Preview(HTTP.Request(arturl).content, sort_order = 1)
+                    metadata.art[arturl] = Proxy.Media(HTTP.Request(arturl).content, sort_order = 1)
                 except:
                     self.log('UPDATE:: Error getting Background Art') 
                     pass
@@ -379,4 +380,4 @@ class AEBNii(Agent.Movies):
             metadata.art.validate_keys(validArtList)
         except Exception as e:
             self.log('UPDATE:: Error getting Poster/Background Art: %s', e)
-            pass       
+            pass 
