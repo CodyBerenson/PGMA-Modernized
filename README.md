@@ -13,23 +13,31 @@
 
 ### Please Read
 Usage for the Agents:
+
 Feature Films:
+
 (Studio) - Title (Year).ext
+
 e.g.  
 
 (Titan Media) - Copperhead Canyon (2008).mp4
+
 (Raging Stallion Studios) - Manscent (2019).mp4
+
 (Men) - Camp Chaos (2019).mp4
 
 The matching agent will return the movie poster annd relevant metadata,actor thumbnails (matched from IAFD.com) 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/film.jpg)
 
 Scens from blogs:
+
 (Studio) - Title (Year).ext
 e.g., 
 
 (Men Series) - Bellamy Bradley, Alex Fortin, William Seed and Morgan Blake in 'Battle Buddies, Part 4' (2017).mp4
+
 (Active Duty) - Phoenix River and Ryan Jordan (2018).mp4
+
 (Sean Cody) - Jess Tops Deacon (Bareback) (2018).mp4
 
 The matching agent will return a scene poster and relevant metadata,actor thumbnails (matched from IAFD.com) 
