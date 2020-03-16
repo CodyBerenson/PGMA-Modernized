@@ -1,7 +1,7 @@
 # Plex Metadata Agents for Gay Adult Video
 **Please read all this document before usage**
 
-![](https://raw.githubusercontent.com/acvigue/pgma/master/images/preview.gif)
+![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/preview.gif)
 ### How to install
 1. Clone this repository to your Plex server and copy the Cockporn.bundle folder as well as any of the studio agents to your plugin folder. [Can't find the folder?](https://support.plex.tv/hc/en-us/articles/201106098-How-do-I-find-the-Plug-Ins-folder)
 2. Login to the web interface and open settings.
