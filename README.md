@@ -12,12 +12,34 @@
 **View the README inside the studio folders to correctly label your files**
 
 ### Please Read
-Use site-specific agents if possible, limit search queries (for example, name your movie 3321.mp4 instead of Skater Boys.mp4, it makes it easier on the Agent)
+Usage for the Agents:
+Feature Films:
+(Studio) - Title (Year).ext
+e.g.  
 
-If site-specific agents aren't possible, please use the XML agent.
-1. Place video in the setup XML folder
-2. Search for metadata
-3. Edit XML file in metadata subfolder (XML/metadata/&lt;video&gt;.xml)
+(Titan Media) - Copperhead Canyon (2008).mp4
+(Raging Stallion Studios) - Manscent (2019).mp4
+(Men) - Camp Chaos (2019).mp4
+
+The matching agent will return the movie poster annd relevant metadata,actor thumbnails (matched from IAFD.com) 
+![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/film.jpg)
+
+Scens from blogs:
+(Studio) - Title (Year).ext
+e.g., 
+
+(Men Series) - Bellamy Bradley, Alex Fortin, William Seed and Morgan Blake in 'Battle Buddies, Part 4' (2017).mp4
+(Active Duty) - Phoenix River and Ryan Jordan (2018).mp4
+(Sean Cody) - Jess Tops Deacon (Bareback) (2018).mp4
+
+The matching agent will return a scene poster and relevant metadata,actor thumbnails (matched from IAFD.com) 
+![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/scene.jpg)
+
+Some tips:  
+1.  Especially for WayBig, replace curly opening quotes with the standard single quote'.  Waybig will use a curly opening quote; if copying and pasting from the WayBig site, replace with a standard single quote.
+2.  The Agent will attempt to crop the scene poster for display in plex, using either an inline cropping service, or if unavailable a visual basic script (for Windows PMS installations).  If both fail, the agent will return the (often oversized) poster as-is from the blog site.  
 
 ## Disclaimer
+
+
 This project stores no images or metadata. All metadata is downloaded directly from publicly-available sources
