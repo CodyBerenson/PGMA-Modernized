@@ -2,13 +2,26 @@
 import datetime, linecache, platform, os, re, string, sys, urllib
 
 # Version / Log Title 
-VERSION_NO = '2020.01.18.5'
+VERSION_NO = '2020.01.18.6'
 PLUGIN_LOG_TITLE = 'Fagalicious'
+
+# PLEX API
+load_file = Core.storage.load
+
+DEBUG = Prefs['debug']
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
 # if title on website has a hyphen in its title that does not correspond to a colon replace it with an em dash in the corresponding position
 FILEPATTERN = Prefs['regex']
+
+# Seconds to pause after a network request was made, ensuring undue burden is not placed on the web server
 DELAY = int(Prefs['delay'])
+
+# online image cropper
+THUMBOR = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}"
+
+# backup VBScript image cropper
+CROPPER = r'"%localappdata%\Plex Media Server\Plug-ins\QueerClick.bundle\Contents\Code\ImageCropper.vbs" "{0}" "{1}" {2} {3}'
 
 # URLS
 BASE_URL = 'https://fagalicious.com'
@@ -125,16 +138,17 @@ class Fagalicious(Agent.Movies):
                 self.log('SELF:: NO IAFD Actor Page')
 
     def log(self, message, *args):
-        if Prefs['debug']:
+        if DEBUG:
             Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
 
     def search(self, results, media, lang, manual):
         self.log('-----------------------------------------------------------------------')
         self.log('SEARCH:: Version - v.%s', VERSION_NO)
         self.log('SEARCH:: Platform - %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs->debug - %s', Prefs['debug'])
-        self.log('SEARCH::      ->delay - %s', Prefs['delay'])
-        self.log('SEARCH::      ->regex - %s', FILEPATTERN)
+        self.log('SEARCH:: Prefs->debug      - %s', DEBUG)
+        self.log('SEARCH::      ->delay      - %s', DELAY)
+        self.log('SEARCH::      ->regex      - %s', FILEPATTERN)
+        self.log('SEARCH::      ->thumbor    - %s', THUMBOR)
         self.log('SEARCH:: media.title - %s', media.title)
         self.log('SEARCH:: media.items[0].parts[0].file - %s', media.items[0].parts[0].file)
         self.log('SEARCH:: media.items - %s', media.items)
@@ -349,13 +363,40 @@ class Fagalicious(Agent.Movies):
             metadata.genres.add(genre)
 
         # 2d/e.   Posters /Background art - Front Cover set to poster
+        imageList = html.xpath('//div[@class="mypicsgallery"]/a/img[@src and @data-src]')
         try:
-            imageList = html.xpath('//div[@class="mypicsgallery"]/a/img[@src and @data-src]/@data-src')
-            image = imageList[0]
-            self.log('UPDATE:: Movie Poster Found: "%s"', image)
-            validPosterList = [image]
-            if image not in metadata.posters:
+            thumborImage = None
+            scriptImage = None
+            image = imageList[0].get('data-src')
+            width = int(imageList[0].get('width'))
+            height = int(imageList[0].get('height'))
+            # width:height ratio 1:1.5
+            desiredHeight = int(width * 1.5)
+            self.log('UPDATE:: Movie Poster Found: size; (%sx%s) address; "%s"', width, height, image)
+            # cropping needs to be done
+            if height > desiredHeight:
+                thumborImage = THUMBOR.format(width, desiredHeight, image)
+                # if thumbor service is down - use vbscript (only windows)
+                if not thumborImage and os.name == 'nt':
+                    FileName = r"%temp%\{0}".format(image.split("/")[-1])
+                    cmd = r'CScript.exe ' + CROPPER.format(image, FileName, width, desiredHeight)
+                    self.log('UPDATE:: Command: %s', cmd)
+                    subprocess.call(cmd)
+                    scriptImage = load_file(FileName)
+                    validPosterList = [FileName]
+                    metadata.posters[scriptImage] = Proxy.Media(scriptImage, sort_order = 1)
+                    self.log('UPDATE:: Script Image; "%s"', scriptImage)                        
+                else:
+                    validPosterList = [thumborImage]
+                    metadata.posters[thumborImage] = Proxy.Media(HTTP.Request(thumborImage).content, sort_order = 1)
+                    self.log('UPDATE:: Thumbor Image; "%s"', thumborImage)
+
+            # if no cropping needed or cropping did not occur
+            if height <= desiredHeight or (height > desiredHeight and not thumborImage and not scriptImage):
+                validPosterList = [image]
                 metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
+                self.log('UPDATE:: Image; "%s"', image)
+
             #  clean up and only keep the poster we have added
             metadata.posters.validate_keys(validPosterList)
 
@@ -364,15 +405,43 @@ class Fagalicious(Agent.Movies):
             pass     
 
         try:
+            thumborImage = None
+            scriptImage = None
             if len(imageList) > 1:
-                image = imageList[1]
+                del imageList[0]
             else:
-                image = html.xpath('//figure[@class="gallery-item"]/div/img[@src and @data-src]/@data-src')[0]
+                imageList = html.xpath('//figure[@class="gallery-item"]/div/img[@src and @data-src]')
 
-            self.log('UPDATE:: Movie Background Art Found: "%s"', image)
-            validArtList = [image]
-            if image not in metadata.art:
+            image = imageList[0].get('data-src')
+            width = int(imageList[0].get('width'))
+            height = int(imageList[0].get('height'))
+            # width:height ratio 16:9
+            desiredHeight = int(width * 0.5625)
+            self.log('UPDATE:: Movie Poster Found: size; (%sx%s) address; "%s"', width, height, image)
+            # cropping needs to be done
+            if height > desiredHeight:
+                thumborImage = THUMBOR.format(width, desiredHeight, image)
+                # if thumbor service is down - use vbscript (only windows)
+                if not thumborImage and os.name == 'nt':
+                    FileName = r"%temp%\{0}".format(image.split("/")[-1])
+                    cmd = r'CScript.exe ' + CROPPER.format(image, FileName, width, desiredHeight)
+                    self.log('UPDATE:: Command: %s', cmd)
+                    subprocess.call(cmd)
+                    scriptImage = load_file(FileName)
+                    validArtList = [FileName]
+                    metadata.art[scriptImage] = Proxy.Media(scriptImage, sort_order = 1)
+                    self.log('UPDATE:: Loaded Image; "%s"', scriptImage)                        
+                else:
+                    validArtList = [thumborImage]
+                    metadata.art[thumborImage] = Proxy.Media(HTTP.Request(thumborImage).content, sort_order = 1)
+                    self.log('UPDATE:: Thumbor Image; "%s"', thumborImage)
+
+            # if no cropping needed or cropping did not occur
+            if height <= desiredHeight or (height > desiredHeight and not thumborImage and not scriptImage):
+                validArtList = [image]
                 metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
+                self.log('UPDATE:: Image; "%s"', image)
+
             #  clean up and only keep the Art we have added
             metadata.art.validate_keys(validArtList)
         except Exception as e:

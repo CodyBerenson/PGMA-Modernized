@@ -17,5 +17,11 @@
         "type": "enum",
         "values": ["0", "10", "20", "30", "40", "50", "60"],
         "default": "0"
+    },
+    {
+        "id": "thumbor",
+        "label": "Web Address of Thumbor: A smart imaging service. It enables on-demand onlines cropping, resizing and flipping of images",
+        "type": "text",
+        "default": "http://34.67.235.246:8888/unsafe"
     }
 ]
