@@ -28,7 +28,8 @@ Dim strImageURL, strImageFile
     End With
 
     Set objImageFile = CreateObject("WIA.ImageFile")
-    objImageFile.LoadFile strImageFile 'load image
+    objImageFile.LoadFile strImageFile 							' load image
+    If objImageFile.Height <= intHeight Then intHeight = 0		' to cover for images which do not have image height attributes set
 
     Set objImageProcess = CreateObject("WIA.ImageProcess") 
     objImageProcess.Filters.Add objImageProcess.FilterInfos("Crop").filterid 'setup filter

@@ -47,8 +47,8 @@ The matching agent will return a scene poster and relevant metadata,actor thumbn
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/scene.jpg)
 
 Some tips:  
-1.  Especially for WayBig, replace curly opening quotes with the standard single quote'.  Waybig will use a curly opening quote; if copying and pasting from the WayBig site, replace with a standard single quote.
-2.  The Agent will attempt to crop the scene poster for display in plex, using either an inline cropping service, or if unavailable a visual basic script (for Windows PMS installations).  If both fail, the agent will return the (often oversized) poster as-is from the blog site.  
+
+1.  The Agent will attempt to crop the scene poster for display in plex, using either an inline cropping service, or if unavailable a visual basic script (for Windows PMS installations).  If both fail, the agent will return the (often oversized) poster as-is from the blog site.  
 
 ## Disclaimer
 

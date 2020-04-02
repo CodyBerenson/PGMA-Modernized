@@ -2,7 +2,7 @@
 import datetime, linecache, platform, os, re, string, sys, urllib, lxml
 
 # Version / Log Title 
-VERSION_NO = '2019.12.25.3'
+VERSION_NO = '2019.12.25.5'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -154,6 +154,10 @@ class GEVI(Agent.Movies):
                 uptofirstDigit = firstDigit - 1
                 searchTitle = searchTitle[0:uptofirstDigit]
                 break
+
+        # remove initial 'the' in title as it messes GEVIs search algorithm
+        if searchTitle[:4] == 'the ':
+            searchTitle = searchTitle[4:]
         
         searchQuery = BASE_SEARCH_URL % String.URLEncode(searchTitle)
         self.log('SEARCH:: Search Query: %s', searchQuery)
@@ -188,6 +192,7 @@ class GEVI(Agent.Movies):
             elif compareStudio in siteStudio:
                 self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
             else:
+                self.log('SEARCH:: Studio: Full Match Fail: Filename: %s != Website: %s', compareStudio, siteStudio)
                 continue
 
             # Search Website for date - date is in format yyyy - so default to December 31st
@@ -359,4 +364,4 @@ class GEVI(Agent.Movies):
             metadata.art.validate_keys(validArtList)
         except Exception as e:
             self.log('UPDATE:: Error getting Poster/Background Art: %s', e)
-            pass       
+            pass

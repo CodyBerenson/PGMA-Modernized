@@ -1,8 +1,8 @@
 ﻿# QueerClick - (IAFD)
-import datetime, linecache, platform, os, re, string, sys, urllib, urllib2, subprocess, traceback
+import datetime, linecache, platform, os, re, string, sys, urllib, urllib2, subprocess
 
 # Version / Log Title 
-VERSION_NO = '2020.02.14.6'
+VERSION_NO = '2020.02.14.8'
 PLUGIN_LOG_TITLE = 'QueerClick'
 
 # PLEX API
@@ -21,7 +21,7 @@ DELAY = int(Prefs['delay'])
 THUMBOR = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}"
 
 # backup VBScript image cropper
-CROPPER = r'"%localappdata%\Plex Media Server\Plug-ins\QueerClick.bundle\Contents\Code\ImageCropper.vbs" "{0}" "{1}" {2} {3}'
+CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/QueerClick.bundle/Contents/Code/ImageCropper.vbs" "{1}" "{2}" "{3}" "{4}"'
 
 # URLS
 BASE_URL = 'https://queerclick.com'
@@ -407,89 +407,118 @@ class QueerClick(Agent.Movies):
                 # Only need two images
                 if imageCount > 2:
                     break
-                
+
                 # convert to numeric
                 width = int(image.get('width'))
                 height = int(height)
                 self.log('UPDATE:: Found Image %s. "%s"', imageCount, src)
                 imageList.append([src, width, height])
+        except Exception as e:
+            self.log('UPDATE:: Error getting Posters/Background Art: %s', e)
+            pass
 
-            # Poster - set first image as poster
-            try:
-                thumborImage = None
-                scriptImage = None
-                image, width, height = imageList[0]
-                # width:height ratio 1:1.5
-                desiredHeight = int(width * 1.5)
-                self.log('UPDATE:: Movie Poster Found: size; (%sx%s) address; "%s"', width, height, image)
-                # cropping needs to be done
-                if height > desiredHeight:
-                    thumborImage = THUMBOR.format(width, desiredHeight, image)
+        # Posters
+        try:
+            thumborImage = None
+            scriptImage = None
+            image, width, height = imageList[0]
+
+            # width:height ratio 1:1.5
+            desiredHeight = int(width * 1.5)
+
+            self.log('UPDATE:: Movie Poster Found: width; %s address; "%s"', width, image)
+
+            # cropping needs to be done
+            if height > desiredHeight:
+                height = desiredHeight
+                try:
+                    # crop by default
+                    thumborImage = THUMBOR.format(width, height, image)
+                    validPosterList = [thumborImage]
+                    metadata.posters[thumborImage] = Proxy.Media(HTTP.Request(thumborImage).content, sort_order = 1)
+                    self.log('UPDATE:: Thumbor Image; "%s"', thumborImage)
+                except Exception as e:
                     # if thumbor service is down - use vbscript (only windows)
-                    if not thumborImage and os.name == 'nt':
-                        FileName = r"%temp%\{0}".format(image.split("/")[-1])
-                        cmd = r'CScript.exe ' + CROPPER.format(image, FileName, width, desiredHeight)
-                        self.log('UPDATE:: Command: %s', cmd)
-                        subprocess.call(cmd)
-                        scriptImage = load_file(FileName)
-                        validPosterList = [FileName]
-                        metadata.posters[scriptImage] = Proxy.Media(scriptImage, sort_order = 1)
-                        self.log('UPDATE:: Script Image; "%s"', scriptImage)                        
-                    else:
-                        validPosterList = [thumborImage]
-                        metadata.posters[thumborImage] = Proxy.Media(HTTP.Request(thumborImage).content, sort_order = 1)
-                        self.log('UPDATE:: Thumbor Image; "%s"', thumborImage)
+                    thumborImage = None
+                    try:
+                        if os.name == 'nt':
+                            envVar = os.environ
+                            scriptImage = os.path.join(envVar['TEMP'], image.split("/")[-1]).replace('\\', '/')
+                            localappdata = envVar['LOCALAPPDATA'].replace('\\', '/')
+                            cmd = CROPPER.format(localappdata, image, scriptImage, width, height)
+                            self.log('UPDATE:: Command: %s', cmd)
 
-                # if no cropping needed or cropping did not occur
-                if height <= desiredHeight or (height > desiredHeight and not thumborImage and not scriptImage):
+                            subprocess.call(cmd)
+                            scriptImageData = load_file(scriptImage)
+                            validPosterList = [scriptImage]
+                            metadata.posters[scriptImage] = Proxy.Media(scriptImageData, sort_order = 1)
+                            self.log('UPDATE:: Script Image; "%s"', scriptImage)                        
+                    except Exception as e:
+                        scriptImage = None
+                        pass
+                    pass
+
+            # if cropping did not occur: use original image
+            if not thumborImage and not scriptImage:
                     validPosterList = [image]
                     metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
-                    self.log('UPDATE:: Image; "%s"', image)
+                    self.log('UPDATE:: Original Image; "%s"', image)
 
-                #  clean up and only keep the poster we have added
-                metadata.posters.validate_keys(validPosterList)
-            except Exception as e:
-                self.log('UPDATE:: Error getting Poster Art: %s', e)
-                pass
-
-            # Background Art - set second image to background art
-            try:
-                thumborImage = None
-                scriptImage = None
-                image, width, height = imageList[1]
-                # width:height ratio 16:9
-                desiredHeight = int(width * 0.5625)
-                self.log('UPDATE:: Movie Background Art Found: size; (%sx%s) address; "%s"', width, height, image)
-                # cropping needs to be done
-                if height > desiredHeight:
-                    thumborImage = THUMBOR.format(width, desiredHeight, image)
-                    # if thumbor service is down - use vbscript (only windows)
-                    if not thumborImage and os.name == 'nt':
-                        FileName = r"%temp%\{0}".format(image.split("/")[-1])
-                        cmd = r'CScript.exe ' + CROPPER.format(image, FileName, width, desiredHeight)
-                        self.log('UPDATE:: Command: %s', cmd)
-                        subprocess.call(cmd)
-                        scriptImage = load_file(FileName)
-                        validArtList = [FileName]
-                        metadata.art[scriptImage] = Proxy.Media(scriptImage, sort_order = 1)
-                        self.log('UPDATE:: Loaded Image; "%s"', scriptImage)                        
-                    else:
-                        validArtList = [thumborImage]
-                        metadata.art[thumborImage] = Proxy.Media(HTTP.Request(thumborImage).content, sort_order = 1)
-                        self.log('UPDATE:: Thumbor Image; "%s"', thumborImage)
-
-                # if no cropping needed or cropping did not occur
-                if height <= desiredHeight or (height > desiredHeight and not thumborImage and not scriptImage):
-                    validArtList = [image]
-                    metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
-                    self.log('UPDATE:: Image; "%s"', image)
-
-                #  clean up and only keep the Art we have added
-                metadata.art.validate_keys(validArtList)
-            except Exception as e:
-                self.log('UPDATE:: Error getting Background Art: %s', e)
-                pass
+            #  clean up and only keep the poster we have added
+            metadata.posters.validate_keys(validPosterList)
 
         except Exception as e:
-            self.log('UPDATE:: Error getting Movie Poster and Background Art: %s', e)
+            self.log('UPDATE:: Error getting Poster: %s', e)
+            pass
+
+        # Background Art - set second image to background art
+        try:
+            thumborImage = None
+            scriptImage = None
+            image, width, height = imageList[1]
+            # width:height ratio 16:9
+            desiredHeight = int(width * 0.5625)
+
+            self.log('UPDATE:: Background Art Found: width; %s address; "%s"', width, image)
+
+            # cropping needs to be done
+            if height > desiredHeight:
+                height = desiredHeight
+                try:
+                    # crop by default
+                    thumborImage = THUMBOR.format(width, height, image)
+                    validArtList = [thumborImage]
+                    metadata.art[thumborImage] = Proxy.Media(HTTP.Request(thumborImage).content, sort_order = 1)
+                    self.log('UPDATE:: Thumbor Image; "%s"', thumborImage)
+                except Exception as e:
+                    # if thumbor service is down - use vbscript (only windows)
+                    thumborImage = None
+                    try:
+                        if os.name == 'nt':
+                            envVar = os.environ
+                            scriptImage = os.path.join(envVar['TEMP'], image.split("/")[-1]).replace('\\', '/')
+                            localappdata = envVar['LOCALAPPDATA'].replace('\\', '/')
+                            cmd = CROPPER.format(localappdata, image, scriptImage, width, height)
+                            self.log('UPDATE:: Command: %s', cmd)
+
+                            subprocess.call(cmd)
+                            scriptImageData = load_file(scriptImage)
+                            validArtList = [scriptImage]
+                            metadata.art[scriptImage] = Proxy.Media(scriptImageData, sort_order = 1)
+                            self.log('UPDATE:: Script Image; "%s"', scriptImage)                        
+                    except Exception as e:
+                        scriptImage = None
+                        pass
+                    pass
+
+            # if cropping did not occur
+            if not thumborImage and not scriptImage:
+                validArtList = [image]
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
+                self.log('UPDATE:: Original Image; "%s"', image)
+
+            #  clean up and only keep the Art we have added
+            metadata.art.validate_keys(validArtList)
+        except Exception as e:
+            self.log('UPDATE:: Error getting Background Art: %s', e)
             pass

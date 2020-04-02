@@ -2,7 +2,7 @@
 import datetime, linecache, platform, os, re, string, sys, urllib
 
 # Version / Log Title 
-VERSION_NO = '2019.12.31.1'
+VERSION_NO = '2019.12.31.2'
 PLUGIN_LOG_TITLE = 'AEBN II'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -180,6 +180,7 @@ class AEBNii(Agent.Movies):
                 elif compareStudio in siteStudio:
                     self.log('SEARCH:: Studio: Part Word Match: Filename: {0} IN Website: {1}'.format(compareStudio, siteStudio))
                 else:
+                    self.log('SEARCH:: Studio: Full Match Fail: Filename: {0} != Website: {1}'.format(compareStudio, siteStudio))
                     continue
 
                 # Search Website for date and reset if available to 1st of month (AEBN only gives mm/yyyy)
@@ -356,28 +357,34 @@ class AEBNii(Agent.Movies):
             if thumburl[:2] == "//":
                 thumburl = 'http:' + thumburl
             self.log('UPDATE:: Movie Thumbnail Found: "%s"', thumburl)
-            posterurl = thumburl.replace('160w', 'xlf')
-            validPosterList = [posterurl]
-            if posterurl not in metadata.posters:
-                try:
-                    metadata.posters[posterurl] = Proxy.Media(HTTP.Request(posterurl).content, sort_order = 1)
-                except:
-                    self.log('UPDATE:: Error getting Poster') 
-                    pass
-            #  clean up and only keep the poster we have added
-            metadata.posters.validate_keys(validPosterList)
 
-            arturl = thumburl.replace('160w', 'xlb')
-            validArtList = [arturl]
-            validArtList.append(arturl)
-            if arturl not in metadata.art:
-                try:
-                    metadata.art[arturl] = Proxy.Media(HTTP.Request(arturl).content, sort_order = 1)
-                except:
-                    self.log('UPDATE:: Error getting Background Art') 
-                    pass
-            #  clean up and only keep the background art we have added
-            metadata.art.validate_keys(validArtList)
+            for suffix in ['xlf', 'bf']:
+                posterurl = thumburl.replace('160w', suffix)
+                validPosterList = [posterurl]
+                if posterurl not in metadata.posters:
+                    try:
+                        metadata.posters[posterurl] = Proxy.Media(HTTP.Request(posterurl).content, sort_order = 1)
+                        #  clean up and only keep the poster we have added
+                        metadata.posters.validate_keys(validPosterList)
+                        self.log('UPDATE:: Found Poster URL: %s', posterurl)
+                        break
+                    except:
+                        self.log('UPDATE:: Error No Poster URL: %s', posterurl)
+                        pass
+
+            for suffix in ['xlb', 'bb']:
+                arturl = thumburl.replace('160w', suffix)
+                validArtList = [arturl]
+                if arturl not in metadata.art:
+                    try:
+                        metadata.art[arturl] = Proxy.Media(HTTP.Request(arturl).content, sort_order = 1)
+                        #  clean up and only keep the background art we have added
+                        metadata.art.validate_keys(validArtList)
+                        self.log('UPDATE:: Found Background Art URL: %s', arturl)
+                        break
+                    except:
+                        self.log('UPDATE:: Error No Background Art URL: %s', arturl)
+                        pass
         except Exception as e:
             self.log('UPDATE:: Error getting Poster/Background Art: %s', e)
             pass 
