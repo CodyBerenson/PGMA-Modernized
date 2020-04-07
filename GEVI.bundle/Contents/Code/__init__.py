@@ -1,8 +1,17 @@
 ﻿# GEVI - (IAFD)
+'''
+                                    Version History
+                                    ---------------
+    Date            Version             Modification
+    7 Apr 2020      2019.12.25.7        Changed the agent to search past the first page of results
+
+---------------------------------------------------------------------------------------------------------------
+'''
+
 import datetime, linecache, platform, os, re, string, sys, urllib, lxml
 
 # Version / Log Title 
-VERSION_NO = '2019.12.25.5'
+VERSION_NO = '2019.12.25.7'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -14,7 +23,7 @@ DELAY = int(Prefs['delay'])
 
 # URLS
 BASE_URL = 'https://www.gayeroticvideoindex.com'
-BASE_SEARCH_URL = BASE_URL + '/search.php?type=t&where=b&query=%s&Search=Search&page=1'
+BASE_SEARCH_URL = BASE_URL + '/search.php?type=t&where=b&query={0}&Search=Search&page={1}'
 
 def Start():
     HTTP.CacheTime = CACHE_1WEEK
@@ -155,66 +164,108 @@ class GEVI(Agent.Movies):
                 searchTitle = searchTitle[0:uptofirstDigit]
                 break
 
-        # remove initial 'the' in title as it messes GEVIs search algorithm
-        if searchTitle[:4] == 'the ':
-            searchTitle = searchTitle[4:]
-        
-        searchQuery = BASE_SEARCH_URL % String.URLEncode(searchTitle)
-        self.log('SEARCH:: Search Query: %s', searchQuery)
+        # removal of definitive/indefinitive articles in title as it messes GEVIs search algorithm
+        # English, French and German
+        intialWords = ['a', 'an', 'un', 'une', 'ein', 'eine', 'the', 'le', 'la', 'les', 'das', 'die', 'der']
+        firstWord = searchTitle.split()[0]
+        if firstWord in intialWords:
+            self.log('SEARCH:: Remove Initial in/definitive article: %s', firstWord)
+            spliceAt = len(firstWord) + 1
+            searchTitle = searchTitle[spliceAt:]
 
         # Finds the entire media enclosure <Table> element then steps through the rows
-        titleList = HTML.ElementFromURL(searchQuery, sleep=DELAY).xpath('//table[contains(@class,"d")]/tr')
-        self.log('SEARCH:: Titles List: %s Found', len(titleList))
+        pageNumber = 0
+        morePages = True
+        while morePages:
+            pageNumber += 1
+            self.log('SEARCH:: Result Page No: %s', pageNumber)
 
-        for title in titleList:
-            siteTitle = title[0].text_content().strip()
-            if siteTitle == '':
-                break
+            searchQuery = BASE_SEARCH_URL.format(String.URLEncode(searchTitle), pageNumber)
+            self.log('SEARCH:: Search Query: %s', searchQuery)
+            html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
+            titleList = html.xpath('//table[contains(@class,"d")]/tr')
+            self.log('SEARCH:: Titles List: %s Found', len(titleList))
 
-            siteTitle = self.NormaliseComparisonString(siteTitle)
-            self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
-            if siteTitle != compareTitle:
-                continue
-
-            siteURL = title.xpath('.//td/a/@href')[0]
-            if BASE_URL not in siteURL:
-                siteURL = BASE_URL + siteURL
-            self.log('SEARCH:: Title url: %s', siteURL)
-
-            # need to check that the studio name of this title matches to the filename's studio
-            siteStudio = title[2].text_content().strip()
-            self.log('SEARCH:: Site Studio: %s', siteStudio)
-            siteStudio = self.NormaliseComparisonString(siteStudio)
-            if siteStudio == compareStudio:
-                self.log('SEARCH:: Studio: Full Word Match: Filename: %s = Website: %s', compareStudio, siteStudio)
-            elif siteStudio in compareStudio:
-                self.log('SEARCH:: Studio: Part Word Match: Website: %s IN Filename: %s', siteStudio, compareStudio)
-            elif compareStudio in siteStudio:
-                self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
-            else:
-                self.log('SEARCH:: Studio: Full Match Fail: Filename: %s != Website: %s', compareStudio, siteStudio)
-                continue
-
-            # Search Website for date - date is in format yyyy - so default to December 31st
             try:
-                siteReleaseDate = title[1].text_content().strip()
-                self.log('SEARCH:: Release Date: %s', siteReleaseDate)
-                siteReleaseDate = datetime.datetime(int(siteReleaseDate), 12, 31)
+                testmorePages = html.xpath('.//a[text()="Next"]/text()')[0]
+                morePages = True
             except:
-                siteReleaseDate = compareReleaseDate
-                self.log('SEARCH:: Error getting Site Release Date')
-                pass
+                morePages = False
 
-            # there can not be a difference more than 365 days
-            timedelta = siteReleaseDate - compareReleaseDate
-            self.log('SEARCH:: Compare Release Date - %s Site Date - %s : Dx [%s] days"', compareReleaseDate, siteReleaseDate, timedelta.days)
-            if abs(timedelta.days) > 366:
-                self.log('SEARCH:: Difference of more than a year between file date and %s date from Website')
-                continue
+            for title in titleList:
+                siteTitle = title[0].text_content().strip()
+                if siteTitle == '':
+                    break
 
-            # we should have a match on studio, title and year now
-            results.Append(MetadataSearchResult(id = siteURL, name = saveTitle, score = 100, lang = lang)) 
-            return
+                siteTitle = self.NormaliseComparisonString(siteTitle)
+                self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
+                if siteTitle != compareTitle:
+                    continue
+
+                siteURL = title.xpath('./td/a/@href')[0]
+                if BASE_URL not in siteURL:
+                    siteURL = BASE_URL + siteURL
+                self.log('SEARCH:: Title url: %s', siteURL)
+
+                # Search Website for date - date is in format yyyy - so default to December 31st
+                try:
+                    siteReleaseDate = title[1].text_content().strip()
+                    self.log('SEARCH:: Search Release Date: %s', siteReleaseDate)
+                    siteReleaseDate = datetime.datetime(int(siteReleaseDate), 12, 31)
+                except:
+                    siteReleaseDate = compareReleaseDate
+                    self.log('SEARCH:: Error getting Search Release Date')
+                    pass
+
+                # need to check that the studio name of this title matches to the filename's studio
+                siteStudio = title[2].text_content().strip()
+                self.log('SEARCH:: Search Studio: %s', siteStudio)
+                siteStudio = self.NormaliseComparisonString(siteStudio)
+                if siteStudio == compareStudio:
+                    self.log('SEARCH:: Studio: Full Word Match: Filename: %s = Website: %s', compareStudio, siteStudio)
+                elif siteStudio in compareStudio:
+                    self.log('SEARCH:: Studio: Part Word Match: Website: %s IN Filename: %s', siteStudio, compareStudio)
+                elif compareStudio in siteStudio:
+                    self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
+                else:
+                    self.log('SEARCH:: Studio: Full Match Fail: Read Result Page: %s', siteURL)
+                    # GEVI sometimes lists the distributor rather than the studio on the search results, 
+                    # therefore if we get a match on the title look further
+                    html = HTML.ElementFromURL(siteURL, sleep=DELAY)
+                    siteStudio = html.xpath('//td[contains(text(),"studio")]//following-sibling::td[1]/a/text()')[0].strip()
+                    siteStudio = self.NormaliseComparisonString(siteStudio)
+                    if siteStudio == compareStudio:
+                        self.log('SEARCH:: Studio: Full Word Match: Filename: %s = Website: %s', compareStudio, siteStudio)
+                    elif siteStudio in compareStudio:
+                        self.log('SEARCH:: Studio: Part Word Match: Website: %s IN Filename: %s', siteStudio, compareStudio)
+                    elif compareStudio in siteStudio:
+                        self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
+                    else:
+                        self.log('SEARCH:: Studio: Full Match Fail: Filename: %s != Website: %s', compareStudio, siteStudio)
+                        continue
+
+                    # Search Website for date - date is in format yyyy - so default to December 31st
+                    try:
+                        sitePreviousReleaseDate = siteReleaseDate
+                        siteReleaseDate = html.xpath('//td[contains(text(),"produced")]//following-sibling::td[1]/text()')[0].strip()
+                        self.log('SEARCH:: Release Date: %s', siteReleaseDate)
+                        siteReleaseDate = datetime.datetime(int(siteReleaseDate), 12, 31)
+                    except:
+                        # if none found at this level - use search result date
+                        siteReleaseDate = sitePreviousReleaseDate
+                        self.log('SEARCH:: Error getting Site Release Date')
+                        pass
+
+                # there can not be a difference more than 366 days
+                timedelta = siteReleaseDate - compareReleaseDate
+                self.log('SEARCH:: Compare Release Date - %s Site Date - %s : Dx [%s] days"', compareReleaseDate, siteReleaseDate, timedelta.days)
+                if abs(timedelta.days) > 366:
+                    self.log('SEARCH:: Difference of more than a year between file date and %s date from Website')
+                    continue
+
+                # we should have a match on studio, title and year now
+                results.Append(MetadataSearchResult(id = siteURL + '|' + siteReleaseDate.strftime('%d/%m/%Y'), name = saveTitle, score = 100, lang = lang)) 
+                return
 
     def update(self, metadata, media, lang, force=True):
         folder, file = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
@@ -233,19 +284,19 @@ class GEVI(Agent.Movies):
         self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
 
         # Fetch HTML.
-        html = HTML.ElementFromURL(metadata.id, sleep=DELAY)
+        html = HTML.ElementFromURL(metadata.id.split('|')[0], timeout=60, errors='ignore', sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
         #    1.  Metadata that is set by Agent as default
         #        a. Studio               : From studio group of filename - no need to process this as above
         #        b. Title                : From title group of filename - no need to process this as is used to find it on website
         #        c. Tag line             : Corresponds to the url of movie
-        #        d. Content Rating       : Always X
+        #        d. Originally Available : set from metadata.id (search result)
+        #        e. Content Rating       : Always X
         #    2.  Metadata retrieved from website
-        #        a. Originally Available : Initially set from year group value + 31st December
-        #                                  if value found on website, replace this initial setting
+        #        a. Countries            : Alphabetic order
         #        b. Summary 
-        #        c. Directors            : List of Drectors (alphabetic order)
+        #        c. Directors            : List of Directors (alphabetic order)
         #        d. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
         #        e. Genre
         #        f. Posters/Background 
@@ -258,26 +309,18 @@ class GEVI(Agent.Movies):
         metadata.title = group_title
         self.log('UPDATE:: Video Title: "%s"' % metadata.title)
 
-        # 1c.   Set Tagline to URL.
-        metadata.tagline = metadata.id
-        self.log('UPDATE:: Tagline: %s', metadata.id)
+        # 1c/d. Set Tagline/Originally Available from metadata.id
+        metadata.tagline = metadata.id.split('|')[0]
+        metadata.originally_available_at = datetime.datetime.strptime(metadata.id.split('|')[1], '%d/%m/%Y')
+        metadata.year = metadata.originally_available_at.year
+        self.log('UPDATE:: Tagline: %s', metadata.tagline)
+        self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)    
 
-        # 1d.   Set Content Rating to Adult
+        # 1e.   Set Content Rating to Adult
         metadata.content_rating = 'X'
         self.log('UPDATE:: Content Rating: X')
 
-        # 2a.   Originally Available - default to December 31st of Filename value, then update with website value if found
-        metadata.originally_available_at = datetime.datetime(int(group_year), 12, 31)
-        metadata.year = metadata.originally_available_at.year
-        try:
-            siteReleaseDate = html.xpath('//td[contains(text(),"released")]//following-sibling::td[1]/text()')[0].strip()
-            metadata.originally_available_at = datetime.datetime(int(siteReleaseDate), 12, 31).date()
-            metadata.year = metadata.originally_available_at.year
-        except: 
-            self.log('UPDATE:: Error setting Originally Available At')
-            pass
-
-        # 2b.   Summary
+        # 2a.   Summary
         try:
             summary = html.xpath('//td[@class="sd"]/div[@class="dw"]/span/text()')[0].strip()
             summary = summary.replace('\n','').replace('\r','').strip()
@@ -285,6 +328,25 @@ class GEVI(Agent.Movies):
             metadata.summary = summary
         except:
             self.log('UPDATE:: Error getting Summary: %s')
+            pass
+
+        # 2b.   Countries
+        try:
+            countriesdict = {}
+            htmlcountries = html.xpath('//td[contains(text(),"location")]//following-sibling::td[1]/text()')
+            self.log('UPDATE:: Countries List %s', htmlcountries)
+            for countriesname in htmlcountries:
+                countries = countriesname.strip()
+                if (len(countries) > 0):
+                    countriesdict[countries] = None
+
+            # sort the dictionary and add key to metadata
+            metadata.countries.clear()
+            for key in sorted (countriesdict): 
+                metadata.countries.add(key)
+            metadata.countries.discard('')
+        except Exception as e:
+            self.log('UPDATE:: Error getting Countries(ies): %s', e)
             pass
 
         # 2c.   Directors

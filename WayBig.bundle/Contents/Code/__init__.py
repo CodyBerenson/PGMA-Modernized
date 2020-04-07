@@ -4,7 +4,7 @@
 import datetime, linecache, platform, os, re, string, sys, urllib, subprocess
 
 # Version / Log Title 
-VERSION_NO = '2019.12.22.11'
+VERSION_NO = '2019.12.22.12'
 PLUGIN_LOG_TITLE = 'WayBig'
 
 # PLEX API
@@ -204,28 +204,17 @@ class WayBig(Agent.Movies):
                 self.log('SEARCH:: Site Title "%s"', siteTitle)
                 siteTitle = self.NormaliseComparisonString(siteTitle)
                 compareTitle  = self.NormaliseComparisonString(compareTitle)
-                self.log('SEARCH:: Site Title: [%s]', siteTitle)
-                self.log('SEARCH:: Comp Title: [%s]', compareTitle)
+
+                self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
                 if siteTitle != compareTitle:
                     siteTitle = siteTitle.replace(group_studio.lower(),'')
                     compareTitle = compareTitle.replace(group_studio.lower(),'')
                     if siteTitle != compareTitle:
                         continue
 
-                self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
-
                 # curID = the ID portion of the href in 'movie'
                 siteURL = title.xpath('.//a[contains(@rel, "bookmark")]/@href')[0]
                 self.log('SEARCH:: Site Title URL: %s' % str(siteURL))
-
-                # Get thumbnail image - store it with the CURID for use during updating
-                siteImageURL = ''
-                try:
-                    siteImageURL = title.xpath('.//img/@src')[0]
-                    self.log('SEARCH:: Site Thumbnail Image URL: %s' % str(siteImageURL))
-                except:
-                    self.log('SEARCH:: Error Site Thumbnail Image')
-                    pass
 
                 # Site Released Date Check - default to imageFileName year
                 try:
@@ -242,7 +231,7 @@ class WayBig(Agent.Movies):
                     continue
 
                 # we should have a match on both studio and title now
-                results.Append(MetadataSearchResult(id = siteURL + '|' + siteImageURL, name = saveTitle, score = 100, lang = lang))
+                results.Append(MetadataSearchResult(id = siteURL, name = saveTitle, score = 100, lang = lang))
 
                 # we have found a title that matches quit loop
                 return
@@ -265,7 +254,7 @@ class WayBig(Agent.Movies):
         self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
 
         # the ID is composed of the webpage for the video and its thumbnail
-        html = HTML.ElementFromURL(metadata.id.split('|')[0], timeout=60, errors='ignore', sleep=DELAY)
+        html = HTML.ElementFromURL(metadata.id, timeout=60, errors='ignore', sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
         #    1.  Metadata that is set by Agent as default
@@ -274,7 +263,6 @@ class WayBig(Agent.Movies):
         #        c. Content Rating       : Always X
         #        d. Tag line             : Corresponds to the url of movie, retrieved from metadata.id split
         #        e. Originally Available : retrieved from the url of the movie
-        #        f. background Art       : retrieved from metadata.id split
         #    2.  Metadata retrieved from website
         #        a. Summary 
         #        b. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
@@ -304,20 +292,6 @@ class WayBig(Agent.Movies):
         except: 
             self.log('UPDATE:: Error setting Originally Available At from imageFileName')
             pass
-
-        # 1f.   Background art
-        arturl = metadata.id.split('|')[1].strip()
-        if not arturl:
-            validArtList = [arturl]
-            if arturl not in metadata.art:
-                try:
-                    self.log('UPDATE:: Background Art URL: %s', arturl)
-                    metadata.art[arturl] = Proxy.Media(HTTP.Request(arturl).content, sort_order = 1)
-                except:
-                    self.log('UPDATE:: Error getting Background Art') 
-                    pass
-            #  clean up and only keep the background art we have added
-            metadata.art.validate_keys(validArtList)
 
         # 2a.   Summary
         try:
