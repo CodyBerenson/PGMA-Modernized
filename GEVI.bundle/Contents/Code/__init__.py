@@ -4,6 +4,7 @@
                                     ---------------
     Date            Version             Modification
     7 Apr 2020      2019.12.25.7        Changed the agent to search past the first page of results
+    8 Apr 2020      2020.12.25.8        Created new function to prepare the video title to build the search query
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -11,7 +12,7 @@
 import datetime, linecache, platform, os, re, string, sys, urllib, lxml
 
 # Version / Log Title 
-VERSION_NO = '2019.12.25.7'
+VERSION_NO = '2019.12.25.8'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -23,7 +24,7 @@ DELAY = int(Prefs['delay'])
 
 # URLS
 BASE_URL = 'https://www.gayeroticvideoindex.com'
-BASE_SEARCH_URL = BASE_URL + '/search.php?type=t&where=b&query={0}&Search=Search&page={1}'
+BASE_SEARCH_URL = BASE_URL + '/search.php?type=t&where=m&query={0}&Search=Search&page={1}'
 
 def Start():
     HTTP.CacheTime = CACHE_1WEEK
@@ -82,6 +83,37 @@ class GEVI(Agent.Movies):
         # remove all non alphanumeric chars
         regex = re.compile(r'\W+')
         return regex.sub('', myString)
+
+    # Prepare Video title for search query
+    def PrepareSearchQueryString(self, myString):
+        # convert to lower case and trim and strip diacritics - except ß which we replace with one s
+        myString = myString.replace('ß', 's')
+        myString = String.StripDiacritics(myString)
+        myString = myString.lower().strip()
+
+        # these need to be replace with a null string
+        for replaceChars in ['-', '–', "'", ',' '& ', '!', '.']:
+            myString = myString.replace(replaceChars, '')
+        # these need to be replace with a single space
+        for replaceChars in ['.', '  ']:
+            myString = myString.replace(replaceChars, ' ')
+
+        # split myString at first digit as GEVI will not find titles with digits in them
+        for firstDigit, character in enumerate(myString):
+            if character.isdigit():
+                uptofirstDigit = firstDigit - 1
+                myString = myString[0:uptofirstDigit]
+                break
+
+        # removal of definitive/indefinitive articles in title as it messes GEVIs search algorithm
+        # English, French and German
+        intialWords = ['a', 'an', 'un', 'une', 'ein', 'eine', 'the', 'le', 'la', 'les', 'das', 'die', 'der']
+        firstWord = myString.split()[0]
+        if firstWord in intialWords:
+            self.log('SEARCH:: Remove Initial in/definitive article: %s', firstWord)
+            spliceAt = len(firstWord) + 1
+            myString = myString[spliceAt:]
+        return myString
 
     # check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not
     def getIAFDActorImage(self, actor):
@@ -154,24 +186,7 @@ class GEVI(Agent.Movies):
         compareTitle = self.NormaliseComparisonString(saveTitle)
 
         # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
-        searchTitle = String.StripDiacritics(saveTitle.lower())
-        searchTitle = searchTitle.replace('-', '').replace('–', '').replace("'",'').replace(',','').replace('& ','').replace('  ', ' ')
-
-        # split searchTitle at first digit as GEVI will not find titles with digits in them
-        for firstDigit, character in enumerate(searchTitle):
-            if character.isdigit():
-                uptofirstDigit = firstDigit - 1
-                searchTitle = searchTitle[0:uptofirstDigit]
-                break
-
-        # removal of definitive/indefinitive articles in title as it messes GEVIs search algorithm
-        # English, French and German
-        intialWords = ['a', 'an', 'un', 'une', 'ein', 'eine', 'the', 'le', 'la', 'les', 'das', 'die', 'der']
-        firstWord = searchTitle.split()[0]
-        if firstWord in intialWords:
-            self.log('SEARCH:: Remove Initial in/definitive article: %s', firstWord)
-            spliceAt = len(firstWord) + 1
-            searchTitle = searchTitle[spliceAt:]
+        searchTitle = self.PrepareSearchQueryString(saveTitle)
 
         # Finds the entire media enclosure <Table> element then steps through the rows
         pageNumber = 0
@@ -415,7 +430,12 @@ class GEVI(Agent.Movies):
             #  clean up and only keep the poster we have added
             metadata.posters.validate_keys(validPosterList)
 
-            image = htmlimage[1]
+            # if there is no background art - use poster as background art too
+            if len(htmlimage) == 2:
+                image = htmlimage[1]
+            else:
+                image = htmlimage[0]
+
             if BASE_URL not in image:
                 image = BASE_URL + image
             self.log('UPDATE:: Movie Background Art Found: "%s"', image)
