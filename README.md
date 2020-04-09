@@ -66,7 +66,7 @@ GEVI has a TREMENDOUS amount of indexed content, but has some quirks that are ea
 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/results1.jpg)
 
-4.  There are times when the movie page may have one or more AKA titles.  Use the Title from the Title on the movie page.  This last example is a good one.  Two movie titles.  Three company names.  The correct filename should be **(Pietro Filmes) - Mãos à Obra (2001).mp4**
+4.  There are times when the movie page may have one or more AKA titles.  Use the Title from the Title on the **movie page**...**not the results list as in the previous examples**.  This last example is a good one.  Two movie titles.  Three company names.  The correct filename should be **(Pietro Filmes) - Mãos à Obra (2001).mp4**
 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/results2.jpg)
 
