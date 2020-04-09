@@ -46,9 +46,42 @@ e.g.,
 The matching agent will return a scene poster and relevant metadata,actor thumbnails (matched from IAFD.com) 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/scene.jpg)
 
+
+
+**Gay Erotic Video Index (GEVI) Tips and Considerations:**
+
+GEVI has a TREMENDOUS amount of indexed content, but has some quirks that are easy to navigate, if you follow a couple rules, beginning with the filing naming convention (Studio) - Title (YYYY).ext.  
+
+1.  In GEVI as in the other Agents, if on windows, one cannot use a colon (:) in a filename.  If the site uses a colon either in the Studio or Title, ignore it.
+
+2.  When manually searching for a movie, GEVI's results page will display the Company (i.e. Distributor), not the Studio.  The Agent requires the Studio which is often different, so select the movie and click into the movie page.  However, make note of the Title from the Results list.
+
+![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/results.jpg)
+
+![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/movie1.jpg)
+
+3.  There are times when the movie page may have multiple line titles (previous and next image).  Use the Title from the Results list.  
+
+![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/movie2.jpg)
+
+4.  There are times when the movie page may have one or more AKA titles.  Use the Title from the Title on the movie page..  
+
+![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/results1.jpg)
+
+![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/movie2.jpg)
+
+This last example is a good one.  Two movie titles.  Three company names.  The correct filename:  (Pietro Filmes) - Mãos à Obra (2001).mp4
+
+5.  Once you get used to the quirks of GEVI, it is an incredible Agent.  
+
+
 Some tips:  
 
 1.  The Agent will attempt to crop the scene poster for display in plex, using either an inline cropping service, or if unavailable a visual basic script (for Windows PMS installations).  If both fail, the agent will return the (often oversized) poster as-is from the blog site.  
+
+2.  If you come across a site that indexes films or scenes and has plex style movie covers, it may be a good candidate for a new Agent.  Open an issue and make a request.  **note** we will not create studio specific Agents...studios don't offer plex style movie covers and often update the framework of their site which breaks Agents.
+
+3.  If you have any challenges or struggles, open a new issue.  Please describe your challenge as thoroughly as possible, including which agent you were targeting, the filename and include the log, if you can. **note** please, no screenshots that contain graphic content. 
 
 ## Disclaimer
 
