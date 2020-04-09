@@ -73,7 +73,7 @@ GEVI has a TREMENDOUS amount of indexed content, but has some quirks that are ea
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/movie3.jpg)
 
 
-5.  Once you get used to the quirks of GEVI, it is an incredible Agent.  
+5. Once you get used to the quirks/workings of the Gay Erotic Video Index site itself, the GEVI is an incredible Plex Agent.  
 
 
 ### Some final tips:  
