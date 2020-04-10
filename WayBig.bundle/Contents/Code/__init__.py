@@ -4,7 +4,7 @@
 import datetime, linecache, platform, os, re, string, sys, urllib, subprocess
 
 # Version / Log Title 
-VERSION_NO = '2019.12.22.12'
+VERSION_NO = '2019.12.22.13'
 PLUGIN_LOG_TITLE = 'WayBig'
 
 # PLEX API
@@ -89,7 +89,7 @@ class WayBig(Agent.Movies):
     # clean search string before searching on WayBig
     def CleanSearchString(self, myString):
         # Waybig seems to fail to find Titles which have an apostrophe in them split at first incident and take first split, just to search but not compare
-        invalidCharacters = ["'", "‘", "’"]
+        invalidCharacters = ["'", "‘", "’", "&"]
         for Char in invalidCharacters:
             if Char in myString:
                 myString = myString.split(Char)[0]
@@ -207,8 +207,10 @@ class WayBig(Agent.Movies):
 
                 self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
                 if siteTitle != compareTitle:
-                    siteTitle = siteTitle.replace(group_studio.lower(),'')
-                    compareTitle = compareTitle.replace(group_studio.lower(),'')
+                    # some studios are sometimes listed with no spaces.. Next Door Ebony  listed as NextDoorEbony
+                    noSpaceStudio = group_studio.lower().replace(' ', '')
+                    siteTitle = siteTitle.replace(' ','').replace(noSpaceStudio,'')
+                    compareTitle = compareTitle.replace(' ','').replace(noSpaceStudio,'')
                     if siteTitle != compareTitle:
                         continue
 
