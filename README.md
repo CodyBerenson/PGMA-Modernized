@@ -66,23 +66,25 @@ GEVI has a TREMENDOUS amount of indexed content, but has some quirks that are ea
 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/results1.jpg)
 
-4.  There are times when the movie page may have one or more AKA titles.  Use the Title from the Title on the movie page.  This last example is a good one.  Two movie titles.  Three company names.  The correct filename should be **(Pietro Filmes) - Mãos à Obra (2001).mp4**
+4.  There are times when the movie page may have one or more AKA titles.  **Use the Title from the Title on the movie page...not the results list as in the previous examples**.  This last example is a good one.  Two movie titles.  Three company names.  The correct filename should be **(Pietro Filmes) - Mãos à Obra (2001).mp4**
 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/results2.jpg)
 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/movie3.jpg)
 
 
-5.  Once you get used to the quirks of GEVI, it is an incredible Agent.  
+5. Once you get used to the quirks/workings of the Gay Erotic Video Index site itself, the GEVI is an incredible Plex Agent.  
 
 
 ### Some final tips:  
 
-1.  The Agent will attempt to crop the scene poster for display in plex, using either an inline cropping service, or if unavailable a visual basic script (for Windows PMS installations).  If both fail, the agent will return the (often oversized) poster as-is from the blog site.  
+1.  Consider using a couple Agents.  Can't find the film you're looking for on AEBN?  Try GEVI. Like the description or poster image better on HomoActive?  Use it.  Remember, that the same film may be on multiple sites, with each site using its specific version of the studio name or title.  Match your filename to the specific site you're wanting to match to. 
 
-2.  If you come across a site that indexes films or scenes and has plex style movie covers, it may be a good candidate for a new Agent.  Open an issue and make a request.  **Note: ** we will not create studio specific Agents...studios don't offer plex style movie covers and often update the framework of their site which breaks Agents.
+2.  The Agent will attempt to crop the scene poster for display in plex, using either an inline cropping service, or if unavailable a visual basic script (for Windows PMS installations).  If both fail, the agent will return the (often oversized) poster as-is from the blog site.  
 
-3.  If you have any challenges or struggles, open a new issue.  Please describe your challenge as thoroughly as possible, including which agent you were targeting, the filename and include the log, if you can. **Note:** please, no screenshots that contain graphic content. 
+3.  If you come across a site that indexes films or scenes and has plex style movie covers, it may be a good candidate for a new Agent.  Open an issue and make a request.  **Note: ** we will not create studio specific Agents...studios don't offer plex style movie covers and often update the framework of their site which breaks Agents.
+
+4.  If you have any challenges or struggles, open a new issue.  Please describe your challenge as thoroughly as possible, including which agent you were targeting, the filename and include the log, if you can. **Note:** please, no screenshots that contain graphic content. 
 
 ## Disclaimer
 
