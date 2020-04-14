@@ -1,6 +1,6 @@
 # GayAdult.bundle
 
-2020-02-07
+2020-04-12
 https://github.com/acvigue/pgma
 
 GAY ADULT:
@@ -12,7 +12,9 @@ The metadata that contributes to this agent comes from the following websites:
     4. Gay Entertainment Video Index
     5. Gay Hot Movies
     6. Homo Active
+    7. RadVideo
 
 The metadata that contributes to this agent comes from the following blogs:
     1. Fagalicious
-    2. WayBig
+	2. QueerClick
+    3. WayBig

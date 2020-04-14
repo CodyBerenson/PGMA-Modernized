@@ -12,3 +12,4 @@ The metadata that contributes to this agent comes from the following websites:
     4. Gay Entertainment Video Index
     5. Gay Hot Movies
     6. Homo Active
+	7. RadVideo

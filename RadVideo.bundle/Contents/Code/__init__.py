@@ -1,12 +1,9 @@
-﻿# GEVI - (IAFD)
+﻿# RadVideo - (IAFD)
 '''
                                     Version History
                                     ---------------
     Date            Version             Modification
-    7 Apr 2020      2019.12.25.7        Changed the agent to search past the first page of results
-    8 Apr 2020      2020.12.25.8        Created new function to prepare the video title to build the search query
-    12 Apr 2020     2020.12.25.9        removed line in updating countries as it raised an error in the logs
-                                        logical error replacing full stops in title when preparing search string
+    12 Apr 2020     2020.04.12.1        Creation
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -14,8 +11,8 @@
 import datetime, linecache, platform, os, re, string, sys, urllib, lxml
 
 # Version / Log Title 
-VERSION_NO = '2019.12.25.9'
-PLUGIN_LOG_TITLE = 'GEVI'
+VERSION_NO = '2020.04.12.1'
+PLUGIN_LOG_TITLE = 'RadVideo'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
 # if title on website has a hyphen in its title that does not correspond to a colon replace it with an em dash in the corresponding position
@@ -25,18 +22,18 @@ FILEPATTERN = Prefs['regex']
 DELAY = int(Prefs['delay'])
 
 # URLS
-BASE_URL = 'https://www.gayeroticvideoindex.com'
-BASE_SEARCH_URL = BASE_URL + '/search.php?type=t&where=m&query={0}&Search=Search&page={1}'
+BASE_URL = 'https://www.radvideo.com'
+BASE_SEARCH_URL = BASE_URL + '/search{0}?q={1}'
 
 def Start():
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-agent'] = 'Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.2; Trident/4.0; SLCC2; .NET CLR 2.0.50727; .NET CLR 3.5.30729; .NET CLR 3.0.30729; Media Center PC 6.0)'
+    HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.163 Safari/537.36'
 
 def ValidatePrefs():
     pass
 
-class GEVI(Agent.Movies):
-    name = 'GEVI (IAFD)'
+class RadVideo(Agent.Movies):
+    name = 'RadVideo (IAFD)'
     languages = [Locale.Language.English]
     primary_provider = False
     preference = True
@@ -88,33 +85,9 @@ class GEVI(Agent.Movies):
 
     # Prepare Video title for search query
     def PrepareSearchQueryString(self, myString):
-        # convert to lower case and trim and strip diacritics - except ß which we replace with one s
-        myString = myString.replace('ß', 's')
         myString = String.StripDiacritics(myString)
         myString = myString.lower().strip()
 
-        # these need to be replace with a null string
-        for replaceChars in ['-', '–', "'", ',' '& ', '!']:
-            myString = myString.replace(replaceChars, '')
-        # these need to be replace with a single space
-        for replaceChars in ['.', '  ']:
-            myString = myString.replace(replaceChars, ' ')
-
-        # split myString at first digit as GEVI will not find titles with digits in them
-        for firstDigit, character in enumerate(myString):
-            if character.isdigit():
-                uptofirstDigit = firstDigit - 1
-                myString = myString[0:uptofirstDigit]
-                break
-
-        # removal of definitive/indefinitive articles in title as it messes GEVIs search algorithm
-        # English, French and German
-        intialWords = ['a', 'an', 'un', 'une', 'ein', 'eine', 'the', 'le', 'la', 'les', 'das', 'die', 'der']
-        firstWord = myString.split()[0]
-        if firstWord in intialWords:
-            self.log('SEARCH:: Remove Initial in/definitive article: %s', firstWord)
-            spliceAt = len(firstWord) + 1
-            myString = myString[spliceAt:]
         return myString
 
     # check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not
@@ -187,7 +160,7 @@ class GEVI(Agent.Movies):
         # compareTitle will be used to search against the titles on the website, remove all umlauts, accents and ligatures
         compareTitle = self.NormaliseComparisonString(saveTitle)
 
-        # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
+        # Search Query - for use to search the internet, remove all non alphabetic characters as RadVideo site returns no results if apostrophes or commas exist etc..
         searchTitle = self.PrepareSearchQueryString(saveTitle)
 
         # Finds the entire media enclosure <Table> element then steps through the rows
@@ -197,20 +170,28 @@ class GEVI(Agent.Movies):
             pageNumber += 1
             self.log('SEARCH:: Result Page No: %s', pageNumber)
 
-            searchQuery = BASE_SEARCH_URL.format(String.URLEncode(searchTitle), pageNumber)
+            if pageNumber == 1:
+                searchQuery = BASE_SEARCH_URL.format('', String.URLEncode(searchTitle))
+            else:
+                searchQuery = BASE_SEARCH_URL.format('/page/' + str(pageNumber), String.URLEncode(searchTitle))
+
             self.log('SEARCH:: Search Query: %s', searchQuery)
             html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
-            titleList = html.xpath('//table[contains(@class,"d")]/tr')
+            titleList = html.xpath('//div[@class="item"]/a[@title]')
             self.log('SEARCH:: Titles List: %s Found', len(titleList))
 
             try:
-                testmorePages = html.xpath('.//a[text()="Next"]/text()')[0]
+                testmorePages = html.xpath('//a[@class="next i-next" and @title="Next"]/@title')[0]
                 morePages = True
             except:
                 morePages = False
 
             for title in titleList:
-                siteTitle = title[0].text_content().strip()
+                siteTitle = title.get('title')
+                if 'DVD' in siteTitle:
+                    siteTitle = siteTitle.split('DVD')[0]
+                if 'DOWNLOAD' in siteTitle:
+                    siteTitle = siteTitle.split('DOWNLOAD')[0]
                 if siteTitle == '':
                     break
 
@@ -219,23 +200,12 @@ class GEVI(Agent.Movies):
                 if siteTitle != compareTitle:
                     continue
 
-                siteURL = title.xpath('./td/a/@href')[0]
-                if BASE_URL not in siteURL:
-                    siteURL = BASE_URL + siteURL
+                siteURL = title.get('href')
                 self.log('SEARCH:: Title url: %s', siteURL)
 
-                # Search Website for date - date is in format yyyy - so default to December 31st
-                try:
-                    siteReleaseDate = title[1].text_content().strip()
-                    self.log('SEARCH:: Search Release Date: %s', siteReleaseDate)
-                    siteReleaseDate = datetime.datetime(int(siteReleaseDate), 12, 31)
-                except:
-                    siteReleaseDate = compareReleaseDate
-                    self.log('SEARCH:: Error getting Search Release Date')
-                    pass
-
-                # need to check that the studio name of this title matches to the filename's studio
-                siteStudio = title[2].text_content().strip()
+                # if the title matches load the siteurl to check studio and release date
+                html = HTML.ElementFromURL(siteURL, sleep=DELAY)
+                siteStudio = html.xpath('//dt[contains(text(),"Studio:")]//following-sibling::dd[1]/a/text()')[0].strip()
                 self.log('SEARCH:: Search Studio: %s', siteStudio)
                 siteStudio = self.NormaliseComparisonString(siteStudio)
                 if siteStudio == compareStudio:
@@ -245,33 +215,18 @@ class GEVI(Agent.Movies):
                 elif compareStudio in siteStudio:
                     self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
                 else:
-                    self.log('SEARCH:: Studio: Full Match Fail: Read Result Page: %s', siteURL)
-                    # GEVI sometimes lists the distributor rather than the studio on the search results, 
-                    # therefore if we get a match on the title look further
-                    html = HTML.ElementFromURL(siteURL, sleep=DELAY)
-                    siteStudio = html.xpath('//td[contains(text(),"studio")]//following-sibling::td[1]/a/text()')[0].strip()
-                    siteStudio = self.NormaliseComparisonString(siteStudio)
-                    if siteStudio == compareStudio:
-                        self.log('SEARCH:: Studio: Full Word Match: Filename: %s = Website: %s', compareStudio, siteStudio)
-                    elif siteStudio in compareStudio:
-                        self.log('SEARCH:: Studio: Part Word Match: Website: %s IN Filename: %s', siteStudio, compareStudio)
-                    elif compareStudio in siteStudio:
-                        self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
-                    else:
-                        self.log('SEARCH:: Studio: Full Match Fail: Filename: %s != Website: %s', compareStudio, siteStudio)
-                        continue
+                    self.log('SEARCH:: Studio: Full Match Fail')
+                    continue
 
-                    # Search Website for date - date is in format yyyy - so default to December 31st
-                    try:
-                        sitePreviousReleaseDate = siteReleaseDate
-                        siteReleaseDate = html.xpath('//td[contains(text(),"produced")]//following-sibling::td[1]/text()')[0].strip()
-                        self.log('SEARCH:: Release Date: %s', siteReleaseDate)
-                        siteReleaseDate = datetime.datetime(int(siteReleaseDate), 12, 31)
-                    except:
-                        # if none found at this level - use search result date
-                        siteReleaseDate = sitePreviousReleaseDate
-                        self.log('SEARCH:: Error getting Site Release Date')
-                        pass
+                # Search Website for date - date is in format yyyy - so default to December 31st
+                try:
+                    siteReleaseDate = html.xpath('//dt[contains(text(),"Release Date:")]//following-sibling::dd[1]/text()')[0].strip()
+                    self.log('SEARCH:: Search Release Date: %s', siteReleaseDate)
+                    siteReleaseDate = datetime.datetime.strptime(siteReleaseDate, '%d-%m-%Y')
+                except:
+                    siteReleaseDate = compareReleaseDate
+                    self.log('SEARCH:: Error getting Search Release Date')
+                    pass
 
                 # there can not be a difference more than 366 days
                 timedelta = siteReleaseDate - compareReleaseDate
@@ -315,8 +270,7 @@ class GEVI(Agent.Movies):
         #        b. Summary 
         #        c. Directors            : List of Directors (alphabetic order)
         #        d. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
-        #        e. Genre
-        #        f. Posters/Background 
+        #        e. Posters/Background 
 
         # 1a.   Studio - straight of the file name
         metadata.studio = group_studio
@@ -339,8 +293,7 @@ class GEVI(Agent.Movies):
 
         # 2a.   Summary
         try:
-            summary = html.xpath('//td[@class="sd"]/div[@class="dw"]/span/text()')[0].strip()
-            summary = summary.replace('\n','').replace('\r','').strip()
+            summary = html.xpath('//div[@class="std"]/text()')[0].strip()
             self.log('UPDATE:: Summary Found: %s', summary)
             metadata.summary = summary
         except:
@@ -350,7 +303,7 @@ class GEVI(Agent.Movies):
         # 2b.   Countries
         try:
             countriesdict = {}
-            htmlcountries = html.xpath('//td[contains(text(),"location")]//following-sibling::td[1]/text()')
+            htmlcountries = html.xpath('//dt[contains(text(),"Country:")]//following-sibling::dd[1]/text()')
             self.log('UPDATE:: Countries List %s', htmlcountries)
             for countriesname in htmlcountries:
                 countries = countriesname.strip()
@@ -368,7 +321,7 @@ class GEVI(Agent.Movies):
         # 2c.   Directors
         try:
             directordict = {}
-            htmldirector = html.xpath('//td[contains(text(),"director")]//following-sibling::td[1]/a/text()')
+            htmldirector = html.xpath('//dt[contains(text(),"Director:")]//following-sibling::dd[1]/text()')
             self.log('UPDATE:: Director List %s', htmldirector)
             for directorname in htmldirector:
                 director = directorname.strip()
@@ -387,7 +340,7 @@ class GEVI(Agent.Movies):
         # 2d.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
         try:
             castdict = {}
-            htmlcast = html.xpath('//td[@class="pd"]/a/text()')
+            htmlcast = html.xpath('//dt[contains(text(),"Actors:")]//following-sibling::dd[1]/a/text()')
             for castname in htmlcast:
                 cast = castname.strip()
                 if '(' in cast:
@@ -405,22 +358,9 @@ class GEVI(Agent.Movies):
             self.log('UPDATE - Error getting Cast: %s', e)
             pass
 
-        # 2e.   Genre
+        # 2e.   Posters/Background Art
         try:
-            metadata.genres.clear()
-            htmlgenres = html.xpath('//td[contains(text(),"category")]//following-sibling::td[1]/text()')
-            self.log('UPDATE:: %s Genres Found: "%s"', len(htmlgenres), htmlgenres)
-            for genre in htmlgenres:
-                genre = genre.strip()
-                if (len(genre) > 0):
-                    metadata.genres.add(genre)
-        except Exception as e:
-            self.log('UPDATE:: Error getting Genres: %s', e)
-            pass
-
-        # 2f.   Posters/Background Art
-        try:
-            htmlimage = html.xpath('//td[@class="gp"]/a/@href')
+            htmlimage = html.xpath('//img[@class="gallery-image"]/@src')
             image = htmlimage[0]
             if BASE_URL not in image:
                 image = BASE_URL + image
@@ -432,7 +372,7 @@ class GEVI(Agent.Movies):
             metadata.posters.validate_keys(validPosterList)
 
             # if there is no background art - use poster as background art too
-            if len(htmlimage) == 2:
+            if len(htmlimage) > 1:
                 image = htmlimage[1]
             else:
                 image = htmlimage[0]
