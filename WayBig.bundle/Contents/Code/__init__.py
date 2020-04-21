@@ -126,6 +126,8 @@ class WayBig(Agent.Movies):
         # reverse url encoding on the folowing characters (, ), &, :, ! and ,
         myString = myString.replace('%2528','(').replace('%2529',')').replace('%40','&').replace('%3A',':').replace('%2C',',').replace('%21','!')
         myString = myString[:50].strip()
+        if myString[-1] == '%':
+            myString = myString[:49]
         return myString
 
     # check IAFD web site for better quality Actor thumbnails irrespective of whether we have a thumbnail or not
