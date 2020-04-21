@@ -1,17 +1,18 @@
 Option Explicit
 
-Dim intWidth, intHeight
+Dim lngWidth, lngHeight, lngBottomCrop
 Dim objShell, objArgs, objXmlHttp, objStream, objImageFile, objImageProcess, objFSO, objFile
 Dim strImageURL, strImageFile
 
+	'On Error Resume Next
     Set objShell = CreateObject("WScript.Shell")
     Set objFSO = CreateObject("Scripting.FileSystemObject")
     
     Set objArgs = WScript.Arguments
     strImageURL = objArgs.Item(0)
     strImageFile = objArgs.Item(1)
-    intWidth = Int(objArgs.Item(2))
-    intHeight = Int(objArgs.Item(3))
+    lngWidth = CLng(objArgs.Item(2))
+    lngHeight = CLng(objArgs.Item(3))
 
     Set objXmlHttp = CreateObject("Microsoft.XMLHTTP")
 	With objXmlHttp
@@ -28,15 +29,17 @@ Dim strImageURL, strImageFile
     End With
 
     Set objImageFile = CreateObject("WIA.ImageFile")
-    objImageFile.LoadFile strImageFile 'load image
-
+    objImageFile.LoadFile strImageFile 							' load image
+    If objImageFile.Height < lngHeight Then lngHeight = 0		' to cover for images which do not have image height attributes set
+    lngBottomCrop = objImageFile.Height - lngHeight
+    
     Set objImageProcess = CreateObject("WIA.ImageProcess") 
     objImageProcess.Filters.Add objImageProcess.FilterInfos("Crop").filterid 'setup filter
     With objImageProcess.Filters(1)
         .Properties("Left") = 0
         .Properties("Top") = 0
         .Properties("Right") = 0 
-        .Properties("Bottom") = objImageFile.Height - intHeight
+        .Properties("Bottom") = lngBottomCrop
     End With
     
     Set objImageFile = objImageProcess.Apply(objImageFile) 'apply change

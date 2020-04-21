@@ -1,16 +1,24 @@
-﻿# coding=utf-8
+﻿# Fagalicious - (IAFD)
+'''
+                                    Version History
+                                    ---------------
+    Date            Version             Modification
+    22 Dec 2019     2020.01.18.1        Creation
+    19 Apr 2020     2020.01.18.9        Corrected image cropping
+                                        added new xpath for titles with video image as main image
+                                        improved multiple result pages handling
+                                        reoved debug print option
 
-# Fagalicious - (IAFD)
+---------------------------------------------------------------------------------------------------------------
+'''
 import datetime, linecache, platform, os, re, string, sys, urllib, subprocess
 
 # Version / Log Title 
-VERSION_NO = '2020.01.18.8'
+VERSION_NO = '2020.01.18.9'
 PLUGIN_LOG_TITLE = 'Fagalicious'
 
 # PLEX API
 load_file = Core.storage.load
-
-DEBUG = Prefs['debug']
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
 # if title on website has a hyphen in its title that does not correspond to a colon replace it with an em dash in the corresponding position
@@ -27,11 +35,11 @@ CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/Fagalicious.bundle/Conte
 
 # URLS
 BASE_URL = 'https://fagalicious.com'
-BASE_SEARCH_URL = BASE_URL + '/search/{0}/page/{1}'
+BASE_SEARCH_URL = BASE_URL + '/search/{0}/'
 
 def Start():
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-agent'] = 'Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.2; Trident/4.0; SLCC2; .NET CLR 2.0.50727; .NET CLR 3.5.30729; .NET CLR 3.0.30729; Media Center PC 6.0)'
+    HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
 
 def ValidatePrefs():
     pass
@@ -43,11 +51,9 @@ class Fagalicious(Agent.Movies):
     preference = True
     media_types = ['Movie']
     contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultScenes']
-    accepts_from = ['com.plexapp.agents.localmedia']
 
     def matchedFilename(self, file):
         # match file name to regex
-        self.log ("PATTERN = %s", FILEPATTERN) 
         pattern = re.compile(FILEPATTERN)
         return pattern.search(file)
 
@@ -57,12 +63,7 @@ class Fagalicious(Agent.Movies):
         matched = pattern.search(file)
         if matched:
             groups = matched.groupdict()
-            groupstitle = groups['title']
-            if ' - Disk ' in groupstitle:
-                groupstitle = groupstitle.split(' - Disk ')[0]
-            if ' - Disc ' in groupstitle:
-                groupstitle = groupstitle.split(' - Disc ')[0]
-            return groups['studio'], groupstitle, groups['year']
+            return groups['studio'], groups['title'], groups['year']
 
     # Normalise string for Comparison, strip all non alphanumeric characters, Vol., Volume, Part, and 1 in series
     def NormaliseComparisonString(self, myString):
@@ -110,11 +111,9 @@ class Fagalicious(Agent.Movies):
                 self.log('SEARCH:: "%s" found - Amended Search Title "%s"', item, myString)
 
         # Search Query - for use to search the internet - string can not be longer than 50 characters
-        if len(myString) > 50:
-            myString = myString[:50].strip()
-
-        self.log('SEARCH:: "%s" found - Stripped Search Title "%s"', item, myString)
-        return String.StripDiacritics(myString).lower()        
+        myString = String.StripDiacritics(myString).lower()
+        myString = myString[:50].strip()
+        return myString
 
     # check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not
     def getIAFDActorImage(self, actor):
@@ -140,15 +139,13 @@ class Fagalicious(Agent.Movies):
                 self.log('SELF:: NO IAFD Actor Page')
 
     def log(self, message, *args):
-        if DEBUG:
-            Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+        Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
 
     def search(self, results, media, lang, manual):
         self.log('-----------------------------------------------------------------------')
         self.log('SEARCH:: Version - v.%s', VERSION_NO)
         self.log('SEARCH:: Platform - %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs->debug      - %s', DEBUG)
-        self.log('SEARCH::      ->delay      - %s', DELAY)
+        self.log('SEARCH:: Prefs->delay      - %s', DELAY)
         self.log('SEARCH::      ->regex      - %s', FILEPATTERN)
         self.log('SEARCH::      ->thumbor    - %s', THUMBOR)
         self.log('SEARCH:: media.title - %s', media.title)
@@ -192,30 +189,30 @@ class Fagalicious(Agent.Movies):
         searchTitle = self.CleanSearchString(searchTitle)
         searchTitle = String.URLEncode(searchTitle)
         
-        # Finds the entire media enclosure <DIV> elements then steps through them
-        totalPages = 1
-        pageNumber = 0
-        self.log('SEARCH:: Initial Total Search Pages: %s pages', totalPages)
-        while pageNumber <= totalPages:
-            pageNumber += 1
-            self.log('SEARCH:: Result Page No: %s', pageNumber)
+        searchQuery = BASE_SEARCH_URL.format(searchTitle)
 
-            searchQuery = BASE_SEARCH_URL.format(searchTitle, pageNumber)
+        morePages = True
+        while morePages:
             self.log('SEARCH:: Search Query: %s', searchQuery)
-            html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
-            if pageNumber == 1:
-                siteTotalPages = html.xpath('//div[@class="nav-links"]/a[@class="page-numbers"]/text()') or '0'
-                if siteTotalPages != '0':
-                    siteTotalPages = max(siteTotalPages)
-                self.log('SEARCH:: Total Search Pages: %s pages', siteTotalPages)
-                totalPages = int(siteTotalPages)
+            try: 
+                html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
+            except:
+                break
+
+            try:
+                searchQuery = html.xpath('//div[@class="nav-links"]/a[@class="page-numbers"]/@href')[0]
+                pageNumber = html.xpath('//div[@class="nav-links"]/span/text()')[0]
+                morePages = True
+            except:
+                pageNumber = "1"
+                morePages = False
 
             titleList = html.xpath('//h2[@class="entry-title"]')
-            self.log('SEARCH:: Titles List: %s Found', len(titleList))
+            titlesFound = len(titleList)
+            if titlesFound > 0:
+                self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, titlesFound)
 
             for title in titleList:
-                self.log('SEARCH:: Title : %s', title)
-
                 siteEntry = title.find('.//a').text.split(':')
                 self.log('SEARCH:: Site Entry: %s"', siteEntry)
 
@@ -242,7 +239,11 @@ class Fagalicious(Agent.Movies):
                 elif compareStudio in siteStudio:
                     self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
                 else:
-                    continue
+                    # remove spaces in comparison variables and check for equality
+                    noSpaceSiteStudio = siteStudio.replace(' ', '')
+                    noSpaceCompareStudio = compareStudio.replace(' ', '')
+                    if noSpaceSiteStudio != noSpaceCompareStudio:
+                        continue
 
                 siteURL = title.find('.//a').get('href')
                 self.log('SEARCH:: Title url: %s', siteURL)
@@ -322,15 +323,23 @@ class Fagalicious(Agent.Movies):
 
         # 2a.   Summary
         try:
-            summary = html.xpath('//section[@class="entry-content"]/p//text()')
-            summary = " ".join(summary)
-            summary = summary.replace('\n','').replace('\r','').strip()
-            summary = summary.split('writes:')[1]
+            summary = ''
+            htmlsummary = html.xpath('//section[@class="entry-content"]/p')
+            for item in htmlsummary:
+                summary = '{0}{1}\n'.format(summary, item.text_content())
             self.log('UPDATE:: Summary Found: %s', summary)
-            metadata.summary = summary
-        except:
-            self.log('UPDATE:: Error getting Summary: %s')
-            pass
+
+            regex = r'.*writes:'
+            pattern = re.compile(regex, re.IGNORECASE | re.DOTALL)
+            summary = re.sub(pattern, '', summary)
+
+            regex = r'– Get the .*|– Download the .*'
+            pattern = re.compile(regex, re.IGNORECASE)
+            summary = re.sub(pattern, '', summary)
+
+            metadata.summary = summary.strip()
+        except Exception as e:
+            self.log('UPDATE:: Error getting Summary: %s', e)
 
         # 2b/c.   Cast/Genre
         #       Fagalicious stores the cast and genres as tags, if tag is in title assume its a cast member else its a genre
@@ -339,17 +348,18 @@ class Fagalicious(Agent.Movies):
             castdict = {}
             genres = []
             htmltags = html.xpath('//ul/a[contains(@href, "https://fagalicious.com/tag/")]/text()')
-            self.log('UPDATE:: %s Cast/Genres Tags Found: "%s"', len(htmltags), htmltags)
+            self.log('UPDATE:: %s Genres/Cast Tags Found: "%s"', len(htmltags), htmltags)
             for tag in htmltags:
-                if tag in group_title:
-                    cast = tag.strip()
-                    if (len(cast) > 0):
-                        castdict[cast] = self.getIAFDActorImage(cast)
+                if tag.lower() in group_studio.lower():
+                    continue
+                tag = tag.split('(')[0].strip()
+                cast = self.getIAFDActorImage(tag)
+                if cast is None:
+                    genres.append(tag)
                 else:
-                    genres.append(tag.split('(')[0])
+                    castdict[tag] = cast
         except Exception as e:
             self.log('UPDATE - Error getting Cast/Genres: %s', e)
-            pass
 
         # Process Cast  
         # sort the dictionary and add kv to metadata
@@ -364,122 +374,157 @@ class Fagalicious(Agent.Movies):
         for genre in genres:
             metadata.genres.add(genre)
 
-        # 2d/e.   Posters /Background art - Front Cover set to poster
-        imageList = html.xpath('//div[@class="mypicsgallery"]/a/img[@src and @data-src]')
+        # 2d   Posters - Front Cover set to poster
+        envVar = os.environ
+        TempFolder = envVar['TEMP']
+        LocalAppDataFolder = envVar['LOCALAPPDATA']
+
+        index = 0
         try:
-            thumborImage = None
-            scriptImage = None
-            image = imageList[0].get('data-src')
-            if '?' in image:
-                image = image.split('?')[0]
-            width = int(imageList[0].get('width'))
-            height = int(imageList[0].get('height'))
+            fromWhere = 'ORIGINAL'
+            imageList = html.xpath('//div[@class="mypicsgallery"]/a/img[@src and @data-src]')
+            if imageList:
+                image = imageList[index].get('data-src')
+                if '?' in image:
+                    image = image.split('?')[0]
+                imageContent = HTTP.Request(image).content
 
-            # width:height ratio 1:1.5
-            desiredHeight = int(width * 1.5)
-
-            self.log('UPDATE:: Movie Poster Found: width; %s address; "%s"', width, image)
-
-            # cropping needs to be done
-            if height > desiredHeight:
-                height = desiredHeight
+                # default width is 800 as most of them are set to this
                 try:
-                    # crop by default
-                    thumborImage = THUMBOR.format(width, height, image)
-                    validPosterList = [thumborImage]
-                    metadata.posters[thumborImage] = Proxy.Media(HTTP.Request(thumborImage).content, sort_order = 1)
-                    self.log('UPDATE:: Thumbor Image; "%s"', thumborImage)
+                    width = int(imageList[index].get('width'))
+                except:
+                    width = 800
+                    self.log('UPDATE:: No Width Attribute, default to; "%s"', width)
+
+                # width:height ratio 1:1.5
+                maxHeight = int(width * 1.5)
+                try:
+                    height = int(imageList[index].get('height'))
+                except:
+                    height = maxHeight
+                    self.log('UPDATE:: No Height Attribute, default to; "%s"', height)
+            else:
+                # no cropping needed as these video images are 800x450
+                image = html.xpath('//video/@poster')[0]
+                imageContent = HTTP.Request(image).content
+                width = 800
+                height = 450
+                maxHeight = height
+
+            self.log('UPDATE:: Movie Poster Found: w x h; %sx%s address; "%s"', width, height, image)
+
+            # cropping needed
+            if height >= maxHeight:
+                self.log('UPDATE:: Attempt to Crop as Image height; %s > Maximum Height; %s', height, maxHeight)
+                height = maxHeight
+                try:
+                    testImage = THUMBOR.format(width, height, image)
+                    testImageContent = HTTP.Request(testImage).content
                 except Exception as e:
-                    # if thumbor service is down - use vbscript (only windows)
-                    thumborImage = None
+                    self.log('UPDATE:: Thumbor Failure: %s', e)
                     try:
                         if os.name == 'nt':
-                            envVar = os.environ
-                            scriptImage = os.path.join(envVar['TEMP'], image.split("/")[-1]).replace('\\', '/')
-                            localappdata = envVar['LOCALAPPDATA'].replace('\\', '/')
-                            cmd = CROPPER.format(localappdata, image, scriptImage, width, height)
+                            testImage = os.path.join(TempFolder, image.split("/")[-1])
+                            cmd = CROPPER.format(LocalAppDataFolder, image, testImage, width, height)
                             self.log('UPDATE:: Command: %s', cmd)
-
                             subprocess.call(cmd)
-                            scriptImageData = load_file(scriptImage)
-                            validPosterList = [scriptImage]
-                            metadata.posters[scriptImage] = Proxy.Media(scriptImageData, sort_order = 1)
-                            self.log('UPDATE:: Script Image; "%s"', scriptImage)                        
+                            testImageContent = load_file(testImage)
                     except Exception as e:
-                        scriptImage = None
-                        pass
-                    pass
-
-            # if cropping did not occur
-            if not thumborImage and not scriptImage:
-                    validPosterList = [image]
-                    metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
-                    self.log('UPDATE:: Original Image; "%s"', image)
+                        self.log('UPDATE:: Crop Script Failure: %s', e)
+                    else:
+                        fromWhere = 'SCRIPT'
+                        image = testImage
+                        imageContent = testImageContent
+                else:
+                    fromWhere = 'THUMBOR'
+                    image = testImage
+                    imageContent = testImageContent
 
             #  clean up and only keep the poster we have added
-            metadata.posters.validate_keys(validPosterList)
-        except Exception as e:
-            self.log('UPDATE:: Error getting Poster Art: %s', e)
-            pass     
+            self.log('UPDATE:: %s Image; "%s"', fromWhere, image)
+            for key in metadata.posters.keys():
+                del metadata.posters[key]
+            metadata.posters[image] = Proxy.Media(imageContent)
 
+        except Exception as e:
+            self.log('UPDATE:: Error getting Poster: %s', e)
+
+        
+        # 2e.   Background Art - Next picture set to Background 
+        #       height attribute not always provided - so crop to ratio as default - if thumbor fails use script
         try:
-            thumborImage = None
-            scriptImage = None
-            if len(imageList) > 1:
-                del imageList[0]
-            else:
+            fromWhere = 'ORIGINAL'
+            imageList = html.xpath('//div[@class="mypicsgallery"]/a/img[@src and @data-src]')
+
+            # use second image in list as background
+            index = 1
+
+            # if there is no background image in list - try this xpath and use first image as background art
+            if not imageList:
+                index = 0
                 imageList = html.xpath('//figure[@class="gallery-item"]/div/img[@src and @data-src]')
 
-            image = imageList[0].get('data-src')
-            if '?' in image:
-                image = image.split('?')[0]
-            width = int(imageList[0].get('width'))
-            height = int(imageList[0].get('height'))
+            if imageList:
+                image = imageList[index].get('data-src')
+                if '?' in image:
+                    image = image.split('?')[0]
+                imageContent = HTTP.Request(image).content
 
-            # width:height ratio 16:9
-            desiredHeight = int(width * 0.5625)
-
-            self.log('UPDATE:: Background Art Found: width; %s address; "%s"', width, image)
-
-            # cropping needs to be done
-            if height > desiredHeight:
-                height = desiredHeight
+                # default width is 800 as most of them are set to this
                 try:
-                    # crop by default
-                    thumborImage = THUMBOR.format(width, height, image)
-                    validArtList = [thumborImage]
-                    metadata.art[thumborImage] = Proxy.Media(HTTP.Request(thumborImage).content, sort_order = 1)
-                    self.log('UPDATE:: Thumbor Image; "%s"', thumborImage)
-                except Exception as e:
-                    # if thumbor service is down - use vbscript (only windows)
-                    thumborImage = None
+                    width = int(imageList[index].get('width'))
+                except:
+                    width = 800
+                    self.log('UPDATE:: No Width Attribute, default to; "%s"', width)
 
+                # width:height ratio 1:1.5
+                maxHeight = int(width * 1.5)
+                try:
+                    height = int(imageList[index].get('height'))
+                except:
+                    height = maxHeight
+                    self.log('UPDATE:: No Height Attribute, default to; "%s"', height)
+            else:
+                # no cropping needed as these video images are 800x450
+                image = html.xpath('//video/@poster')[0]
+                imageContent = HTTP.Request(image).content
+                width = 800
+                height = 450
+                maxHeight = height
+
+            self.log('UPDATE:: Background Art Found: w x h; %sx%s address; "%s"', width, height, image)
+
+            # cropping needed
+            if height >= maxHeight:
+                self.log('UPDATE:: Attempt to Crop as Image height; %s > Maximum Height; %s', height, maxHeight)
+                height = maxHeight
+                try:
+                    testImage = THUMBOR.format(width, height, image)
+                    testImageContent = HTTP.Request(testImage).content
+                except Exception as e:
+                    self.log('UPDATE:: Thumbor Failure: %s', e)
                     try:
                         if os.name == 'nt':
-                            envVar = os.environ
-                            scriptImage = os.path.join(envVar['TEMP'], image.split("/")[-1]).replace('\\', '/')
-                            localappdata = envVar['LOCALAPPDATA'].replace('\\', '/')
-                            cmd = CROPPER.format(localappdata, image, scriptImage, width, height)
+                            testImage = os.path.join(TempFolder, image.split("/")[-1])
+                            cmd = CROPPER.format(LocalAppDataFolder, image, testImage, width, height)
                             self.log('UPDATE:: Command: %s', cmd)
-
                             subprocess.call(cmd)
-                            scriptImageData = load_file(scriptImage)
-                            validArtList = [scriptImage]
-                            metadata.art[scriptImage] = Proxy.Media(scriptImageData, sort_order = 1)
-                            self.log('UPDATE:: Script Image; "%s"', scriptImage)                        
+                            testImageContent = load_file(testImage)
                     except Exception as e:
-                        scriptImage = None
-                        pass
-                    pass
+                        self.log('UPDATE:: Crop Script Failure: %s', e)
+                    else:
+                        fromWhere = 'SCRIPT'
+                        image = testImage
+                        imageContent = testImageContent
+                else:
+                    fromWhere = 'THUMBOR'
+                    image = testImage
+                    imageContent = testImageContent
 
-            # if cropping did not occur
-            if not thumborImage and not scriptImage:
-                validArtList = [image]
-                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
-                self.log('UPDATE:: Original Image; "%s"', image)
-
-            #  clean up and only keep the Art we have added
-            metadata.art.validate_keys(validArtList)
+            #  clean up and only keep the art we have added
+            self.log('UPDATE:: %s Image; "%s"', fromWhere, image)
+            for key in metadata.art.keys():
+                del metadata.art[key]
+            metadata.art[image] = Proxy.Media(imageContent)
         except Exception as e:
             self.log('UPDATE:: Error getting Background Art: %s', e)
-            pass
