@@ -7,14 +7,15 @@
     19 Apr 2020     2020.01.18.9        Corrected image cropping
                                         added new xpath for titles with video image as main image
                                         improved multiple result pages handling
-                                        reoved debug print option
+                                        removed debug print option
+    29 Apr 2020     2020.01.18.10       updated IAFD routine, corrected error in multiple page processing
 
 ---------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, sys, urllib, subprocess
 
 # Version / Log Title 
-VERSION_NO = '2020.01.18.9'
+VERSION_NO = '2020.01.18.10'
 PLUGIN_LOG_TITLE = 'Fagalicious'
 
 # PLEX API
@@ -117,26 +118,25 @@ class Fagalicious(Agent.Movies):
 
     # check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not
     def getIAFDActorImage(self, actor):
-        IAFD_ACTOR_URL = 'http://www.iafd.com/person.rme/perfid=FULLNAME/gender=SEX/FULL_NAME.htm'
-        photourl = None
+        photourl = ''
         actor = actor.lower()
         fullname = actor.replace(' ','').replace("'", '').replace(".", '')
         full_name = actor.replace(' ','-').replace("'", '&apos;')
 
-        # actors are categorised on iafd as male or director in order of likelihood
+        # actors are categorised on iafd as male, director, female in order of likelihood
         for gender in ['m', 'd']:
-            iafd_url = IAFD_ACTOR_URL.replace("FULLNAME", fullname).replace("FULL_NAME", full_name).replace("SEX", gender)
+            iafd_url = 'http://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
             self.log('SELF:: Actor  %s - IAFD url: %s', actor, iafd_url)
             # Check URL exists and get actors thumbnail
             try:
-                html = HTML.ElementFromURL(iafd_url)
-                photourl = html.xpath('//*[@id="headshot"]/img')[0].get('src')
+                photourl = HTML.ElementFromURL(iafd_url).xpath('//*[@id="headshot"]/img')[0].get('src')
                 photourl = photourl.replace('headshots/', 'headshots/thumbs/th_')
-                if 'nophoto340.jpg' in photourl:
-                    photourl = None
-                return photourl
+                photourl = 'nophoto' if 'nophoto' in photourl else photourl
+                break   # if we have got here then actor has a page, stop iteration
             except: 
                 self.log('SELF:: NO IAFD Actor Page')
+
+        return photourl
 
     def log(self, message, *args):
         Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
@@ -199,54 +199,62 @@ class Fagalicious(Agent.Movies):
             except:
                 break
 
+            pageNumber = 1
             try:
-                searchQuery = html.xpath('//div[@class="nav-links"]/a[@class="page-numbers"]/@href')[0]
-                pageNumber = html.xpath('//div[@class="nav-links"]/span/text()')[0]
+                pageNumber = html.xpath('//span[@class="page-numbers current"]/text()')[0]  # current page number
+                searchQuery = html.xpath('//a[@class="next page-numbers"]/@href')[0]        # next page to go to
                 morePages = True
             except:
-                pageNumber = "1"
                 morePages = False
 
             titleList = html.xpath('//h2[@class="entry-title"]')
-            titlesFound = len(titleList)
-            if titlesFound > 0:
-                self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, titlesFound)
+            self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
 
             for title in titleList:
-                siteEntry = title.find('.//a').text.split(':')
-                self.log('SEARCH:: Site Entry: %s"', siteEntry)
-
-                siteTitle = ''
-                for i, entry in enumerate(siteEntry):
-                    if i == 0:
-                        siteStudio = entry
+                # Site Entry : Composed of Studio, then Scene Title separated by a Colon
+                try:
+                    siteEntry = title.find('.//a').text.split(':')
+                    self.log('SEARCH:: Site Entry: %s"', siteEntry)
+                except:
+                    continue
+                
+                # Site Title 
+                try:
+                    siteTitle = ' '.join(siteEntry[1:])
+                    self.log('SEARCH:: Site Title: %s"', siteTitle)
+                    siteTitle = self.NormaliseComparisonString(siteTitle)
+                    self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
+                    if siteTitle != compareTitle:
+                        continue
+                except:
+                    continue
+                
+                # Site Studio - need to check that the studio name of this title matches to the filename's studio
+                try:
+                    siteStudio = siteEntry[0]
+                    self.log('SEARCH:: Site Studio: %s', siteStudio)
+                    siteStudio = self.NormaliseComparisonString(siteStudio)
+                    if siteStudio == compareStudio:
+                        self.log('SEARCH:: Studio: Full Word Match: Filename: %s = Website: %s', compareStudio, siteStudio)
+                    elif siteStudio in compareStudio:
+                        self.log('SEARCH:: Studio: Part Word Match: Website: %s IN Filename: %s', siteStudio, compareStudio)
+                    elif compareStudio in siteStudio:
+                        self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
                     else:
-                        siteTitle += entry
-
-                self.log('SEARCH:: Site Title: %s"', siteTitle)
-                siteTitle = self.NormaliseComparisonString(siteTitle)
-                self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
-                if siteTitle != compareTitle:
+                        # remove spaces in comparison variables and check for equality
+                        noSpaceSiteStudio = siteStudio.replace(' ', '')
+                        noSpaceCompareStudio = compareStudio.replace(' ', '')
+                        if noSpaceSiteStudio != noSpaceCompareStudio:
+                            continue
+                except:
                     continue
 
-                # need to check that the studio name of this title matches to the filename's studio
-                self.log('SEARCH:: Site Studio: %s', siteStudio)
-                siteStudio = self.NormaliseComparisonString(siteStudio)
-                if siteStudio == compareStudio:
-                    self.log('SEARCH:: Studio: Full Word Match: Filename: %s = Website: %s', compareStudio, siteStudio)
-                elif siteStudio in compareStudio:
-                    self.log('SEARCH:: Studio: Part Word Match: Website: %s IN Filename: %s', siteStudio, compareStudio)
-                elif compareStudio in siteStudio:
-                    self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
-                else:
-                    # remove spaces in comparison variables and check for equality
-                    noSpaceSiteStudio = siteStudio.replace(' ', '')
-                    noSpaceCompareStudio = compareStudio.replace(' ', '')
-                    if noSpaceSiteStudio != noSpaceCompareStudio:
-                        continue
-
-                siteURL = title.find('.//a').get('href')
-                self.log('SEARCH:: Title url: %s', siteURL)
+                # Site Title URL
+                try:
+                    siteURL = title.find('.//a').get('href')
+                    self.log('SEARCH:: Title url: %s', siteURL)
+                except:
+                    self.log('SEARCH:: Error getting Site Title Url')
 
                 # Search Website for date - date is in format dd-mm-yyyy
                 try:
@@ -256,7 +264,6 @@ class Fagalicious(Agent.Movies):
                 except:
                     siteReleaseDate = compareReleaseDate
                     self.log('SEARCH:: Error getting Site Release Date')
-                    pass
 
                 # there can not be a difference more than 365 days
                 timedelta = siteReleaseDate - compareReleaseDate
@@ -350,14 +357,26 @@ class Fagalicious(Agent.Movies):
             htmltags = html.xpath('//ul/a[contains(@href, "https://fagalicious.com/tag/")]/text()')
             self.log('UPDATE:: %s Genres/Cast Tags Found: "%s"', len(htmltags), htmltags)
             for tag in htmltags:
-                if tag.lower() in group_studio.lower():
+                if tag.lower().replace(' ', '') in group_studio.lower().replace(' ', ''):
                     continue
-                tag = tag.split('(')[0].strip()
-                cast = self.getIAFDActorImage(tag)
-                if cast is None:
-                    genres.append(tag)
-                else:
-                    castdict[tag] = cast
+
+                splittag = tag.split('(')[0].strip()
+                if 'aka ' in tag:
+                    akatag = tag.replace('(', '').replace(')', '')
+                    akatags = akatag.split('aka')
+                    for akatag in akatags:
+                        cast = self.getIAFDActorImage(akatag)
+                        if cast:
+                            if cast != 'nophoto':
+                                castdict[splittag] = cast   # assign picture to main name
+                                break
+                else:               
+                    cast = self.getIAFDActorImage(splittag)
+                    if cast:
+                        if cast != 'nophoto':
+                            castdict[tag] = cast
+                    else:
+                        genres.append(tag)
         except Exception as e:
             self.log('UPDATE - Error getting Cast/Genres: %s', e)
 
@@ -375,10 +394,6 @@ class Fagalicious(Agent.Movies):
             metadata.genres.add(genre)
 
         # 2d   Posters - Front Cover set to poster
-        envVar = os.environ
-        TempFolder = envVar['TEMP']
-        LocalAppDataFolder = envVar['LOCALAPPDATA']
-
         index = 0
         try:
             fromWhere = 'ORIGINAL'
@@ -424,6 +439,9 @@ class Fagalicious(Agent.Movies):
                     self.log('UPDATE:: Thumbor Failure: %s', e)
                     try:
                         if os.name == 'nt':
+                            envVar = os.environ
+                            TempFolder = envVar['TEMP']
+                            LocalAppDataFolder = envVar['LOCALAPPDATA']
                             testImage = os.path.join(TempFolder, image.split("/")[-1])
                             cmd = CROPPER.format(LocalAppDataFolder, image, testImage, width, height)
                             self.log('UPDATE:: Command: %s', cmd)
@@ -505,6 +523,9 @@ class Fagalicious(Agent.Movies):
                     self.log('UPDATE:: Thumbor Failure: %s', e)
                     try:
                         if os.name == 'nt':
+                            envVar = os.environ
+                            TempFolder = envVar['TEMP']
+                            LocalAppDataFolder = envVar['LOCALAPPDATA']
                             testImage = os.path.join(TempFolder, image.split("/")[-1])
                             cmd = CROPPER.format(LocalAppDataFolder, image, testImage, width, height)
                             self.log('UPDATE:: Command: %s', cmd)

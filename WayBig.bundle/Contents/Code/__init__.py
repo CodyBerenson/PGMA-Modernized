@@ -10,13 +10,14 @@
                                         Search multiple result pages
     17 Apr 2020     2019.08.12.15       Removed disable debug logging preference
                                         corrected logic around image cropping
+    28 Apr 2020     2019.08.12.16       update IAFD routine
 
 ---------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, sys, urllib, subprocess
 
 # Version / Log Title 
-VERSION_NO = '2019.12.22.15'
+VERSION_NO = '2019.12.22.16'
 PLUGIN_LOG_TITLE = 'WayBig'
 
 # PLEX API
@@ -41,7 +42,7 @@ BASE_SEARCH_URL = BASE_URL + '/blog/index.php?s={0}'
 
 def Start():
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-agent'] = 'Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.2; Trident/4.0; SLCC2; .NET CLR 2.0.50727; .NET CLR 3.5.30729; .NET CLR 3.0.30729; Media Center PC 6.0)'
+    HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
 
 def ValidatePrefs():
     pass
@@ -130,28 +131,27 @@ class WayBig(Agent.Movies):
             myString = myString[:49]
         return myString
 
-    # check IAFD web site for better quality Actor thumbnails irrespective of whether we have a thumbnail or not
-    def getIAFDActorImage(self, Actor):
-        IAFD_Actor_URL = 'http://www.iafd.com/person.rme/perfid=FULLNAME/gender=SEX/FULL_NAME.htm'
-        photourl = None
-        Actor = Actor.lower()
-        fullname = Actor.replace(' ','').replace("'", '').replace(".", '')
-        full_name = Actor.replace(' ','-').replace("'", '&apos;')
+    # check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not
+    def getIAFDActorImage(self, actor):
+        photourl = ''
+        actor = actor.lower()
+        fullname = actor.replace(' ','').replace("'", '').replace(".", '')
+        full_name = actor.replace(' ','-').replace("'", '&apos;')
 
-        # Actors are categorised on iafd as male or director in order of likelihood
+        # actors are categorised on iafd as male, director, female in order of likelihood
         for gender in ['m', 'd']:
-            iafd_url = IAFD_Actor_URL.replace("FULLNAME", fullname).replace("FULL_NAME", full_name).replace("SEX", gender)
-            self.log('SELF:: Actor  %s - IAFD url: %s', Actor, iafd_url)
-            # Check URL exists and get Actors thumbnail
+            iafd_url = 'http://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
+            self.log('SELF:: Actor  %s - IAFD url: %s', actor, iafd_url)
+            # Check URL exists and get actors thumbnail
             try:
-                html = HTML.ElementFromURL(iafd_url)
-                photourl = html.xpath('//*[@id="headshot"]/img')[0].get('src')
+                photourl = HTML.ElementFromURL(iafd_url).xpath('//*[@id="headshot"]/img')[0].get('src')
                 photourl = photourl.replace('headshots/', 'headshots/thumbs/th_')
-                if 'nophoto340.jpg' in photourl:
-                    photourl = None
-                return photourl
+                photourl = 'nophoto' if 'nophoto' in photourl else photourl
+                break   # if we have got here then actor has a page, stop iteration
             except: 
                 self.log('SELF:: NO IAFD Actor Page')
+
+        return photourl
 
     def log(self, message, *args):
         Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
@@ -389,10 +389,6 @@ class WayBig(Agent.Movies):
             self.log('UPDATE:: Error getting Cast')
 
         # 2c.   Posters - Front Cover set to poster
-        envVar = os.environ
-        TempFolder = envVar['TEMP']
-        LocalAppDataFolder = envVar['LOCALAPPDATA']
-
         imageList = html.xpath('//a[@target="_self" or @target="_blank"]/img[(@height or @width) and @alt and contains(@src, "zing.waybig.com/reviews")]')
         index = 0
         try:
@@ -428,6 +424,9 @@ class WayBig(Agent.Movies):
                     self.log('UPDATE:: Thumbor Failure: %s', e)
                     try:
                         if os.name == 'nt':
+                            envVar = os.environ
+                            TempFolder = envVar['TEMP']
+                            LocalAppDataFolder = envVar['LOCALAPPDATA']
                             testImage = os.path.join(TempFolder, image.split("/")[-1])
                             cmd = CROPPER.format(LocalAppDataFolder, image, testImage, width, height)
                             self.log('UPDATE:: Command: %s', cmd)
@@ -489,6 +488,9 @@ class WayBig(Agent.Movies):
                     self.log('UPDATE:: Thumbor Failure: %s', e)
                     try:
                         if os.name == 'nt':
+                            envVar = os.environ
+                            TempFolder = envVar['TEMP']
+                            LocalAppDataFolder = envVar['LOCALAPPDATA']
                             testImage = os.path.join(TempFolder, image.split("/")[-1])
                             cmd = CROPPER.format(LocalAppDataFolder, image, testImage, width, height)
                             self.log('UPDATE:: Command: %s', cmd)

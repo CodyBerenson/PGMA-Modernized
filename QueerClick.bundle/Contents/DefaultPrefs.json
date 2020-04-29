@@ -6,12 +6,6 @@
         "default": "^\\((?P<studio>.+)\\) - (?P<title>[^-]+)(?:(?P<genres>.+))? \\((?P<year>\\d{4})\\)"
     },
     {
-        "id": "debug",
-        "label": "Enable debug logging",
-        "type": "bool",
-        "default": "true"
-    },
-    {
         "id": "delay",
         "label": "Seconds to pause after a network request was made, ensuring undue burden is not placed on the web server.",
         "type": "enum",

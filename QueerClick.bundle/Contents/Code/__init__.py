@@ -1,14 +1,23 @@
 ﻿# QueerClick - (IAFD)
+'''
+                                    Version History
+                                    ---------------
+    Date            Version             Modification
+    28 Apr 2020     2020.02.14.10       Removed disable debug logging preference
+                                        corrected logic around image cropping
+                                        improved error handling on title, url retrieval
+    29 Apr 2020     2020.02.14.11       update IAFD routine
+
+---------------------------------------------------------------------------------------------------------------
+'''
 import datetime, linecache, platform, os, re, string, sys, urllib, urllib2, subprocess
 
 # Version / Log Title 
-VERSION_NO = '2020.02.14.8'
+VERSION_NO = '2020.02.14.10'
 PLUGIN_LOG_TITLE = 'QueerClick'
 
 # PLEX API
 load_file = Core.storage.load
-
-DEBUG = Prefs['debug']
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
 # if title on website has a hyphen in its title that does not correspond to a colon replace it with an em dash in the corresponding position
@@ -25,11 +34,11 @@ CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/QueerClick.bundle/Conten
 
 # URLS
 BASE_URL = 'https://queerclick.com'
-BASE_SEARCH_URL = BASE_URL + '/{0}?s={1}'
+BASE_SEARCH_URL = BASE_URL + '/?s={0}'
 
 def Start():
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-agent'] = 'Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.2; Trident/4.0; SLCC2; .NET CLR 2.0.50727; .NET CLR 3.5.30729; .NET CLR 3.0.30729; Media Center PC 6.0)'
+    HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
 
 def ValidatePrefs():
     pass
@@ -41,11 +50,9 @@ class QueerClick(Agent.Movies):
     preference = True
     media_types = ['Movie']
     contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultScenes']
-    accepts_from = ['com.plexapp.agents.localmedia']
 
     def matchedFilename(self, file):
         # match file name to regex
-        self.log ("PATTERN = %s", FILEPATTERN) 
         pattern = re.compile(FILEPATTERN)
         return pattern.search(file)
 
@@ -55,15 +62,8 @@ class QueerClick(Agent.Movies):
         matched = pattern.search(file)
         if matched:
             groups = matched.groupdict()
-            groupstitle = groups['title']
-            if ' - Disk ' in groupstitle:
-                groupstitle = groupstitle.split(' - Disk ')[0]
-            if ' - Disc ' in groupstitle:
-                groupstitle = groupstitle.split(' - Disc ')[0]
-            groupsgenres = ''
-            if groups['genres'] is not None:
-                groupsgenres = groups['genres'][2:].strip()
-            return groups['studio'], groupstitle.strip(), groupsgenres, groups['year']
+            groupsgenres = groups['genres'][2:].strip() if groups['genres'] else ''
+            return groups['studio'], groups['title'], groupsgenres, groups['year']
 
     # Normalise string for Comparison, strip all non alphanumeric characters, Vol., Volume, Part, and 1 in series
     def NormaliseComparisonString(self, myString):
@@ -119,37 +119,34 @@ class QueerClick(Agent.Movies):
 
     # check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not
     def getIAFDActorImage(self, actor):
-        IAFD_ACTOR_URL = 'http://www.iafd.com/person.rme/perfid=FULLNAME/gender=SEX/FULL_NAME.htm'
-        photourl = None
+        photourl = ''
         actor = actor.lower()
         fullname = actor.replace(' ','').replace("'", '').replace(".", '')
         full_name = actor.replace(' ','-').replace("'", '&apos;')
 
-        # actors are categorised on iafd as male or director in order of likelihood
+        # actors are categorised on iafd as male, director, female in order of likelihood
         for gender in ['m', 'd']:
-            iafd_url = IAFD_ACTOR_URL.replace("FULLNAME", fullname).replace("FULL_NAME", full_name).replace("SEX", gender)
+            iafd_url = 'http://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
             self.log('SELF:: Actor  %s - IAFD url: %s', actor, iafd_url)
             # Check URL exists and get actors thumbnail
             try:
-                html = HTML.ElementFromURL(iafd_url)
-                photourl = html.xpath('//*[@id="headshot"]/img')[0].get('src')
+                photourl = HTML.ElementFromURL(iafd_url).xpath('//*[@id="headshot"]/img')[0].get('src')
                 photourl = photourl.replace('headshots/', 'headshots/thumbs/th_')
-                if 'nophoto340.jpg' in photourl:
-                    photourl = None
-                return photourl
+                photourl = 'nophoto' if 'nophoto' in photourl else photourl
+                break   # if we have got here then actor has a page, stop iteration
             except: 
                 self.log('SELF:: NO IAFD Actor Page')
 
+        return photourl
+
     def log(self, message, *args):
-        if DEBUG:
-            Log(PLUGIN_LOG_TITLE + ' - '  +  message, *args)
+        Log(PLUGIN_LOG_TITLE + ' - '  +  message, *args)
 
     def search(self, results, media, lang, manual):
         self.log('-----------------------------------------------------------------------')
         self.log('SEARCH:: Version - v.%s', VERSION_NO)
         self.log('SEARCH:: Platform - %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs->debug      - %s', DEBUG)
-        self.log('SEARCH::      ->delay      - %s', DELAY)
+        self.log('SEARCH:: Prefs->delay      - %s', DELAY)
         self.log('SEARCH::      ->regex      - %s', FILEPATTERN)
         self.log('SEARCH::      ->thumbor    - %s', THUMBOR)
         self.log('SEARCH:: media.title - %s', media.title)
@@ -192,68 +189,78 @@ class QueerClick(Agent.Movies):
         searchTitle = "{0} {1}".format(group_studio, saveTitle)
         searchTitle = self.CleanSearchString(searchTitle)
         searchTitle = String.URLEncode(searchTitle)
+
+        searchQuery = BASE_SEARCH_URL.format(searchTitle)
         
-        # Finds the entire media enclosure <DIV> elements then steps through them
         morePages = True
         pageNumber = 0
-        self.log('SEARCH:: Set to Search for More Pages')
         while morePages:
-            pageNumber += 1
-            self.log('SEARCH:: Result Page No: %s', pageNumber)
-
-            searchpageNumber = pageNumber
-            if pageNumber == 1:
-                searchpageNumber = ''
-
-            searchQuery = BASE_SEARCH_URL.format(searchpageNumber, searchTitle)
             self.log('SEARCH:: Search Query: %s', searchQuery)
-            html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
+            try: 
+                html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
+            except:
+                break
 
-            if pageNumber == 1:
-                morePages = bool(html.xpath('//span[@class="right"]/a/text()'))
-                self.log('SEARCH:: More Search Pages: %s', morePages)
-
-            titleList = html.xpath('.//article[@id and @class]')
-            self.log('SEARCH:: Titles List: %s Found', len(titleList))
-            if len(titleList) == 0:
+            pageNumber += 1
+            try:
+                searchQuery = html.xpath('//div[@class="pagination post"]/span[@class="right"]/a/@href')[0]    # next page to go to
+                morePages = True
+            except:
                 morePages = False
 
+            titleList = html.xpath('.//article[@id and @class]')
+            self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
+
             for title in titleList:
-                siteEntry = title.find('.//h2[@class="entry-title"]/a')
-                siteEntry = siteEntry.text.split(':')
-                self.log('SEARCH:: Site Entry: %s"', siteEntry)
+                # Site Entry
+                try:
+                    siteEntry = title.find('.//h2[@class="entry-title"]/a')
+                    siteEntry = siteEntry.text.split(':')
+                    self.log('SEARCH:: Site Entry: %s"', siteEntry)
+                except:
+                    continue
 
-                siteTitle = ''
-                for i, entry in enumerate(siteEntry):
-                    if i == 0:
-                        siteStudio = entry
+                # Site Title 
+                try:
+                    siteTitle = ' '.join(siteEntry[1:])
+                    # remove genres from the site entry
+                    if group_genres:
+                        siteTitle = siteTitle.replace(group_genres, '').strip()
+                    self.log('SEARCH:: Site Title: %s"', siteTitle)
+                    siteTitle = self.NormaliseComparisonString(siteTitle)
+                    self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
+                    if siteTitle != compareTitle:
+                        continue
+                except:
+                    continue
+
+                # Site Studio - need to check that the studio name of this title matches to the filename's studio
+                try:
+                    siteStudio = siteEntry[0]
+                    self.log('SEARCH:: Site Studio: %s', siteStudio)
+                    siteStudio = self.NormaliseComparisonString(siteStudio)
+                    if siteStudio == compareStudio:
+                        self.log('SEARCH:: Studio: Full Word Match: Filename: %s = Website: %s', compareStudio, siteStudio)
+                    elif siteStudio in compareStudio:
+                        self.log('SEARCH:: Studio: Part Word Match: Website: %s IN Filename: %s', siteStudio, compareStudio)
+                    elif compareStudio in siteStudio:
+                        self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
                     else:
-                        siteTitle += entry
-
-                # remove genres from the site entry
-                if group_genres is not None:
-                    siteTitle = siteTitle.replace(group_genres, '').strip()
-
-                self.log('SEARCH:: Site Title: %s"', siteTitle)
-                siteTitle = self.NormaliseComparisonString(siteTitle)
-                self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
-                if siteTitle != compareTitle:
+                        # remove spaces in comparison variables and check for equality
+                        noSpaceSiteStudio = siteStudio.replace(' ', '')
+                        noSpaceCompareStudio = compareStudio.replace(' ', '')
+                        if noSpaceSiteStudio != noSpaceCompareStudio:
+                            continue
+                except:
                     continue
-
-                # need to check that the studio name of this title matches to the filename's studio
-                self.log('SEARCH:: Site Studio: %s', siteStudio)
-                siteStudio = self.NormaliseComparisonString(siteStudio)
-                if siteStudio == compareStudio:
-                    self.log('SEARCH:: Studio: Full Word Match: Filename: %s = Website: %s', compareStudio, siteStudio)
-                elif siteStudio in compareStudio:
-                    self.log('SEARCH:: Studio: Part Word Match: Website: %s IN Filename: %s', siteStudio, compareStudio)
-                elif compareStudio in siteStudio:
-                    self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
-                else:
+                
+                # Site Title URL
+                try:
+                    siteURL = title.find('.//h2[@class="entry-title"]/a').get('href')
+                    self.log('SEARCH:: Site Title URL: %s' % str(siteURL))
+                except:
+                    self.log('SEARCH:: Error getting Site Title URL')
                     continue
-
-                siteURL = title.find('.//h2[@class="entry-title"]/a').get('href')
-                self.log('SEARCH:: Title url: %s', siteURL)
 
                 # Search Website for date - date is in format dd mmm yy
                 try:
@@ -263,7 +270,6 @@ class QueerClick(Agent.Movies):
                 except:
                     siteReleaseDate = compareReleaseDate
                     self.log('SEARCH:: Error getting Site Release Date')
-                    pass
 
                 # there can not be a difference more than 365 days
                 timedelta = siteReleaseDate - compareReleaseDate
@@ -338,7 +344,6 @@ class QueerClick(Agent.Movies):
                     metadata.genres.add(genre)
         else:
             self.log('UPDATE:: No Genres Found')
-            pass
 
         # 2a.   Summary
         try:
@@ -348,7 +353,6 @@ class QueerClick(Agent.Movies):
             metadata.summary = summary
         except:
             self.log('UPDATE:: Error getting Summary: %s')
-            pass
 
         # 2b/c.   Cast
         #         QueerClick stores the cast as links in the summary text
@@ -381,7 +385,6 @@ class QueerClick(Agent.Movies):
                 castdict[cast] = self.getIAFDActorImage(cast)
         except Exception as e:
             self.log('UPDATE - Error getting Cast: %s', e)
-            pass
 
         # Process Cast  
         # sort the dictionary and add kv to metadata
@@ -415,110 +418,102 @@ class QueerClick(Agent.Movies):
                 imageList.append([src, width, height])
         except Exception as e:
             self.log('UPDATE:: Error getting Posters/Background Art: %s', e)
-            pass
+        else:
+            # Posters
+            try:
+                fromWhere = 'ORIGINAL'
+                image, width, height = imageList[0]
+                imageContent = HTTP.Request(image).content
 
-        # Posters
-        try:
-            thumborImage = None
-            scriptImage = None
-            image, width, height = imageList[0]
+                # width:height ratio 1:1.5
+                maxHeight = int(width * 1.5)
 
-            # width:height ratio 1:1.5
-            desiredHeight = int(width * 1.5)
+                self.log('UPDATE:: Movie Poster Found: w x h; %sx%s address; "%s"', width, height, image)
 
-            self.log('UPDATE:: Movie Poster Found: width; %s address; "%s"', width, image)
-
-            # cropping needs to be done
-            if height > desiredHeight:
-                height = desiredHeight
-                try:
-                    # crop by default
-                    thumborImage = THUMBOR.format(width, height, image)
-                    validPosterList = [thumborImage]
-                    metadata.posters[thumborImage] = Proxy.Media(HTTP.Request(thumborImage).content, sort_order = 1)
-                    self.log('UPDATE:: Thumbor Image; "%s"', thumborImage)
-                except Exception as e:
-                    # if thumbor service is down - use vbscript (only windows)
-                    thumborImage = None
+                # cropping needed
+                if height >= maxHeight:
+                    self.log('UPDATE:: Attempt to Crop as Image height; %s > Maximum Height; %s', height, maxHeight)
+                    height = maxHeight
                     try:
-                        if os.name == 'nt':
-                            envVar = os.environ
-                            scriptImage = os.path.join(envVar['TEMP'], image.split("/")[-1]).replace('\\', '/')
-                            localappdata = envVar['LOCALAPPDATA'].replace('\\', '/')
-                            cmd = CROPPER.format(localappdata, image, scriptImage, width, height)
-                            self.log('UPDATE:: Command: %s', cmd)
-
-                            subprocess.call(cmd)
-                            scriptImageData = load_file(scriptImage)
-                            validPosterList = [scriptImage]
-                            metadata.posters[scriptImage] = Proxy.Media(scriptImageData, sort_order = 1)
-                            self.log('UPDATE:: Script Image; "%s"', scriptImage)                        
+                        testImage = THUMBOR.format(width, height, image)
+                        testImageContent = HTTP.Request(testImage).content
                     except Exception as e:
-                        scriptImage = None
-                        pass
-                    pass
+                        self.log('UPDATE:: Thumbor Failure: %s', e)
+                        try:
+                            if os.name == 'nt':
+                                envVar = os.environ
+                                TempFolder = envVar['TEMP']
+                                LocalAppDataFolder = envVar['LOCALAPPDATA']
+                                testImage = os.path.join(TempFolder, image.split("/")[-1])
+                                cmd = CROPPER.format(LocalAppDataFolder, image, testImage, width, height)
+                                self.log('UPDATE:: Command: %s', cmd)
+                                subprocess.call(cmd)
+                                testImageContent = load_file(testImage)
+                        except Exception as e:
+                            self.log('UPDATE:: Crop Script Failure: %s', e)
+                        else:
+                            fromWhere = 'SCRIPT'
+                            image = testImage
+                            imageContent = testImageContent
+                    else:
+                        fromWhere = 'THUMBOR'
+                        image = testImage
+                        imageContent = testImageContent
 
-            # if cropping did not occur: use original image
-            if not thumborImage and not scriptImage:
-                    validPosterList = [image]
-                    metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
-                    self.log('UPDATE:: Original Image; "%s"', image)
+                #  clean up and only keep the poster we have added
+                self.log('UPDATE:: %s Image; "%s"', fromWhere, image)
+                for key in metadata.posters.keys():
+                    del metadata.posters[key]
+                metadata.posters[image] = Proxy.Media(imageContent)
 
-            #  clean up and only keep the poster we have added
-            metadata.posters.validate_keys(validPosterList)
+            except Exception as e:
+                self.log('UPDATE:: Error getting Poster: %s', e)
 
-        except Exception as e:
-            self.log('UPDATE:: Error getting Poster: %s', e)
-            pass
+            #   Background Art - set second image to background art
+            try:
+                fromWhere = 'ORIGINAL'
+                image, width, height = imageList[1]
+                imageContent = HTTP.Request(image).content
 
-        # Background Art - set second image to background art
-        try:
-            thumborImage = None
-            scriptImage = None
-            image, width, height = imageList[1]
-            # width:height ratio 16:9
-            desiredHeight = int(width * 0.5625)
+                # width:height ratio 16:9
+                maxHeight = int(width * 0.5625)
 
-            self.log('UPDATE:: Background Art Found: width; %s address; "%s"', width, image)
+                self.log('UPDATE:: Background Art Found: w x h; %sx%s address; "%s"', width, height, image)
 
-            # cropping needs to be done
-            if height > desiredHeight:
-                height = desiredHeight
-                try:
-                    # crop by default
-                    thumborImage = THUMBOR.format(width, height, image)
-                    validArtList = [thumborImage]
-                    metadata.art[thumborImage] = Proxy.Media(HTTP.Request(thumborImage).content, sort_order = 1)
-                    self.log('UPDATE:: Thumbor Image; "%s"', thumborImage)
-                except Exception as e:
-                    # if thumbor service is down - use vbscript (only windows)
-                    thumborImage = None
+                # cropping needed
+                if height >= maxHeight:
+                    self.log('UPDATE:: Attempt to Crop as Image height; %s > Maximum Height; %s', height, maxHeight)
+                    height = maxHeight
                     try:
-                        if os.name == 'nt':
-                            envVar = os.environ
-                            scriptImage = os.path.join(envVar['TEMP'], image.split("/")[-1]).replace('\\', '/')
-                            localappdata = envVar['LOCALAPPDATA'].replace('\\', '/')
-                            cmd = CROPPER.format(localappdata, image, scriptImage, width, height)
-                            self.log('UPDATE:: Command: %s', cmd)
-
-                            subprocess.call(cmd)
-                            scriptImageData = load_file(scriptImage)
-                            validArtList = [scriptImage]
-                            metadata.art[scriptImage] = Proxy.Media(scriptImageData, sort_order = 1)
-                            self.log('UPDATE:: Script Image; "%s"', scriptImage)                        
+                        testImage = THUMBOR.format(width, height, image)
+                        testImageContent = HTTP.Request(testImage).content
                     except Exception as e:
-                        scriptImage = None
-                        pass
-                    pass
+                        self.log('UPDATE:: Thumbor Failure: %s', e)
+                        try:
+                            if os.name == 'nt':
+                                envVar = os.environ
+                                TempFolder = envVar['TEMP']
+                                LocalAppDataFolder = envVar['LOCALAPPDATA']
+                                testImage = os.path.join(TempFolder, image.split("/")[-1])
+                                cmd = CROPPER.format(LocalAppDataFolder, image, testImage, width, height)
+                                self.log('UPDATE:: Command: %s', cmd)
+                                subprocess.call(cmd)
+                                testImageContent = load_file(testImage)
+                        except Exception as e:
+                            self.log('UPDATE:: Crop Script Failure: %s', e)
+                        else:
+                            fromWhere = 'SCRIPT'
+                            image = testImage
+                            imageContent = testImageContent
+                    else:
+                        fromWhere = 'THUMBOR'
+                        image = testImage
+                        imageContent = testImageContent
 
-            # if cropping did not occur
-            if not thumborImage and not scriptImage:
-                validArtList = [image]
-                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
-                self.log('UPDATE:: Original Image; "%s"', image)
-
-            #  clean up and only keep the Art we have added
-            metadata.art.validate_keys(validArtList)
-        except Exception as e:
-            self.log('UPDATE:: Error getting Background Art: %s', e)
-            pass
+                #  clean up and only keep the art we have added
+                self.log('UPDATE:: %s Image; "%s"', fromWhere, image)
+                for key in metadata.art.keys():
+                    del metadata.art[key]
+                metadata.art[image] = Proxy.Media(imageContent)
+            except Exception as e:
+                self.log('UPDATE:: Error getting Background Art: %s', e)
