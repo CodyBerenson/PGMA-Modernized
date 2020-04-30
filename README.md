@@ -32,7 +32,7 @@ e.g.
 The matching agent will return the movie poster annd relevant metadata,actor thumbnails (matched from IAFD.com) 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/film.jpg)
 
-Scens from blogs:
+Scenes from blogs:
 
 (Studio) - Title (Year).ext
 e.g., 
