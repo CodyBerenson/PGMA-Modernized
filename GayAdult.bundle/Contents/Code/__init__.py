@@ -11,11 +11,9 @@ class GayAdult(Agent.Movies):
     name = 'Gay Adult'
     languages = [Locale.Language.NoLanguage, Locale.Language.English]
     primary_provider = True
-    accepts_from=['com.plexapp.agents.localmedia']
 
     def Log(self, message, *args):
-        if Prefs['debug']:
-            Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+        Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
 
     def search(self, results, media, lang):
         self.Log('-----------------------------------------------------------------------')
