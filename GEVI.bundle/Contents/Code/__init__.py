@@ -32,7 +32,7 @@ DELAY = int(Prefs['delay'])
 
 # URLS
 BASE_URL = 'https://www.gayeroticvideoindex.com'
-BASE_SEARCH_URL = BASE_URL + '/search.php?type=t&where=m&query={0}&Search=Search&page={1}'
+BASE_SEARCH_URL = BASE_URL + '/search.php?type=t&where=b&query={0}&Search=Search&page=1'
 
 def Start():
     HTTP.CacheTime = CACHE_1WEEK
@@ -70,14 +70,15 @@ class GEVI(Agent.Movies):
         # convert sort order version to normal version i.e "Best of Zak Spears, The -> the Best of Zak Spears"
         if myString.count(', the'):
             myString = 'the ' + myString.replace(', the', '', 1)
-        if myString.count(', An'):
+        if myString.count(', an'):
             myString = 'an ' + myString.replace(', an', '', 1)
         if myString.count(', a'):
             myString = 'a ' + myString.replace(', a', '', 1)
 
         # remove vol/volume/part and vol.1 etc wording as filenames dont have these to maintain a uniform search across all websites and remove all non alphanumeric characters
-        myString = myString.replace('&', 'and').replace(' 1', '').replace(' vol.', '').replace(' volume', '').replace(' part','')
-
+        myString = myString.replace('&', 'and').replace(' vol.', '').replace(' volume', '').replace(' part','')
+        if myString[-2:] == ' 1':
+            myString = myString[:-2]
         # strip diacritics
         myString = String.StripDiacritics(myString)
 
@@ -86,35 +87,36 @@ class GEVI(Agent.Movies):
         return regex.sub('', myString)
 
     # Prepare Video title for search query
-    def PrepareSearchQueryString(self, myString):
+    def CleanSearchString(self, myString):
         # convert to lower case and trim and strip diacritics - except ß which we replace with one s
-        myString = myString.replace('ß', 's')
+        myString = myString.replace('ß', 's').replace("'s ",'s ')
         myString = String.StripDiacritics(myString)
         myString = myString.lower().strip()
 
-        # split myString at first digit as GEVI will not find titles with digits in them
-        for firstDigit, character in enumerate(myString):
-            if character.isdigit():
-                uptofirstDigit = firstDigit - 1
-                myString = myString[0:uptofirstDigit]
+        # removal of definitive/indefinitive articles in title as it messes GEVIs search algorithm - English, French and German
+        # split myString at position of first separate digit e.g MY TITLE 7 - THE 7TH RETURN becomes MY TITLE 
+        articles = ['a', 'an', 'un', 'une', 'ein', 'eine', 'the', 'le', 'la', 'les', 'das', 'die', 'der']
+        for i, myWord in enumerate(myString.split()):
+            if i == 0:
+                myNewString = myWord if myWord not in articles else ''
+                if myNewString == '':
+                    self.log('SELF:: Removed Initial (in)definitive article: "%s"', myWord)
+                continue
+            try:                    # if it converts, it's a number stop
+                float(myWord)      
+                self.log('SELF:: Split at stand-alone digit: "%s"', myWord)
                 break
+            except ValueError:      # it's a string keep building
+                myNewString = '{0} {1}'.format(myNewString, myWord)
 
-        # removal of definitive/indefinitive articles in title as it messes GEVIs search algorithm
-        # English, French and German
-        intialWords = ['a', 'an', 'un', 'une', 'ein', 'eine', 'the', 'le', 'la', 'les', 'das', 'die', 'der']
-        firstWord = myString.split()[0]
-        if firstWord in intialWords:
-            self.log('SELF:: Remove Initial in/definitive article: %s', firstWord)
-            spliceAt = len(firstWord) + 1
-            myString = myString[spliceAt:]
+        # reassign newly created string
+        myString = myNewString
         
-        # these need to be replace with a space
+        # these need to be replace with a space, multiple spaces need to be removed
         replaceChars = ['-', '–', "'", ',' '&', '!', '.']
-        rx = '[' + re.escape(''.join(replaceChars)) + ']'
-        myString = re.sub(rx, ' ', myString)
-
-        # double spaces to be replaced by single spaces, repeat it twice in case there are triple/quadruple spaces
-        myString = myString.replace('  ', ' ').replace('  ', ' ')
+        regex = '[' + re.escape(''.join(replaceChars)) + ']'
+        myString = re.sub(regex, ' ', myString)
+        myString = ' '.join(myString.split())
 
         # GEVI uses a maximum of 24 characters when searching, make sure that this string only contains whole words
         if len(myString) > 24:
@@ -123,13 +125,14 @@ class GEVI(Agent.Movies):
                     break
                 myString = myString[:i]                
 
+        myString = String.URLEncode(myString.strip())
         self.log('SELF:: Search String = %s', myString)
         return myString
 
     # check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not
     def getIAFDActorImage(self, actor):
         photourl = ''
-        actor = actor.lower()
+        actor = String.StripDiacritics(actor).lower()
         fullname = actor.replace(' ','').replace("'", '').replace(".", '')
         full_name = actor.replace(' ','-').replace("'", '&apos;')
 
@@ -194,34 +197,38 @@ class GEVI(Agent.Movies):
         compareTitle = self.NormaliseComparisonString(saveTitle)
 
         # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
-        searchTitle = self.PrepareSearchQueryString(saveTitle)
+        searchTitle = self.CleanSearchString(saveTitle)
+        searchQuery = BASE_SEARCH_URL.format(searchTitle)
 
         # Finds the entire media enclosure <Table> element then steps through the rows
-        pageNumber = 0
         morePages = True
         while morePages:
-            pageNumber += 1
-            self.log('SEARCH:: Result Page No: %s', pageNumber)
-
-            searchQuery = BASE_SEARCH_URL.format(String.URLEncode(searchTitle), pageNumber)
             self.log('SEARCH:: Search Query: %s', searchQuery)
-            html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
-            titleList = html.xpath('//table[contains(@class,"d")]/tr')
-            self.log('SEARCH:: Titles List: %s Found', len(titleList))
+            try:
+                html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
+            except Exception as e:
+                self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+                return
 
             try:
-                testmorePages = html.xpath('.//a[text()="Next"]/text()')[0]
+                searchQuery = html.xpath('//a[text()="Next"]/@href')[0]
+                searchQuery = "{0}/{1}".format(BASE_URL, searchQuery)   # href does not have base_url in it
+                self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
+                pageNumber = int(searchQuery.split('&where')[0].split('page=')[1]) - 1
                 morePages = True
             except:
+                searchQuery = ''
+                self.log('SEARCH:: No More Pages Found')
+                pageNumber = 1
                 morePages = False
+
+            titleList = html.xpath('//table[contains(@class,"d")]/tr/td[@class="cd"]/parent::tr')
+            self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
 
             for title in titleList:
                 # Site Title
                 try:
                     siteTitle = title[0].text_content().strip()
-                    if siteTitle == '':
-                        break
-
                     siteTitle = self.NormaliseComparisonString(siteTitle)
                     self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
                     if siteTitle != compareTitle:
@@ -232,12 +239,13 @@ class GEVI(Agent.Movies):
 
                 # Site Title URL
                 try:
-                    siteURL = title.xpath('./td/a/@href')[0]
+                    siteURL = title.xpath('.//a/@href')[0]
                     if BASE_URL not in siteURL:
                         siteURL = BASE_URL + siteURL
                     self.log('SEARCH:: Site Title url: %s', siteURL)
                 except:
                     self.log('SEARCH:: Error getting Site Title Url')
+                    continue
 
                 # Search Website for date - date is in format yyyy - so default to December 31st
                 try:
@@ -384,8 +392,8 @@ class GEVI(Agent.Movies):
 
         # scenes
         try:
-            scenes = '\nScenes: {0}'.format(actionnotes)
             htmlscenes = html.xpath('//td[contains(text(),"scenes /")]//following-sibling::td//div')
+            scenes = '' if len(htmlscenes) == 0 else '\nScenes: {0}'.format(actionnotes)
             for item in htmlscenes:
                 scenes = '{0}\n{1}'.format(scenes, item.text_content().strip())
             self.log('UPDATE:: Scenes Found: %s', scenes)
@@ -398,8 +406,8 @@ class GEVI(Agent.Movies):
         if summary:
             regex = r'View this scene at.*'
             pattern = re.compile(regex, re.IGNORECASE)
-            summary = re.sub(pattern, '', summary)
-            metadata.summary = summary
+            summary = re.sub(pattern, '', summary) 
+        metadata.summary = summary if len(summary.strip()) > 0 else ' '
 
         # 2b.   Countries
         try:
