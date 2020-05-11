@@ -15,9 +15,9 @@
 **View the README inside the studio folders to correctly label your files**
 
 ### Please Read
-Usage for the Agents:
+**Usage for the Agents:**
 
-Feature Films:
+**Feature Films:**
 
 (Studio) - Title (Year).ext
 
@@ -32,7 +32,7 @@ e.g.
 The matching agent will return the movie poster annd relevant metadata,actor thumbnails (matched from IAFD.com) 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/film.jpg)
 
-Scenes from blogs:
+**Scenes from blogs:**
 
 (Studio) - Title (Year).ext
 e.g., 
