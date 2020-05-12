@@ -73,7 +73,7 @@ class QueerClick(Agent.Movies):
         # convert sort order version to normal version i.e "Best of Zak Spears, The -> the Best of Zak Spears"
         if myString.count(', the'):
             myString = 'the ' + myString.replace(', the', '', 1)
-        if myString.count(', An'):
+        if myString.count(', an'):
             myString = 'an ' + myString.replace(', an', '', 1)
         if myString.count(', a'):
             myString = 'a ' + myString.replace(', a', '', 1)
@@ -117,10 +117,11 @@ class QueerClick(Agent.Movies):
         self.log('SEARCH:: "%s" found - Stripped Search Title "%s"', item, myString)
         return String.StripDiacritics(myString).lower()        
 
+    #-------------------------------------------------------------------------------------------------------------------------------
     # check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not
     def getIAFDActorImage(self, actor):
         photourl = ''
-        actor = actor.lower()
+        actor = String.StripDiacritics(actor).lower()
         fullname = actor.replace(' ','').replace("'", '').replace(".", '')
         full_name = actor.replace(' ','-').replace("'", '&apos;')
 
@@ -145,6 +146,7 @@ class QueerClick(Agent.Movies):
     def search(self, results, media, lang, manual):
         self.log('-----------------------------------------------------------------------')
         self.log('SEARCH:: Version - v.%s', VERSION_NO)
+        self.log('SEARCH:: Python Version - %s', sys.version_info)
         self.log('SEARCH:: Platform - %s %s', platform.system(), platform.release())
         self.log('SEARCH:: Prefs->delay      - %s', DELAY)
         self.log('SEARCH::      ->regex      - %s', FILEPATTERN)
@@ -380,9 +382,8 @@ class QueerClick(Agent.Movies):
                     # if the xpath value is not in the title skip
                     if cast.lower() not in group_title.lower():
                         continue 
-                if len(cast) == 0:
-                    continue
-                castdict[cast] = self.getIAFDActorImage(cast)
+                    castdict[cast] = self.getIAFDActorImage(cast)
+                    castdict[cast] = '' if castdict[cast] == 'nophoto' else castdict[cast]
         except Exception as e:
             self.log('UPDATE - Error getting Cast: %s', e)
 

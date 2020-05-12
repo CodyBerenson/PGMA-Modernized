@@ -16,6 +16,6 @@
         "id": "thumbor",
         "label": "Web Address of Thumbor: A smart imaging service. It enables on-demand onlines cropping, resizing and flipping of images",
         "type": "text",
-        "default": "https://cdn.vigue.me/unsafe"
+        "default": "http://35.232.232.183:8888/unsafe"
     }
 ]

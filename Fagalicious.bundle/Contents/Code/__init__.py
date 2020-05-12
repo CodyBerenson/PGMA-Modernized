@@ -116,10 +116,11 @@ class Fagalicious(Agent.Movies):
         myString = myString[:50].strip()
         return myString
 
+    #-------------------------------------------------------------------------------------------------------------------------------
     # check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not
     def getIAFDActorImage(self, actor):
         photourl = ''
-        actor = actor.lower()
+        actor = String.StripDiacritics(actor).lower()
         fullname = actor.replace(' ','').replace("'", '').replace(".", '')
         full_name = actor.replace(' ','-').replace("'", '&apos;')
 
