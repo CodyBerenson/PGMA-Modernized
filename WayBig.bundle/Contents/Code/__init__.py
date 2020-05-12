@@ -1,23 +1,25 @@
 ﻿# WayBig (IAFD)
 '''
-                                    Version History
-                                    ---------------
-    Date            Version             Modification
-    22 Dec 2019     2019.12.22.1        Corrected scrapping of collections
-    14 Apr 2020     2019.08.12.14       Corrected xPath to properly identify titles in result list
-                                        Dropped first word of title with invalid characters i.e "'"
-                                        Improved title matching and logging around it
-                                        Search multiple result pages
-    17 Apr 2020     2019.08.12.15       Removed disable debug logging preference
-                                        corrected logic around image cropping
-    28 Apr 2020     2019.08.12.16       update IAFD routine
+                                                  Version History
+                                                  ---------------
+    Date            Version                         Modification
+    22 Dec 2019   2019.12.22.1     Corrected scrapping of collections
+    14 Apr 2020   2019.08.12.14    Corrected xPath to properly identify titles in result list
+                                   Dropped first word of title with invalid characters i.e "'"
+                                   Improved title matching and logging around it
+                                   Search multiple result pages
+    17 Apr 2020   2019.08.12.15    Removed disable debug logging preference
+                                   corrected logic around image cropping
+    28 Apr 2020   2019.08.12.16    update IAFD routine
+    08 May 2020   2019.08.12.17    Added [ and ] to characters not be be url encoded as titles were not returning results
+                                   updated removal of stand alone '1' in comparison routine
 
 ---------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, sys, urllib, subprocess
 
 # Version / Log Title 
-VERSION_NO = '2019.12.22.16'
+VERSION_NO = '2019.12.22.17'
 PLUGIN_LOG_TITLE = 'WayBig'
 
 # PLEX API
@@ -40,13 +42,16 @@ CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/WayBig.bundle/Contents/C
 BASE_URL = 'https://www.waybig.com'
 BASE_SEARCH_URL = BASE_URL + '/blog/index.php?s={0}'
 
+#----------------------------------------------------------------------------------------------------------------------------------
 def Start():
     HTTP.CacheTime = CACHE_1WEEK
     HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
 
+#----------------------------------------------------------------------------------------------------------------------------------
 def ValidatePrefs():
     pass
 
+#----------------------------------------------------------------------------------------------------------------------------------
 class WayBig(Agent.Movies):
     name = 'WayBig (IAFD)'
     languages = [Locale.Language.English]
@@ -55,19 +60,18 @@ class WayBig(Agent.Movies):
     media_types = ['Movie']
     contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultScenes']
 
-    def matchedFileName(self, file):
-        # match file name to regex
-        pattern = re.compile(FILEPATTERN)
-        return pattern.search(file)
-
-    def getFileNameGroups(self, file):
-        # return groups from FileName regex match
+    #-------------------------------------------------------------------------------------------------------------------------------
+    def matchFilename(self, file):
+        # return groups from filename regex match else return false
         pattern = re.compile(FILEPATTERN)
         matched = pattern.search(file)
         if matched:
             groups = matched.groupdict()
             return groups['studio'], groups['title'], groups['year']
+        else:
+            raise Exception("File Name [{0}] not in the expected format: (Studio) - Title (Year)".format(file))
 
+    #-------------------------------------------------------------------------------------------------------------------------------
     # Normalise string for Comparison, strip all non alphanumeric characters, Vol., Volume, Part, and 1 in series
     def NormaliseComparisonString(self, myString):
         # convert to lower case and trim
@@ -76,13 +80,17 @@ class WayBig(Agent.Movies):
         # convert sort order version to normal version i.e "Best of Zak Spears, The -> the Best of Zak Spears"
         if myString.count(', the'):
             myString = 'the ' + myString.replace(', the', '', 1)
-        if myString.count(', An'):
+        if myString.count(', an'):
             myString = 'an ' + myString.replace(', an', '', 1)
         if myString.count(', a'):
             myString = 'a ' + myString.replace(', a', '', 1)
 
-        # remove vol/volume/part and vol.1 etc wording as FileNames dont have these to maintain a uniform search across all websites and remove all non alphanumeric characters
-        myString = myString.replace('&', 'and').replace(' 1', '').replace(' vol.', '').replace(' volume', '').replace(' part ','')
+        # remove vol/volume/part and vol.1 etc wording as filenames dont have these to maintain a uniform search across all websites and remove all non alphanumeric characters
+        myString = myString.replace('&', 'and').replace(' vol.', '').replace(' volume', '').replace(' part','').replace(',', '')
+
+        # remove all standalone "1's"
+        regex = re.compile(r'(?<!\d)1(?!\d)')
+        myString = regex.sub('', myString)
 
         # strip diacritics
         myString = String.StripDiacritics(myString)
@@ -91,8 +99,9 @@ class WayBig(Agent.Movies):
         regex = re.compile(r'\W+')
         return regex.sub('', myString)
 
+    #-------------------------------------------------------------------------------------------------------------------------------
     # clean search string before searching on WayBig
-    def PrepareSearchQueryString(self, myString):
+    def CleanSearchString(self, myString):
         myString = myString.lower().strip()
 
         # if string has an invalid character in it process
@@ -116,7 +125,7 @@ class WayBig(Agent.Movies):
                 myString = myString.split(Char)[0]
                 self.log('SELF:: "{0}" found - Amended Search Query "{1}"'.format(Char, myString))
 
-        # for titles with colons in them: always replace ":" with " - " in filenames
+        # for titles with " - " replace with ":" 
         if " - " in myString:
             myString = myString.replace(' - ',': ')
             self.log('SELF:: Hyphen found - Amended Search Query "%s"', myString)
@@ -124,17 +133,20 @@ class WayBig(Agent.Movies):
         # Search Query - for use to search the internet
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString)
-        # reverse url encoding on the folowing characters (, ), &, :, ! and ,
-        myString = myString.replace('%2528','(').replace('%2529',')').replace('%40','&').replace('%3A',':').replace('%2C',',').replace('%21','!')
+        
+        # reverse url encoding on the folowing characters (, ), &, :, !, [, ] ,
+        myString = myString.replace('%2528','(').replace('%2529',')').replace('%40','&').replace('%3A',':').replace('%2C',',')
+        myString = myString.replace('%21','!').replace('%255b', '[').replace('%255d', ']')
         myString = myString[:50].strip()
         if myString[-1] == '%':
             myString = myString[:49]
         return myString
 
+    #-------------------------------------------------------------------------------------------------------------------------------
     # check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not
     def getIAFDActorImage(self, actor):
         photourl = ''
-        actor = actor.lower()
+        actor = String.StripDiacritics(actor).lower()
         fullname = actor.replace(' ','').replace("'", '').replace(".", '')
         full_name = actor.replace(' ','-').replace("'", '&apos;')
 
@@ -153,35 +165,34 @@ class WayBig(Agent.Movies):
 
         return photourl
 
+    #-------------------------------------------------------------------------------------------------------------------------------
     def log(self, message, *args):
         Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
 
+    #-------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
-        self.log('-----------------------------------------------------------------------')
-        self.log('SEARCH:: Version - v.%s', VERSION_NO)
-        self.log('SEARCH:: Platform - %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs->delay      - %s', DELAY)
-        self.log('SEARCH::      ->regex      - %s', FILEPATTERN)
-        self.log('SEARCH::      ->thumbor    - %s', THUMBOR)
-        self.log('SEARCH:: media.title - %s', media.title)
-        self.log('SEARCH:: media.items[0].parts[0].file - %s', media.items[0].parts[0].file)
-        self.log('SEARCH:: media.items - %s', media.items)
-        self.log('SEARCH:: media.filename - %s', media.filename)
-        self.log('SEARCH:: lang - %s', lang)
-        self.log('SEARCH:: manual - %s', manual)
-        self.log('-----------------------------------------------------------------------')
-
-        folder, file = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
-        self.log('SEARCH:: File Name: %s', file)
-        self.log('SEARCH:: Enclosing Folder: %s', folder)
- 
-        # Check FileName format
-        if not self.matchedFileName(file):
-            self.log('SEARCH:: Skipping %s because the file name is not in the expected format: (Studio) - Title (Year)', file)
+        if not media.items[0].parts[0].file:
             return
+        folder, file = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
 
-        group_studio, group_title, group_year = self.getFileNameGroups(file)
-        self.log('SEARCH:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
+        self.log('-----------------------------------------------------------------------')
+        self.log('SEARCH:: Version      : v.%s', VERSION_NO)
+        self.log('SEARCH:: Python       : %s', sys.version_info)
+        self.log('SEARCH:: Platform     : %s %s', platform.system(), platform.release())
+        self.log('SEARCH:: Prefs->delay : %s', DELAY)
+        self.log('SEARCH::      ->regex : %s', FILEPATTERN)
+        self.log('SEARCH:: media.title  : %s', media.title)
+        self.log('SEARCH:: File Name    : %s', file)
+        self.log('SEARCH:: File Folder  : %s', folder)
+        self.log('-----------------------------------------------------------------------')
+
+        # Check filename format
+        try:
+            group_studio, group_title, group_year = self.matchFilename(file)
+            self.log('SEARCH:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
+        except Exception as e:
+            self.log('SEARCH:: Skipping %s', e)
+            return
 
         #  Release date default to December 31st of FileName value compare against release date on website
         compareReleaseDate = datetime.datetime(int(group_year), 12, 31)
@@ -197,7 +208,7 @@ class WayBig(Agent.Movies):
         compareTitleList = []
 
         cleanStudio = group_studio
-        cleanTitle = self.PrepareSearchQueryString(group_title)
+        cleanTitle = self.CleanSearchString(group_title)
         compareStudio  = self.NormaliseComparisonString(group_studio)
         compareTitle = self.NormaliseComparisonString(group_title)
         
@@ -222,7 +233,7 @@ class WayBig(Agent.Movies):
             self.log('SEARCH:: [%s. %s]', index + 1, searchType[index])
 
             # Search Query - for use to search the internet
-            searchTitle = self.PrepareSearchQueryString(searchTitle)
+            searchTitle = self.CleanSearchString(searchTitle)
             searchQuery = BASE_SEARCH_URL.format(searchTitle)
 
             compareTitle = compareTitleList[index]
@@ -291,22 +302,22 @@ class WayBig(Agent.Movies):
                     # we have found a title that matches quit loop
                     return
 
+    #-------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         folder, file = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
         self.log('-----------------------------------------------------------------------')
-        self.log('UPDATE:: Version - v.%s', VERSION_NO)
-        self.log('UPDATE:: Platform - %s %s', platform.system(), platform.release())
-        self.log('UPDATE:: File Name: %s', file)
-        self.log('UPDATE:: Enclosing Folder: %s', folder)
+        self.log('UPDATE:: Version    : v.%s', VERSION_NO)
+        self.log('UPDATE:: File Name  : %s', file)
+        self.log('UPDATE:: File Folder: %s', folder)
         self.log('-----------------------------------------------------------------------')
 
-        # Check FileName format
-        if not self.matchedFileName(file):
-            self.log('UPDATE:: Skipping %s because the file name is not in the expected format: (Studio) - Title (Year)', file)
+        # Check filename format
+        try:
+            group_studio, group_title, group_year = self.matchFilename(file)
+            self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
+        except Exception as e:
+            self.log('UPDATE:: Skipping %s', e)
             return
-
-        group_studio, group_title, group_year = self.getFileNameGroups(file)
-        self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
 
         # the ID is composed of the webpage for the video and its thumbnail
         html = HTML.ElementFromURL(metadata.id.split('|')[0], timeout=60, errors='ignore', sleep=DELAY)
@@ -423,6 +434,7 @@ class WayBig(Agent.Movies):
                 except Exception as e:
                     self.log('UPDATE:: Thumbor Failure: %s', e)
                     try:
+                        testImageContent = self.cropImage(image, height)
                         if os.name == 'nt':
                             envVar = os.environ
                             TempFolder = envVar['TEMP']
@@ -432,6 +444,7 @@ class WayBig(Agent.Movies):
                             self.log('UPDATE:: Command: %s', cmd)
                             subprocess.call(cmd)
                             testImageContent = load_file(testImage)
+
                     except Exception as e:
                         self.log('UPDATE:: Crop Script Failure: %s', e)
                     else:
@@ -487,6 +500,7 @@ class WayBig(Agent.Movies):
                 except Exception as e:
                     self.log('UPDATE:: Thumbor Failure: %s', e)
                     try:
+                        testImageContent = self.cropImage(image, height)
                         if os.name == 'nt':
                             envVar = os.environ
                             TempFolder = envVar['TEMP']
