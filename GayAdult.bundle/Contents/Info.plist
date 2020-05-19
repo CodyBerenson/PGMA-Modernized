@@ -12,7 +12,7 @@
         <string>
             <![CDATA[
                 2020-02-07<br/>
-                <font size="4" color="green"><a href="https://github.com/acvigue/pgma">GAY ADULT:</a></font><br/><br/>
+                <font size="4" color="green"><a href="https://github.com/CodyBerenson/PGMA-Modernized">GAY ADULT:</a></font><br/><br/>
                 Plex metadata agent for fetching metadata from websites that sell gay adult . 
                 The metadata that contributes to this agent comes from the following websites:<br/>
                     1. Adult Entertainment Broadcast Network<br/>
@@ -20,9 +20,11 @@
                     3. Gay DVD Empire<br/>
                     4. Gay Entertainment Video Index<br/>
                     5. Gay Hot Movies<br/>
-                    6. Homo Active<br/>
-					7. RadVideo<br/>
-					8. IAFD</br>
+					6. GayMovie<br/>
+					7. GayWorld<br/>
+                    8. Homo Active<br/>
+					9. Internet Adult Film Database</br>
+				   10. RadVideo<br/>
 				<br/>
                 The metadata that contributes to this agent comes from the following blogs:<br/>
                     1. Fagalicious<br/>

@@ -1,16 +1,22 @@
 ﻿# IAFD - (IAFD)
 '''
-                                    Version History
-                                    ---------------
-    Date            Version             Modification
-    22 Apr 2020     2020.04.22.1        Creation
+                                                  Version History
+                                                  ---------------
+    Date            Version                         Modification
+    22 Apr 2020   2020.04.22.01    Creation
+    15 May 2020   2020.04.22.02    Corrected search string to account for titles that have a Colon in them
+                                   added/merge matching string routines - filename, studio, release date
+                                   included cast with non-sexual roles
+    19 May 2020   2020.04.22.03    Corrected search to look past the results page and get the movie title page to find
+                                   studio/release date as the results page only listed the distributor/production year
+                                   updated date match function
 
 ---------------------------------------------------------------------------------------------------------------
 '''
-import datetime, linecache, platform, os, re, string, sys, urllib
+import datetime, calendar, linecache, platform, os, re, string, sys, urllib
 
 # Version / Log Title 
-VERSION_NO = '2020.04.22.1'
+VERSION_NO = '2020.04.22.03'
 PLUGIN_LOG_TITLE = 'IAFD'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -24,13 +30,19 @@ DELAY = int(Prefs['delay'])
 BASE_URL = 'http://www.iafd.com'
 BASE_SEARCH_URL = BASE_URL + '/results.asp?searchtype=comprehensive&searchstring={0}'
 
+# Date Formats used by website
+DATE_YMD = '%Y%m%d'
+DATEFORMAT = '%b %d, %Y'
+#----------------------------------------------------------------------------------------------------------------------------------
 def Start():
     HTTP.CacheTime = CACHE_1WEEK
     HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
 
+#----------------------------------------------------------------------------------------------------------------------------------
 def ValidatePrefs():
     pass
 
+#----------------------------------------------------------------------------------------------------------------------------------
 class IAFD(Agent.Movies):
     name = 'Internet Adult Film Database'
     languages = [Locale.Language.English]
@@ -39,19 +51,65 @@ class IAFD(Agent.Movies):
     media_types = ['Movie']
     contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultFilms', 'com.plexapp.agents.GayAdultScenes']
 
-    def matchedFilename(self, file):
-        # match file name to regex
-        pattern = re.compile(FILEPATTERN)
-        return pattern.search(file)
-
-    def getFilenameGroups(self, file):
-        # return groups from filename regex match
+    #-------------------------------------------------------------------------------------------------------------------------------
+    def matchFilename(self, file):
+        # return groups from filename regex match else return false
         pattern = re.compile(FILEPATTERN)
         matched = pattern.search(file)
         if matched:
             groups = matched.groupdict()
             return groups['studio'], groups['title'], groups['year']
+        else:
+            raise Exception("File Name [{0}] not in the expected format: (Studio) - Title (Year)".format(file))
 
+    #-------------------------------------------------------------------------------------------------------------------------------
+    # match file studio name against website studio name: Boolean Return
+    def matchStudioName(self, fileStudioName, siteStudioName):
+        siteStudioName = self.NormaliseComparisonString(siteStudioName)
+
+        # remove spaces in comparison variables and check for equality
+        noSpaces_siteStudioName = siteStudioName.replace(' ', '')
+        noSpaces_fileStudioName = fileStudioName.replace(' ', '')
+
+        if siteStudioName == fileStudioName:
+            self.log('SELF:: Studio: Full Word Match: Site: {0} = File: {1}'.format(siteStudioName, fileStudioName))
+        elif noSpaces_siteStudioName == noSpaces_fileStudioName:
+            self.log('SELF:: Studio: Full Word Match: Site: {0} = File: {1}'.format(siteStudioName, fileStudioName))
+        elif siteStudioName in fileStudioName:
+            self.log('SELF:: Studio: Part Word Match: Site: {0} IN File: {1}'.format(siteStudioName, fileStudioName))
+        elif fileStudioName in siteStudioName:
+            self.log('SELF:: Studio: Part Word Match: File: {0} IN Site: {1}'.format(fileStudioName, siteStudioName))
+        else:
+            raise Exception('Match Failure: Site: {0}'.format(siteStudioName))
+
+        return True
+
+    #-------------------------------------------------------------------------------------------------------------------------------
+    # match file year against website release date: return formatted site date if no error or default to formated file date
+    def matchReleaseDate(self, fileDate, siteDate):
+        if len(siteDate) == 4:      # a year has being provided - default to 31st December of that year
+            siteDate = siteDate + '1231'
+            siteDate = datetime.datetime.strptime(siteDate, DATE_YMD)
+        elif len(siteDate) == 7:    # month/year provided - default to last day of month
+            year = int(siteDate[-4:])
+            month = int(siteDate[:2])
+            day = calendar.monthrange(year, month)[1]
+            siteDate = '{0}{1}{2:2d}'.format(year, month, day)
+            siteDate = datetime.datetime.strptime(siteDate, DATE_YMD)
+        else:
+            siteDate = datetime.datetime.strptime(siteDate, DATEFORMAT)
+
+        # there can not be a difference more than 366 days between FileName Date and SiteDate
+        dx = abs((fileDate - siteDate).days)
+        msg = 'Match{0}: File Date [{1}] - Site Date [{2}] = Dx [{3}] days'.format(' Failure' if dx > 366 else '', fileDate.strftime('%Y %m %d'), siteDate.strftime('%Y %m %d'), dx)
+        if dx > 366:
+            raise Exception('Release Date: {0}'.format(msg))
+        else:
+            self.log('SELF:: Release Date: {0}'.format(msg))
+
+        return siteDate
+
+    #-------------------------------------------------------------------------------------------------------------------------------
     # Normalise string for Comparison, strip all non alphanumeric characters, Vol., Volume, Part, and 1 in series
     def NormaliseComparisonString(self, myString):
         # convert to lower case and trim
@@ -77,6 +135,7 @@ class IAFD(Agent.Movies):
         regex = re.compile(r'\W+')
         return regex.sub('', myString)
 
+    #-------------------------------------------------------------------------------------------------------------------------------
     # clean search string before searching on IAFD
     def CleanSearchString(self, myString):
         # Search Query - for use to search the internet
@@ -87,41 +146,40 @@ class IAFD(Agent.Movies):
             myString = myString[3:]
         if myString[:2] == 'a ':
             myString = myString[2:]
+
+        myString = myString.replace(" - ", ": ")
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString)
         return myString
 
+    #-------------------------------------------------------------------------------------------------------------------------------
     def log(self, message, *args):
         Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
 
+    #-------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
-        self.log('-----------------------------------------------------------------------')
-        self.log('SEARCH:: Version - v.%s', VERSION_NO)
-        self.log('SEARCH:: Platform - %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs->delay      - %s', DELAY)
-        self.log('SEARCH::      ->regex      - %s', FILEPATTERN)
-        self.log('SEARCH:: media.title - %s', media.title)
-        self.log('SEARCH:: media.items[0].parts[0].file - %s', media.items[0].parts[0].file)
-        self.log('SEARCH:: media.items - %s', media.items)
-        self.log('SEARCH:: media.filename - %s', media.filename)
-        self.log('SEARCH:: lang - %s', lang)
-        self.log('SEARCH:: manual - %s', manual)
-        self.log('-----------------------------------------------------------------------')
-
         if not media.items[0].parts[0].file:
             return
-
         folder, file = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
-        self.log('SEARCH:: File Name: %s', file)
-        self.log('SEARCH:: Enclosing Folder: %s', folder)
+
+        self.log('-----------------------------------------------------------------------')
+        self.log('SEARCH:: Version      : v.%s', VERSION_NO)
+        self.log('SEARCH:: Python       : %s', sys.version_info)
+        self.log('SEARCH:: Platform     : %s %s', platform.system(), platform.release())
+        self.log('SEARCH:: Prefs->delay : %s', DELAY)
+        self.log('SEARCH::      ->regex : %s', FILEPATTERN)
+        self.log('SEARCH:: media.title  : %s', media.title)
+        self.log('SEARCH:: File Name    : %s', file)
+        self.log('SEARCH:: File Folder  : %s', folder)
+        self.log('-----------------------------------------------------------------------')
 
         # Check filename format
-        if not self.matchedFilename(file):
-            self.log('SEARCH:: Skipping %s because the file name is not in the expected format: (Studio) - Title (Year)', file)
+        try:
+            group_studio, group_title, group_year = self.matchFilename(file)
+            self.log('SEARCH:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
+        except Exception as e:
+            self.log('SEARCH:: Skipping %s', e)
             return
-
-        group_studio, group_title, group_year = self.getFilenameGroups(file)
-        self.log('SEARCH:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
 
         # compare Studio - used to check against the studio name on website
         compareStudio = self.NormaliseComparisonString(group_studio)
@@ -179,35 +237,11 @@ class IAFD(Agent.Movies):
                 self.log('SEARCH:: Error getting Site Title')
                 continue
 
-            # Site Studio Check
-            try:
-                siteStudio = title.xpath('./td[3]/text()')[0]
-                self.log('SEARCH:: Site Studio: %s', siteStudio)
-                siteStudio = self.NormaliseComparisonString(siteStudio)
-                self.log('SEARCH:: Studio Match: [%s] Compare Studio - Site Studio "%s - %s"', (compareStudio == siteStudio), compareStudio, siteStudio)
-                if siteStudio == compareStudio:
-                    self.log('SEARCH:: Studio: Full Word Match: Filename: %s = Website: %s', compareStudio, siteStudio)
-                elif siteStudio in compareStudio:
-                    self.log('SEARCH:: Studio: Part Word Match: Website: %s IN Filename: %s', siteStudio, compareStudio)
-                elif compareStudio in siteStudio:
-                    self.log('SEARCH:: Studio: Part Word Match: Filename: %s IN Website: %s', compareStudio, siteStudio)
-                else:
-                    # remove spaces in comparison variables and check for equality
-                    noSpaceSiteStudio = siteStudio.replace(' ', '')
-                    noSpaceCompareStudio = compareStudio.replace(' ', '')
-                    if noSpaceSiteStudio != noSpaceCompareStudio:
-                        continue
-            except:
-                self.log('SEARCH:: Error getting Site Studio')
-                continue
-
             # Site Title URL Check
             try:
                 siteURL = title.xpath('./td[1]/a/@href')[0]
-                if siteURL[0] != '/':
-                    siteURL = '/' + siteURL
-                if BASE_URL not in siteURL:
-                    siteURL = BASE_URL + siteURL
+                siteURL = ('/' if siteURL[0] != '/' else '') + siteURL
+                siteURL = (BASE_URL if BASE_URL not in siteURL else '') + siteURL
                 self.log('SEARCH:: Site Title url: %s', siteURL)
             except:
                 self.log('SEARCH:: Error getting Site Title Url')
@@ -216,37 +250,64 @@ class IAFD(Agent.Movies):
             try:
                 siteReleaseDate = title.xpath('./td[2]/text()')[0].strip()
                 self.log('SEARCH:: Site Release Date: %s', siteReleaseDate)
-                siteReleaseDate = datetime.datetime(int(siteReleaseDate), 12, 31)
+                try:
+                    siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteReleaseDate)
+                except Exception as e:
+                    self.log('SEARCH:: Site Release Date: %s: Default to Filename Date', e)
+                    siteReleaseDate = compareReleaseDate
             except:
+                self.log('SEARCH:: Error getting Site Release Date: Default to Filename Date')
                 siteReleaseDate = compareReleaseDate
-                self.log('SEARCH:: Error getting Site Release Date')
 
-            # there can not be a difference more than 365 days
-            timedelta = siteReleaseDate - compareReleaseDate
-            self.log('SEARCH:: Compare Release Date - %s Site Date - %s : Dx [%s] days"', compareReleaseDate, siteReleaseDate, timedelta.days)
-            if abs(timedelta.days) > 366:
-                self.log('SEARCH:: Difference of more than a year between file date and %s date from Website')
+            # Site Studio Check: IAFD lists distributor on main page, look in Site URL for this
+            try:
+                siteDistributor = title.xpath('./td[3]/text()')[0]
+                self.log('SEARCH:: Site Distributor: %s', siteDistributor)
+                html = HTML.ElementFromURL(siteURL, sleep=DELAY)
+                siteStudio = html.xpath('//p[@class="bioheading" and text()="Studio"]//following-sibling::p[1]/a/text()')[0]
+                try:
+                    self.matchStudioName(compareStudio, siteStudio)
+                except Exception as e:
+                    self.log('SEARCH:: Site URL Studio: %s', e)
+                    continue
+
+                # get release date: if none recorded use main results page value
+                try:
+                    siteReleaseDate = html.xpath('//p[@class="bioheading" and text()="Release Date"]//following-sibling::p[1]/text()')[0].strip()
+                    self.log('SEARCH:: Site URL Release Date: %s', siteReleaseDate)
+                    try:
+                        siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteReleaseDate)
+                    except Exception as e:
+                        self.log('SEARCH:: Site xURL Release Date: %s: Default to Filename Date', e)
+                        siteReleaseDate = compareReleaseDate
+                except:
+                    self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
+                    siteReleaseDate = compareReleaseDate
+
+            except:
+                self.log('SEARCH:: Error getting Site Studio')
                 continue
             
             # we should have a match on studio, title and year now
-            results.Append(MetadataSearchResult(id = siteURL + '|' + siteReleaseDate.strftime('%d/%m/%Y'), name = saveTitle, score = 100, lang = lang))
+            results.Append(MetadataSearchResult(id = siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name = saveTitle, score = 100, lang = lang))
             return
 
+    #-------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         folder, file = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
         self.log('-----------------------------------------------------------------------')
-        self.log('UPDATE:: CALLED v.%s', VERSION_NO)
-        self.log('UPDATE:: File Name: %s', file)
-        self.log('UPDATE:: Enclosing Folder: %s', folder)
+        self.log('UPDATE:: Version    : v.%s', VERSION_NO)
+        self.log('UPDATE:: File Name  : %s', file)
+        self.log('UPDATE:: File Folder: %s', folder)
         self.log('-----------------------------------------------------------------------')
 
         # Check filename format
-        if not self.matchedFilename(file):
-            self.log('UPDATE:: Skipping %s because the file name is not in the expected format: (Studio) - Title (Year)', file)
+        try:
+            group_studio, group_title, group_year = self.matchFilename(file)
+            self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
+        except Exception as e:
+            self.log('UPDATE:: Skipping %s', e)
             return
-
-        group_studio, group_title, group_year = self.getFilenameGroups(file)
-        self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
 
         # Fetch HTML.
         html = HTML.ElementFromURL(metadata.id.split('|')[0], timeout=60, errors='ignore', sleep=DELAY)
@@ -256,9 +317,9 @@ class IAFD(Agent.Movies):
         #        a. Studio               : From studio group of filename - no need to process this as is used to find it on website
         #        b. Title                : From title group of filename - no need to process this as is used to find it on website
         #        c. Tag line             : Corresponds to the url of movie
-        #        d. Content Rating       : Always X
+        #        d. Originally Available : set from metadata.id (search result)
+        #        e. Content Rating       : Always X
         #    2.  Metadata retrieved from website
-        #        a. Originally Available : set from metadata.id (search result), then if release date found on url page update it
         #        b. Summary              : Synopsis, Scene Breakdown and Comments
         #        c. Cast                 : List of Actors and Photos (alphabetic order)
         #        d. Directors
@@ -271,27 +332,18 @@ class IAFD(Agent.Movies):
         metadata.title = group_title
         self.log('UPDATE:: Video Title: "%s"' % metadata.title)
 
-        # 1c.   Set Tagline/Originally Available from metadata.id
+        # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = metadata.id.split('|')[0]
+        metadata.originally_available_at = datetime.datetime.strptime(metadata.id.split('|')[1], DATE_YMD)
+        metadata.year = metadata.originally_available_at.year
         self.log('UPDATE:: Tagline: %s', metadata.tagline)
+        self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)    
 
-        # 1d.   Set Content Rating to Adult
+        # 1e.   Set Content Rating to Adult
         metadata.content_rating = 'X'
         self.log('UPDATE:: Content Rating: X')
 
-        # 2a.   Originally Available at
-        try:
-            siteReleaseDate = html.xpath('.//p[@class="bioheading" and text()="Release Date"]//following-sibling::p[1]//text()')[0].strip()
-            siteReleaseDate = datetime.datetime.strptime(siteReleaseDate, '%b %d, %Y')
-        except Exception as e:
-            self.log('UPDATE:: Error getting Release Date, reset to Filename Year: %s', e)
-            siteReleaseDate = datetime.datetime.strptime(metadata.id.split('|')[1], '%d/%m/%Y')
-        finally:
-            metadata.originally_available_at = siteReleaseDate
-            metadata.year = metadata.originally_available_at.year
-            self.log('UPDATE:: Release Date %s', metadata.originally_available_at)
-
-        # 2b.   Summary (synopsis + Scene Breakdown + Comments)
+        # 2a.   Summary (synopsis + Scene Breakdown + Comments)
         try:
             synopsis = html.xpath('//div[@id="synopsis"]/div/ul/li//text()')[0].strip()
             self.log('UPDATE:: Summary - Synopsis Found: %s', synopsis)
@@ -305,7 +357,7 @@ class IAFD(Agent.Movies):
             scene = ''
             for item in htmlscenes:
                 scene += '{0}\n'.format(item)
-            scene = 'Scene Breakdown:\n' + scene
+            scene = '\nScene Breakdown:\n' + scene
             self.log('UPDATE:: Summary - Scene Breakdown Found: %s', scene)
         except Exception as e:
             scene = ''
@@ -329,11 +381,11 @@ class IAFD(Agent.Movies):
         if summary:
             metadata.summary = summary
 
-        # 2c.   Cast
+        # 2b.   Cast
         try:
             castdict = {}
-            htmlcastnames = html.xpath('//div[@class="castbox"]/p/a//text()')
-            htmlcastphotos = html.xpath('//div[@class="castbox"]/p/a/img/@src')
+            htmlcastnames = html.xpath('//div[contains(@class,"castbox")]/p/a//text()')
+            htmlcastphotos = html.xpath('//div[contains(@class,"castbox")]/p/a/img/@src')
             self.log('UPDATE:: %s Cast Names: %s', len(htmlcastnames), htmlcastnames)
             self.log('UPDATE:: %s Cast Photos: %s', len(htmlcastphotos), htmlcastphotos)
             for castname, castphoto in zip(htmlcastnames, htmlcastphotos):
@@ -348,7 +400,7 @@ class IAFD(Agent.Movies):
         except Exception as e:
             self.log('UPDATE - Error getting Cast: %s', e)
 
-        # 2d.   Directors
+        # 2c.   Directors
         try:
             directordict = {}
             htmldirector = html.xpath('//p[@class="bioheading" and text()="Directors"]//following-sibling::p[1]/a/text()')

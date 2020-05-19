@@ -1,10 +1,10 @@
-﻿# GayWorld - (IAFD)
+﻿# GayMovie - (IAFD)
 '''
                                                   Version History
                                                   ---------------
     Date            Version                         Modification
-    10 May 2020   2020.05.10.01    Creation
-    19 May 2020   2020.05.10.02    updated date match function
+    10 May 2020   2020.05.16.01    Creation
+    19 May 2020   2020.05.16.02    updated date match function
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -13,7 +13,7 @@ import datetime, calendar, linecache, platform, os, re, string, sys, urllib, lxm
 
 # Version / Log Title 
 VERSION_NO = '2020.05.10.02'
-PLUGIN_LOG_TITLE = 'GayWorld'
+PLUGIN_LOG_TITLE = 'GayMovie'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
 # if title on website has a hyphen in its title that does not correspond to a colon replace it with an em dash in the corresponding position
@@ -23,7 +23,7 @@ FILEPATTERN = Prefs['regex']
 DELAY = int(Prefs['delay'])
 
 # URLS
-BASE_URL = 'https://gay-world.org'
+BASE_URL = 'https://gay-movie.org' 
 BASE_SEARCH_URL = BASE_URL + '/?s={0}'
 
 # Date Formats used by website
@@ -40,8 +40,8 @@ def ValidatePrefs():
     pass
 
 #----------------------------------------------------------------------------------------------------------------------------------
-class GayWorld(Agent.Movies):
-    name = 'GayWorld (IAFD)'
+class GayMovie(Agent.Movies):
+    name = 'GayMovie (IAFD)'
     languages = [Locale.Language.English]
     primary_provider = False
     preference = True
@@ -105,7 +105,6 @@ class GayWorld(Agent.Movies):
             self.log('SELF:: Release Date: {0}'.format(msg))
 
         return siteDate
-
 
     #-------------------------------------------------------------------------------------------------------------------------------
     # Normalise string for Comparison, strip all non alphanumeric characters, Vol., Volume, Part, and 1 in series
@@ -202,7 +201,7 @@ class GayWorld(Agent.Movies):
         compareTitle = self.NormaliseComparisonString(group_title)
         compareReleaseDate = datetime.datetime(int(group_year), 12, 31) # default to 31 Dec of Filename yesr
 
-        # Search Query - for use to search the internet, remove all non alphabetic characters as GayWorld site returns no results if apostrophes or commas exist etc..
+        # Search Query - for use to search the internet, remove all non alphabetic characters as GayMovie site returns no results if apostrophes or commas exist etc..
         searchTitle = self.CleanSearchString(group_title)
         searchQuery = BASE_SEARCH_URL.format(searchTitle)
 
@@ -227,13 +226,13 @@ class GayWorld(Agent.Movies):
                 pageNumber = 1
                 morePages = False
 
-            titleList = html.xpath('//div[@class="fusion-post-content-wrapper"]/div/h2')
+            titleList = html.xpath('//div[@class="fusion-post-wrapper"]')
             self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
 
             for title in titleList:
                 # Site Title
                 try:
-                    siteTitle = title.xpath('./a/text()')[0]
+                    siteTitle = title.xpath('.//div/div/h2/a/text()')[0]
                     siteTitle = self.NormaliseComparisonString(siteTitle)
                     self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
                     if siteTitle != compareTitle:
@@ -244,7 +243,7 @@ class GayWorld(Agent.Movies):
 
                 # Site Title URL
                 try:
-                    siteURL = title.xpath('./a/@href')[0]
+                    siteURL = title.xpath('.//div/div/h2/a/@href')[0]
                     siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
                     self.log('SEARCH:: Site Title url: %s', siteURL)
                 except:
@@ -254,17 +253,12 @@ class GayWorld(Agent.Movies):
                 # No Site Release Dates stored so default to filename year
                 siteReleaseDate = compareReleaseDate
 
-                # need to scrape Site URL to get Studio Name
+                # Studio Name
                 try:
-                    html = HTML.ElementFromURL(siteURL, sleep=DELAY)
-                    siteStudio = html.xpath('//strong[text()="Studio: "]/a/text()')[0].strip()
-                    try:
-                        self.matchStudioName(compareStudio, siteStudio)
-                    except Exception as e:
-                        self.log('SEARCH:: Site URL Studio: %s', e)
-                        continue
-                except:
-                    self.log('SEARCH:: Error getting Site Studio')
+                    siteStudio = html.xpath('.//a[@rel="tag"]/text()')[0]
+                    self.matchStudioName(compareStudio, siteStudio)
+                except Exception as e:
+                    self.log('SEARCH:: Error getting Site Studio: %s', e)
                     continue
 
                 # we should have a match on studio, title and year now
@@ -326,10 +320,8 @@ class GayWorld(Agent.Movies):
         # 2a.   Summary
         try:
             summary = ''
-            htmlsummary = html.xpath('//strong[text()="Description:"]//parent::p/text()')
-            for item in htmlsummary:
-                summary = '{0}\n{1}'.format(summary, item)
-            self.log('UPDATE:: summary Found: %s', summary)
+            summary = html.xpath('//div[@class="fusion-text"]/p/text()')[0]
+            self.log('UPDATE:: Summary Found: %s', summary)
         except Exception as e:
             summary = ''
             self.log('UPDATE:: Error getting summary: %s', e)
@@ -340,7 +332,7 @@ class GayWorld(Agent.Movies):
         # 2b.   Directors
         try:
             directordict = {}
-            htmldirector = html.xpath('//strong[text()="Director"]//following::text()')[0].replace(': ', '').split(',')
+            htmldirector = html.xpath('//div[@class="fusion-text"]/p/descendant::strong[contains(text(),"Director")]/parent::p/strong[last()]/following::text()')[0].replace(':', '').split(',')
             self.log('UPDATE:: Director List %s', htmldirector)
             for directorname in htmldirector:
                 director = directorname.strip()
