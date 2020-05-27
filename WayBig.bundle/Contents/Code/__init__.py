@@ -13,13 +13,14 @@
     28 Apr 2020   2019.08.12.16    update IAFD routine
     08 May 2020   2019.08.12.17    Added [ and ] to characters not be be url encoded as titles were not returning results
                                    updated removal of stand alone '1' in comparison routine
+    26 May 2020   2019.08.12.18    Corrected error in summary scrape
 
 ---------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, sys, urllib, subprocess
 
 # Version / Log Title 
-VERSION_NO = '2019.12.22.17'
+VERSION_NO = '2019.12.22.18'
 PLUGIN_LOG_TITLE = 'WayBig'
 
 # PLEX API
@@ -362,9 +363,6 @@ class WayBig(Agent.Movies):
 
             # clean summary text
             summary = re.sub('<[^<]+?>', '', summary)
-            regex = '.*}\);'
-            pattern = re.compile(regex, re.DOTALL)
-            summary = re.sub(pattern, '', summary)
             regex = r'JQuery.*'
             pattern = re.compile(regex, re.DOTALL | re.IGNORECASE)
             summary = re.sub(pattern, '', summary)
