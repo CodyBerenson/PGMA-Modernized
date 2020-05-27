@@ -1,5 +1,9 @@
 # Announcements
-**Coming Soon:  AEBNii will be retired and replaced with AEBN.  You won't be required to stop using AEBNii, it will just be removed from the repository and likely no longer supported (e.g., if AEBN makes an update to their site which breaks AEBNii).  The AEBN index utilizes AEBN's modernized view, instead of the classic view, and offers more metadata functionality (e.g., exact release dates).  
+**Coming Soon**
+AEBNii will be retired and replaced with AEBN.  You won't be required to stop using AEBNii, it will just be removed from the repository and likely no longer supported (e.g., if AEBN makes an update to their site which breaks AEBNii).  The AEBN index utilizes AEBN's modernized view, instead of the classic view, and offers more metadata functionality (e.g., exact release dates).  
+
+**New Agents**
+Recently, GayWorld and GayMovie agents were added to the already robust set of Films agents.  While both have limitations in the metadata available, both offer a decent portfolio of movies to match from, and both have superior poster artwork.  
 
 # Plex Metadata Agents for Gay Adult Video
 **Please read all this document before usage**
