@@ -1,9 +1,10 @@
 # Announcements
-**Coming Soon**
-AEBNii will be retired and replaced with AEBN.  You won't be required to stop using AEBNii, it will just be removed from the repository and likely no longer supported (e.g., if AEBN makes an update to their site which breaks AEBNii).  The AEBN index utilizes AEBN's modernized view, instead of the classic view, and offers more metadata functionality (e.g., exact release dates).  
 
-**New Agents**
-Recently, GayWorld and GayMovie agents were added to the already robust set of Films agents.  While both have limitations in the metadata available, both offer a decent portfolio of movies to match from, and both have superior poster artwork.  
+06/06/2020:  The new AEBN Agent is available!  It utilizes the modernized view of AEBN, and offers more metadata functionality (e.g., Exact release dates).  For now, we will support both the new AEBN agent and the legacy AEBNii agent.  However, it is our intent to retire the legacy AEBNii agent.  You won't be required to stop using AEBNii, it will just be removed from the repository and likely no longer supported (e.g., if AEBN makes an update to their site which breaks AEBNii).  
+
+06/06/2020:  The GEVI Agent now allows you to use either the Studio or Distributor name (sometimes they are different) in the **(Studio)** portion of the (Studio) - Title (YYYY).ext naming convention.
+
+05/11/2020 and 05/18/2020:  GayWorld and GayMovie agents were added to the already robust set of Films agents.  While both have limitations in the metadata available, both offer a decent portfolio of movies to match from, and both have superior poster artwork.  
 
 # Plex Metadata Agents for Gay Adult Video
 **Please read all this document before usage**
@@ -59,9 +60,9 @@ The matching agent will return a scene poster and relevant metadata,actor thumbn
 
 GEVI has a TREMENDOUS amount of indexed content, but has some quirks that are easy to navigate, if you follow a couple rules, beginning with the filing naming convention (Studio) - Title (Year).ext.  
 
-1.  In GEVI as in the other Agents, if on windows, one cannot use a colon (:) in a filename.  If the site uses a colon either in the Studio or Title, ignore it.
+1.  In GEVI as in the other Agents, if on windows, one cannot use a colon (:) in a filename.  If the site uses a colon either in the Studio or Title replace with space dasy space, i.e. " - ".
 
-2.  When manually searching for a movie, GEVI's results page will display the Company (i.e. Distributor), not the Studio.  The Agent requires the Studio which is often different, so select the movie and click into the movie page.  However, make note of the Title from the Results list.  In this case, the filename should be **(BoyCrush) - Big Uncut Fuckfest, Kyler Moss's (2013).mp4**
+2.  When manually searching for a movie, GEVI's results page will display the Company (i.e. Distributor), not the Studio.  The Agent *now* allows you to use either.  Select the movie and click into the movie page.  However, make note of the Title from the Results list.  In this case, the filename should be **(BoyCrush) - Big Uncut Fuckfest, Kyler Moss's (2013).mp4**
 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/results.jpg)
 
@@ -73,7 +74,7 @@ GEVI has a TREMENDOUS amount of indexed content, but has some quirks that are ea
 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/results1.jpg)
 
-4.  There are times when the movie page may have one or more AKA titles.  **Use the Title from the Title on the movie page...not the results list as in the previous examples**.  This last example is a good one.  Two movie titles.  Three company names.  The correct filename should be **(Pietro Filmes) - Mãos à Obra (2001).mp4**
+4.  There are times when the movie page may have one or more AKA titles.  **Use the Title from the Title on the movie page...not the results list as in the previous examples**.  This last example is a good one.  Two movie titles.  Three company names.  A correct filename is **(Pietro Filmes) - Mãos à Obra (2001).mp4** (but remember, you can now use Studio or Distributor)
 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/results2.jpg)
 
