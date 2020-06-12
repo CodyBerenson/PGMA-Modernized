@@ -4,6 +4,8 @@
 
 06/12/2020:  Local Media Assets now enabled!  See the explanation of how to take advantage of Local Media Assets below.
 
+06/12/2020:  FAQ Added!  See below.
+
 06/03/2020:  Coming soon!  Each Agent is being updated to offer optional language translation!  
 
 06/01/2020:  The new AEBN Agent is available!  It utilizes the modernized view of AEBN, and offers more metadata functionality (e.g., Exact release dates).  For now, we will support both the new AEBN agent and the legacy AEBNii agent.  However, it is our intent to retire the legacy AEBNii agent.  You won't be required to stop using AEBNii, it will just be removed from the repository and likely no longer supported (e.g., if AEBN makes an update to their site which breaks AEBNii).  
@@ -117,6 +119,51 @@ Another type of local media assets are the tags that may be embedded within a fi
 3.  If you come across a site that indexes films or scenes and has plex style movie covers, it may be a good candidate for a new Agent.  Open an issue and make a request.  **Note: ** we will not create studio specific Agents...studios don't offer plex style movie covers and often update the framework of their site which breaks Agents.
 
 4.  If you have any challenges or struggles, open a new issue.  Please describe your challenge as thoroughly as possible, including which agent you were targeting, the filename and include the log, if you can. **Note:** please, no screenshots that contain graphic content. 
+
+### FAQ:
+
+Q:  When choosing the agent in the library setup window, when it asks for scanner, which scanner option should I choose? Plex Movie Scanner, Plex Video Files, or Plex Video Files Scanner. I'm not sure which one works/works best with this.
+
+A:  Choose Plex Movie Scanner. Then after choosing the plex movie scanner you have three options depending on your library's content:
+
+    For video scenes - use gay adult scenes agent
+    For full movies - use gay adult films
+    For a mixture - use gay adult
+
+
+Q:  When setting up the agents for Gay Adult, Gay Adult Scenes and Gay Adult Films the description mentions it utilizes different sources. Are those sources always used or do you need to also manually check the sources you want those agents to use?
+
+A:  For any given set of agents, you choose which sources and the priority that it uses. Let's say that 90% of your content matches from AEBN; certainly choose AEBN and rank it first. 
+
+
+Q:  I can't get any Scenes to Match on GEVI.  Please help.
+
+A:  The GEVI Agent only scrapes films, not scenes.   Sorry.  
+
+
+Q:  I can't get the WayBig Agent to match videos.  Help!
+
+A:  The WayBig Agent won't scrape videos from waybig, only Blog entries. If WayBig doesn't have the scene you're seeking, try Fagalicious or QueerClick.
+
+
+Q:  Any best practices for backing up your Plex libraries and settings? I backup all my video files but wondering if there's another step I should do to make sure my metadata and album artwork is backed up in case of a drive failure. What do you guys do?
+
+A:  There's a topic on the Plex Forum specifically about backing up (and restoring) the PMS libraries and settings: https://support.plex.tv/articles/201539237-backing-up-plex-media-server-data/
+
+Since you're putting so much effort into building awesome libraries, you don't want to take any chances with losing them!
+
+
+Q:  Why would I want to create separate libraries for movies and scenes?  Why would I want to comingle movies and scenes in one library?
+
+A:  There are pros and cons to each approach. You may want to consider questions such as How many files do you have?  How well-organized is your content?  
+
+Cons of separate libraries include:
+1.  Pro:  A TimTales library is just that.  You don't have to further filter the library if all you want at that moment is your TimTales content.
+2.  Con:  if you click on the actor it only returns matches for that particular library...you'll need to type in the name in the general search engine which will return all libraries;
+
+Combined libaries:
+1.  Pro:  One-stop shop.  All your indexed content in one location.
+2.  Con:  a downfall of comingling, is that the larger the library grows, the longer Plex takes to scan. 
 
 ## Disclaimer
 
