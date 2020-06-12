@@ -1,6 +1,6 @@
 # Announcements
 
-06/12/2020:  Phase 1 of optional Language Translation now available!  For WayBig, Fagalicious, QueerClick, and IAFD Agents, we now offer optional language translation!   Perhaps you'd prefer not have the movie/scene summary in its native French?  Or, perhaps you'd prefer to get all movie/scene summaries translated to your native German, Korean, or Chinese?  You'll soon have these options, Agent by Agent.   
+06/12/2020:  Phase 1 of optional Language Translation now available!  For WayBig, Fagalicious, QueerClick, and IAFD Agents, we now offer optional language translation!   Perhaps you'd prefer not have the movie/scene summary in its native French?  Or, perhaps you'd prefer to get all movie/scene summaries translated to your native German, Korean, or Chinese?  You now have that option for your favorite scenes, and soon you'll soon have these options for all Agents, Agent by Agent.   
 
 06/12/2020:  Local Media Assets now enabled!  See the explanation of how to take advantage of Local Media Assets below.
 
