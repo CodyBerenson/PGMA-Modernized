@@ -24,6 +24,8 @@
         <string>AlwaysOn</string>
         <key>PlexPluginCodePolicy</key>
         <string>Elevated</string>
+		<key>PlexPluginCodePolicy</key>
+		<string>Elevated</string>
         <key>PlexAgentAttributionText</key>
         <string>
             <![CDATA[

@@ -13,6 +13,19 @@
         "default": "0"
     },
     {
+        "id": "language",
+        "label": "Translate movie summary into the selected language",
+        "type": "enum",
+        "values": ["en", "cs", "da", "de", "el", "es", "fi", "fr", "he", "hr", "hu", "it", "ja", "ko", "nl", "no", "pl", "pt", "ru", "sl", "sv", "tr", "zh"],
+        "default": "en"
+    },
+    {
+        "id": "detect",
+        "label": "Always check source language before attempting translate? Select yes if movie summaries are presented in different languages",
+        "type": "bool",
+        "default": "false"
+    },	
+    {
         "id": "thumbor",
         "label": "Web Address of Thumbor: A smart imaging service. It enables on-demand onlines cropping, resizing and flipping of images",
         "type": "text",
