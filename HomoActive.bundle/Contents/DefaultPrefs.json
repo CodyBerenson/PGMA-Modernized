@@ -6,16 +6,23 @@
         "default": "^\\((?P<studio>.+)\\) - (?P<title>.+) \\((?P<year>\\d{4})\\)"
     },
     {
-        "id": "debug",
-        "label": "Enable debug logging",
-        "type": "bool",
-        "default": "true"
-    },
-    {
         "id": "delay",
         "label": "Seconds to pause after a network request was made, ensuring undue burden is not placed on the web server.",
         "type": "enum",
         "values": ["0", "10", "20", "30", "40", "50", "60"],
         "default": "0"
+    },
+    {
+        "id": "language",
+        "label": "Translate movie summary into the selected language",
+        "type": "enum",
+        "values": ["en", "cs", "da", "de", "el", "es", "fi", "fr", "he", "hr", "hu", "it", "ja", "ko", "nl", "no", "pl", "pt", "ru", "sl", "sv", "tr", "zh"],
+        "default": "en"
+    },
+    {
+        "id": "detect",
+        "label": "Always check source language before attempting translate? Select yes if movie summaries are presented in different languages",
+        "type": "bool",
+        "default": "false"
     }
 ]

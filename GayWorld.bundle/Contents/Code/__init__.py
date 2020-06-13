@@ -1,26 +1,37 @@
-﻿# GayWorld - (IAFD)
+#!/usr/bin/env python
+# pylint: disable=line-too-long
+# pylint: disable=W0702, W0703, C0103, C0410
+# encoding=utf8
 '''
+# GayWorld - (IAFD)
                                                   Version History
                                                   ---------------
     Date            Version                         Modification
     10 May 2020   2020.05.10.01    Creation
     19 May 2020   2020.05.10.02    updated date match function
+    01 Jun 2020   2020.05.10.03    Implemented translation of summary
+                                   improved getIAFDActor search
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
+import datetime, linecache, platform, os, re, string, sys, urllib
+from googletrans import Translator
 
-import datetime, calendar, linecache, platform, os, re, string, sys, urllib, lxml
-
-# Version / Log Title 
-VERSION_NO = '2020.05.10.02'
+# Version / Log Title
+VERSION_NO = '2020.05.10.03'
 PLUGIN_LOG_TITLE = 'GayWorld'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
-# if title on website has a hyphen in its title that does not correspond to a colon replace it with an em dash in the corresponding position
-FILEPATTERN = Prefs['regex']
- 
+REGEX = Prefs['regex']
+
 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DELAY = int(Prefs['delay'])
+
+# The summary of the film title will be translated into this language
+LANGUAGE = Prefs['language']
+
+# detect the language the summary appears in on the web page
+DETECT = Prefs['detect']
 
 # URLS
 BASE_URL = 'https://gay-world.org'
@@ -30,17 +41,28 @@ BASE_SEARCH_URL = BASE_URL + '/?s={0}'
 DATE_YMD = '%Y%m%d'
 DATEFORMAT = '%Y%m%d'
 
-#----------------------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------------
 def Start():
+    ''' initialise process '''
     HTTP.CacheTime = CACHE_1WEEK
     HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
 
-#----------------------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------------
 def ValidatePrefs():
+    ''' validate changed user preferences '''
     pass
 
-#----------------------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------------
+def anyOf(iterable):
+    '''  used for matching strings in lists '''
+    for element in iterable:
+        if element:
+            return element
+    return None
+
+# ----------------------------------------------------------------------------------------------------------------------------------
 class GayWorld(Agent.Movies):
+    ''' define Agent class '''
     name = 'GayWorld (IAFD)'
     languages = [Locale.Language.English]
     primary_provider = False
@@ -48,20 +70,20 @@ class GayWorld(Agent.Movies):
     media_types = ['Movie']
     contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultFilms']
 
-    #-------------------------------------------------------------------------------------------------------------------------------
-    def matchFilename(self, file):
-        # return groups from filename regex match else return false
-        pattern = re.compile(FILEPATTERN)
-        matched = pattern.search(file)
+    # -------------------------------------------------------------------------------------------------------------------------------
+    def matchFilename(self, filename):
+        ''' return groups from filename regex match else return false '''
+        pattern = re.compile(REGEX)
+        matched = pattern.search(filename)
         if matched:
             groups = matched.groupdict()
             return groups['studio'], groups['title'], groups['year']
         else:
-            raise Exception("File Name [{0}] not in the expected format: (Studio) - Title (Year)".format(file))
+            raise Exception("File Name [{0}] not in the expected format: (Studio) - Title (Year)".format(filename))
 
-    #-------------------------------------------------------------------------------------------------------------------------------
-    # match file studio name against website studio name: Boolean Return
+    # -------------------------------------------------------------------------------------------------------------------------------
     def matchStudioName(self, fileStudioName, siteStudioName):
+        ''' match file studio name against website studio name: Boolean Return '''
         siteStudioName = self.NormaliseComparisonString(siteStudioName)
 
         # remove spaces in comparison variables and check for equality
@@ -81,17 +103,11 @@ class GayWorld(Agent.Movies):
 
         return True
 
-    #-------------------------------------------------------------------------------------------------------------------------------
-    # match file year against website release date: return formatted site date if no error or default to formated file date
+    # -------------------------------------------------------------------------------------------------------------------------------
     def matchReleaseDate(self, fileDate, siteDate):
+        ''' match file year against website release date: return formatted site date if no error or default to formated file date '''
         if len(siteDate) == 4:      # a year has being provided - default to 31st December of that year
             siteDate = siteDate + '1231'
-            siteDate = datetime.datetime.strptime(siteDate, DATE_YMD)
-        elif len(siteDate) == 7:    # month/year provided - default to last day of month
-            year = int(siteDate[-4:])
-            month = int(siteDate[:2])
-            day = calendar.monthrange(year, month)[1]
-            siteDate = '{0}{1}{2:2d}'.format(year, month, day)
             siteDate = datetime.datetime.strptime(siteDate, DATE_YMD)
         else:
             siteDate = datetime.datetime.strptime(siteDate, DATEFORMAT)
@@ -106,23 +122,13 @@ class GayWorld(Agent.Movies):
 
         return siteDate
 
-
-    #-------------------------------------------------------------------------------------------------------------------------------
-    # Normalise string for Comparison, strip all non alphanumeric characters, Vol., Volume, Part, and 1 in series
+    # -------------------------------------------------------------------------------------------------------------------------------
     def NormaliseComparisonString(self, myString):
-        # convert to lower case and trim
+        ''' Normalise string for Comparison, strip all non alphanumeric characters, Vol., Volume, Part, and 1 in series '''
         myString = myString.strip().lower()
 
-        # convert sort order version to normal version i.e "Best of Zak Spears, The -> the Best of Zak Spears"
-        if myString.count(', the'):
-            myString = 'the ' + myString.replace(', the', '', 1)
-        if myString.count(', an'):
-            myString = 'an ' + myString.replace(', an', '', 1)
-        if myString.count(', a'):
-            myString = 'a ' + myString.replace(', a', '', 1)
-
         # remove vol/volume/part and vol.1 etc wording as filenames dont have these to maintain a uniform search across all websites and remove all non alphanumeric characters
-        myString = myString.replace('&', 'and').replace(' vol.', '').replace(' volume', '').replace(' part','').replace(',', '')
+        myString = myString.replace('&', 'and').replace(' vol.', '').replace(' volume', '').replace(',', '')
 
         # remove all standalone "1's"
         regex = re.compile(r'(?<!\d)1(?!\d)')
@@ -135,155 +141,225 @@ class GayWorld(Agent.Movies):
         regex = re.compile(r'\W+')
         return regex.sub('', myString)
 
-    #-------------------------------------------------------------------------------------------------------------------------------
-    # Prepare Video title for search query
+    # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
+        ''' Prepare Video title for search query '''
+        self.log('SELF:: Original Search Query [{0}]'.format(myString))
+
         # convert to lower case and trim and strip diacritics
-        myString = String.StripDiacritics(myString)
         myString = myString.lower().strip()
-        myString = '"{0}"'.format(String.URLEncode(myString))
-        self.log('SELF:: Search String = %s', myString)
+        myString = String.StripDiacritics(myString)
+
+        # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string 
+        myNormalString = String.URLEncode(myString).replace('%25', '%').replace('*', '')
+        myQuotedString = String.URLEncode('"{0}"'.format(myString)).replace('%25', '%').replace('*', '')
+        myString = [myNormalString, myQuotedString]
+        self.log('SELF:: Returned Search Query [{0}]'.format(myString))
+
         return myString
 
-    #-------------------------------------------------------------------------------------------------------------------------------
-    # check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not
-    def getIAFDActorImage(self, actor):
-        photourl = ''
-        actor = String.StripDiacritics(actor).lower()
-        fullname = actor.replace(' ','').replace("'", '').replace(".", '')
-        full_name = actor.replace(' ','-').replace("'", '&apos;')
+    # -------------------------------------------------------------------------------------------------------------------------------
+    def TranslateString(self, myString):
+        ''' Determine if translation should be done '''
+        myString = myString.strip()
+        if myString:
+            translator = Translator()
+            runTranslation = (LANGUAGE != 'en')
+            self.log('SELF:: Default Language: [%s], Run Translation: [%s]', LANGUAGE, runTranslation)
+            if DETECT:
+                detected = translator.detect(myString)
+                runTranslation = (LANGUAGE != detected.lang)
+                self.log('SELF:: Detect source Language: [%s] Run Translation: [%s]', detected.lang, runTranslation)
+            myString = translator.translate(myString, dest=LANGUAGE).text if runTranslation else myString
+            self.log('SELF:: Translated [%s] Summary Found: %s', runTranslation, myString)
 
-        # actors are categorised on iafd as male, director, female in order of likelihood
+        return myString if myString else ' '     # return single space to initialise metadata summary field
+
+    # -------------------------------------------------------------------------------------------------------------------------------
+    def getIAFDActorImage(self, myString, FilmYear):
+        ''' check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not '''
+
+        actorname = myString
+        myString = String.StripDiacritics(myString).lower()
+
+        # build list containing three possible cast links 1. Full Search in case of AKAs 2. as Performer 3. as Director
+        # the 2nd and 3rd links will only be used if there is no search result
+        urlList = []
+        fullname = myString.replace(' ', '').replace("'", '').replace(".", '')
+        full_name = myString.replace(' ', '-').replace("'", '&apos;')
         for gender in ['m', 'd']:
-            iafd_url = 'http://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
-            self.log('SELF:: Actor  %s - IAFD url: %s', actor, iafd_url)
-            # Check URL exists and get actors thumbnail
+            url = 'http://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
+            urlList.append(url)
+
+        myString = String.URLEncode(myString)
+        url = 'http://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
+        urlList.append(url)
+
+        for count, url in enumerate(urlList, start=1):
+            photourl = ''
             try:
-                photourl = HTML.ElementFromURL(iafd_url).xpath('//*[@id="headshot"]/img')[0].get('src')
-                photourl = photourl.replace('headshots/', 'headshots/thumbs/th_')
-                photourl = 'nophoto' if 'nophoto' in photourl else photourl
-                break   # if we have got here then actor has a page, stop iteration
-            except: 
-                self.log('SELF:: NO IAFD Actor Page')
+                self.log('SELF:: %s. IAFD Actor search string [ %s ]', count, url)
+                html = HTML.ElementFromURL(url)
+                if 'gender=' in url:
+                    career = html.xpath('//p[.="Years Active"]/following-sibling::p[1]/text()[normalize-space()]')[0]
+                    try:
+                        startCareer = career.split('-')[0]
+                        self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
+                        if startCareer <= FilmYear:
+                            photourl = html.xpath('//*[@id="headshot"]/img/@src')[0]
+                            photourl = 'nophoto' if 'nophoto' in photourl else photourl
+                            self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
+                            break
+                    except:
+                        continue
+                else:
+                    xPathString = '//table[@id="tblMal" or @id="tblDir"]/tbody/tr/td[contains(normalize-space(.),"{0}")]/parent::tr'.format(actorname)
+                    actorList = html.xpath(xPathString)
+                    for actor in actorList:
+                        try:
+                            startCareer = actor.xpath('./td[4]/text()[normalize-space()]')[0]
+                            self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
+                            if startCareer <= FilmYear:
+                                photourl = actor.xpath('./td[1]/a/img/@src')[0]
+                                photourl = 'nophoto' if photourl == 'http://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
+                                self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
+                                break
+                        except:
+                            continue
+                    break
+            except Exception as e:
+                photourl = ''
+                self.log('SELF:: Search %s Result: Could not retrieve IAFD Actor Page, %s', count, e)
+                continue
 
         return photourl
 
-    #-------------------------------------------------------------------------------------------------------------------------------
+    # -------------------------------------------------------------------------------------------------------------------------------
     def log(self, message, *args):
+        ''' log messages '''
         Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
 
-    #-------------------------------------------------------------------------------------------------------------------------------
+    # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
+        ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
             return
-        folder, file = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
+        folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
 
         self.log('-----------------------------------------------------------------------')
-        self.log('SEARCH:: Version      : v.%s', VERSION_NO)
-        self.log('SEARCH:: Python       : %s', sys.version_info)
-        self.log('SEARCH:: Platform     : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs->delay : %s', DELAY)
-        self.log('SEARCH::      ->regex : %s', FILEPATTERN)
-        self.log('SEARCH:: media.title  : %s', media.title)
-        self.log('SEARCH:: File Name    : %s', file)
-        self.log('SEARCH:: File Folder  : %s', folder)
+        self.log('SEARCH:: Version         : v.%s', VERSION_NO)
+        self.log('SEARCH:: Python          : %s', sys.version_info)
+        self.log('SEARCH:: Platform        : %s %s', platform.system(), platform.release())
+        self.log('SEARCH:: Prefs->delay    : %s', DELAY)
+        self.log('SEARCH::      ->detect   : %s', DETECT)
+        self.log('SEARCH::      ->language : %s', LANGUAGE)
+        self.log('SEARCH::      ->regex    : %s', REGEX)
+        self.log('SEARCH:: media.title     : %s', media.title)
+        self.log('SEARCH:: File Name       : %s', filename)
+        self.log('SEARCH:: File Folder     : %s', folder)
         self.log('-----------------------------------------------------------------------')
 
         # Check filename format
         try:
-            group_studio, group_title, group_year = self.matchFilename(file)
-            self.log('SEARCH:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
+            FilmStudio, FilmTitle, FilmYear = self.matchFilename(filename)
+            self.log('SEARCH:: Processing: Studio: %s   Title: %s   Year: %s', FilmStudio, FilmTitle, FilmYear)
         except Exception as e:
             self.log('SEARCH:: Skipping %s', e)
             return
 
         # Compare Variables used to check against the studio name on website: remove all umlauts, accents and ligatures
-        compareStudio = self.NormaliseComparisonString(group_studio)
-        compareTitle = self.NormaliseComparisonString(group_title)
-        compareReleaseDate = datetime.datetime(int(group_year), 12, 31) # default to 31 Dec of Filename yesr
+        compareStudio = self.NormaliseComparisonString(FilmStudio)
+        compareTitle = self.NormaliseComparisonString(FilmTitle)
+        compareReleaseDate = datetime.datetime(int(FilmYear), 12, 31) # default to 31 Dec of Filename yesr
 
-        # Search Query - for use to search the internet, remove all non alphabetic characters as GayWorld site returns no results if apostrophes or commas exist etc..
-        searchTitle = self.CleanSearchString(group_title)
-        searchQuery = BASE_SEARCH_URL.format(searchTitle)
+        # Search Query - for use to search the internet, remove all non alphabetic characters as GayMovie site returns no results if apostrophes or commas exist etc..
+        searchTitleList = self.CleanSearchString(FilmTitle)
 
-        # Finds the entire media enclosure <Table> element then steps through the rows
-        morePages = True
-        while morePages:
-            self.log('SEARCH:: Search Query: %s', searchQuery)
-            try:
-                html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
-            except Exception as e:
-                self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
-                return
+        for count, searchTitle in enumerate(searchTitleList, start=1):
+            searchQuery = BASE_SEARCH_URL.format(searchTitle)
+            self.log('SEARCH:: %s. Search Query: %s', count, searchQuery)
 
-            try:
-                searchQuery = html.xpath('//a[@class="pagination-next"]/@href')[0]
-                self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
-                pageNumber = int(searchQuery.split('/')[-1].split('?')[0]) - 1
-                morePages = True
-            except:
-                searchQuery = ''
-                self.log('SEARCH:: No More Pages Found')
-                pageNumber = 1
-                morePages = False
-
-            titleList = html.xpath('//div[@class="fusion-post-content-wrapper"]/div/h2')
-            self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
-
-            for title in titleList:
-                # Site Title
+            morePages = True
+            while morePages:
+                self.log('SEARCH:: Search Query: %s', searchQuery)
                 try:
-                    siteTitle = title.xpath('./a/text()')[0]
-                    siteTitle = self.NormaliseComparisonString(siteTitle)
-                    self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
-                    if siteTitle != compareTitle:
-                        continue
+                    html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
+                    # Finds the entire media enclosure
+                    titleList = html.xpath('//div[@class="fusion-post-content-wrapper"]/div/h2')
+                    if not titleList:
+                        break
+                except Exception as e:
+                    self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+                    return
+
+                try:
+                    searchQuery = html.xpath('//a[@class="pagination-next"]/@href')[0]
+                    self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
+                    pageNumber = int(searchQuery.split('/')[-1].split('?')[0]) - 1
+                    morePages = True if pageNumber <= 10 else False
                 except:
-                    self.log('SEARCH:: Error getting Site Title')
-                    continue
+                    searchQuery = ''
+                    self.log('SEARCH:: No More Pages Found')
+                    pageNumber = 1
+                    morePages = False
 
-                # Site Title URL
-                try:
-                    siteURL = title.xpath('./a/@href')[0]
-                    siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
-                    self.log('SEARCH:: Site Title url: %s', siteURL)
-                except:
-                    self.log('SEARCH:: Error getting Site Title Url')
-                    continue
+                self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
 
-                # No Site Release Dates stored so default to filename year
-                siteReleaseDate = compareReleaseDate
-
-                # need to scrape Site URL to get Studio Name
-                try:
-                    html = HTML.ElementFromURL(siteURL, sleep=DELAY)
-                    siteStudio = html.xpath('//strong[text()="Studio: "]/a/text()')[0].strip()
+                for title in titleList:
+                    # Site Title
                     try:
-                        self.matchStudioName(compareStudio, siteStudio)
-                    except Exception as e:
-                        self.log('SEARCH:: Site URL Studio: %s', e)
+                        siteTitle = title.xpath('./a/text()')[0]
+                        siteTitle = self.NormaliseComparisonString(siteTitle)
+                        self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
+                        if siteTitle != compareTitle:
+                            continue
+                    except:
+                        self.log('SEARCH:: Error getting Site Title')
                         continue
-                except:
-                    self.log('SEARCH:: Error getting Site Studio')
-                    continue
 
-                # we should have a match on studio, title and year now
-                results.Append(MetadataSearchResult(id = siteURL + '|' + siteReleaseDate.strftime(DATEFORMAT), name = group_title, score = 100, lang = lang)) 
-                return
+                    # Site Title URL
+                    try:
+                        siteURL = title.xpath('./a/@href')[0]
+                        siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
+                        self.log('SEARCH:: Site Title url: %s', siteURL)
+                    except:
+                        self.log('SEARCH:: Error getting Site Title Url')
+                        continue
 
-    #-------------------------------------------------------------------------------------------------------------------------------
+                    # No Site Release Dates stored so default to filename year
+                    siteReleaseDate = compareReleaseDate
+
+                    # need to scrape Site URL to get Studio Name
+                    try:
+                        html = HTML.ElementFromURL(siteURL, sleep=DELAY)
+                        siteStudio = html.xpath('//strong[text()="Studio: "]/a/text()')[0].strip()
+                        try:
+                            self.matchStudioName(compareStudio, siteStudio)
+                        except Exception as e:
+                            self.log('SEARCH:: Site URL Studio: %s', e)
+                            continue
+                    except:
+                        self.log('SEARCH:: Error getting Site Studio')
+                        continue
+
+                    # we should have a match on studio, title and year now
+                    results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name=FilmTitle, score=100, lang=lang))
+                    return
+
+    # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
-        folder, file = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
+        ''' Update Media Entry '''
+        folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
         self.log('-----------------------------------------------------------------------')
         self.log('UPDATE:: Version    : v.%s', VERSION_NO)
-        self.log('UPDATE:: File Name  : %s', file)
+        self.log('UPDATE:: File Name  : %s', filename)
         self.log('UPDATE:: File Folder: %s', folder)
         self.log('-----------------------------------------------------------------------')
 
         # Check filename format
         try:
-            group_studio, group_title, group_year = self.matchFilename(file)
-            self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', group_studio, group_title, group_year)
+            FilmStudio, FilmTitle, FilmYear = self.matchFilename(filename)
+            self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', FilmStudio, FilmTitle, FilmYear)
         except Exception as e:
             self.log('UPDATE:: Skipping %s', e)
             return
@@ -299,25 +375,25 @@ class GayWorld(Agent.Movies):
         #        d. Originally Available : set from metadata.id (search result)
         #        e. Content Rating       : Always X
         #    2.  Metadata retrieved from website
-        #        a. Summary 
+        #        a. Summary
         #        b. Directors            : List of Directors (alphabetic order)
         #        c. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
-        #        d. Posters/Background 
+        #        d. Posters/Background
 
         # 1a.   Studio - straight of the file name
-        metadata.studio = group_studio
+        metadata.studio = FilmStudio
         self.log('UPDATE:: Studio: "%s"' % metadata.studio)
 
         # 1b.   Set Title
-        metadata.title = group_title
+        metadata.title = FilmTitle
         self.log('UPDATE:: Video Title: "%s"' % metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = metadata.id.split('|')[0]
-        metadata.originally_available_at = datetime.datetime.strptime(metadata.id.split('|')[1], DATEFORMAT)
+        metadata.originally_available_at = datetime.datetime.strptime(metadata.id.split('|')[1], DATE_YMD)
         metadata.year = metadata.originally_available_at.year
         self.log('UPDATE:: Tagline: %s', metadata.tagline)
-        self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)    
+        self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
         # 1e.   Set Content Rating to Adult
         metadata.content_rating = 'X'
@@ -329,29 +405,27 @@ class GayWorld(Agent.Movies):
             htmlsummary = html.xpath('//strong[text()="Description:"]//parent::p/text()')
             for item in htmlsummary:
                 summary = '{0}\n{1}'.format(summary, item)
+            metadata.summary = self.TranslateString(summary)
             self.log('UPDATE:: summary Found: %s', summary)
         except Exception as e:
-            summary = ''
             self.log('UPDATE:: Error getting summary: %s', e)
-
-        summary = summary.strip()
-        metadata.summary = summary if len(summary) > 0 else ' '
 
         # 2b.   Directors
         try:
-            directordict = {}
+            directors = []
             htmldirector = html.xpath('//strong[text()="Director"]//following::text()')[0].replace(': ', '').split(',')
             self.log('UPDATE:: Director List %s', htmldirector)
-            for directorname in htmldirector:
-                director = directorname.strip()
-                if (len(director) > 0):
-                    directordict[director] = None
+            for director in htmldirector:
+                director = director.strip()
+                if director:
+                    directors.append(director)
 
             # sort the dictionary and add kv to metadata
+            directors.sort()
             metadata.directors.clear()
-            for key in sorted (directordict): 
-                director = metadata.directors.new()
-                director.name = key
+            for director in directors:
+                Director = metadata.directors.new()
+                Director.name = director
         except Exception as e:
             self.log('UPDATE:: Error getting Director(s): %s', e)
 
@@ -365,12 +439,12 @@ class GayWorld(Agent.Movies):
                     continue
                 if '(' in cast:
                     cast = cast.split('(')[0]
-                castdict[cast] = self.getIAFDActorImage(cast)
+                castdict[cast] = self.getIAFDActorImage(cast, FilmYear)
                 castdict[cast] = '' if castdict[cast] == 'nophoto' else castdict[cast]
 
             # sort the dictionary and add kv to metadata
             metadata.roles.clear()
-            for key in sorted (castdict): 
+            for key in sorted(castdict):
                 role = metadata.roles.new()
                 role.name = key
                 role.photo = castdict[key]
@@ -379,24 +453,25 @@ class GayWorld(Agent.Movies):
 
         # 2d.   Posters/Background Art
         try:
-            htmlimages = html.xpath('//a[@class="fusion-lightbox"]/img/@src')[:2]	# only need first two images
+            htmlimages = html.xpath('//a[@class="fusion-lightbox"]/img/@src')[:2]  # only need first two images
+
             image = htmlimages[0]
-            validPosterList = [image]
+            validPosterList = []
             image = (BASE_URL if BASE_URL not in image else '') + image
             self.log('UPDATE:: Movie Poster Found: "%s"', image)
             validPosterList.append(image)
             if image not in metadata.posters:
-                metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
+                metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             #  clean up and only keep the poster we have added
             metadata.posters.validate_keys(validPosterList)
 
             image = htmlimages[1]
-            validArtList = [image]
+            validArtList = []
             image = (BASE_URL if BASE_URL not in image else '') + image
             self.log('UPDATE:: Movie Background Art Found: "%s"', image)
             validArtList.append(image)
             if image not in metadata.art:
-                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order = 1)
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             #  clean up and only keep the Art we have added
             metadata.art.validate_keys(validArtList)
         except Exception as e:
