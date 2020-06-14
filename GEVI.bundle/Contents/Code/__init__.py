@@ -219,7 +219,7 @@ class GEVI(Agent.Movies):
             self.log('SELF:: Error removing initial (in)definitive articles: %s', e)
 
         # all preparation has resulted in an empty string e.g title like 35 & Up by Bacchus Releasing
-        myString = re.sub(r'[^A-Za-z]', '', myBackupString) if not myString else myString
+        myString = re.sub(r'[^A-Za-z]', ' ', myBackupString) if not myString else myString
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())
