@@ -1,8 +1,10 @@
 # Announcements
 
-06/12/2020:  Phase 1 of optional Language Translation now available!  For WayBig, Fagalicious, QueerClick, and IAFD Agents, we now offer optional language translation!   Perhaps you'd prefer not have the movie/scene summary in its native French?  Or, perhaps you'd prefer to get all movie/scene summaries translated to your native German, Korean, or Chinese?  You now have that option for your favorite scenes, and soon you'll soon have these options for all Agents, Agent by Agent.   
+06/13/2020:  Phase 2 of optional Language Translation now available!  All PGMA-Modernized Indexes now include the ability to translate film/scene summaries from/to alternative languages.  See below for a more detailed explanation.
 
-06/12/2020:  Local Media Assets now enabled!  See the explanation of how to take advantage of Local Media Assets below.
+06/12/2020:  Phase 1 of optional Language Translation now available!  For WayBig, Fagalicious, QueerClick, and IAFD Agents, we now offer optional language translation!   Perhaps you'd prefer not have the movie/scene summary in its native French?  Or, perhaps you'd prefer to get all movie/scene summaries translated to your native German, Korean, or Chinese?  You now have that option for your favorite scenes, and soon you'll soon have these options for all Agents, Agent by Agent. See below for a more detailed explanation.  
+
+06/12/2020:  Local Media Assets now enabled!  See the explanation below for how to take advantage of Local Media Assets below.
 
 06/12/2020:  FAQ Added!  See below.
 
@@ -152,7 +154,22 @@ A:  The GEVI Agent only scrapes films, not scenes.   Sorry.
 
 Q:  I can't get the WayBig Agent to match videos.  Help!
 
-A:  The WayBig Agent won't scrape videos from waybig, only Blog entries. If WayBig doesn't have the scene you're seeking, try Fagalicious or QueerClick.
+A:  The WayBig Agent won't scrape videos from WayBig.com, only Blog entries. If WayBig doesn't have the scene you're seeking, try Fagalicious or QueerClick.  Not on any of the three?  Try IAFD and upload your own poster.
+
+
+Q:  I've tried everything, and I can't get a particular film/scene to match.  What now?
+
+A:  Open a new Issue.  Please describe the challenge, include the URL for the film/scene, and the corresponding Agent's log file (i.e. if the film is on AEBN, please include the com.plexapp.agents.AEBN.log.) Unsure how to find the log?  This blog entry describes the log location for each PMS platform:  https://support.plex.tv/articles/200250417-plex-media-server-log-files/ The log will be in the PMS Plugin Logs subfolder.   **Please, do not upload graphic images**  Once a new issue is opened, we troubleshoot.  Most root causes turn out to be an incorectly named filename.  However, even though we have robustly tested the agents, we still find anomalies (e.g., special characters) that a particular index may infrequently use which necessitates an update to the logic in the Agent.  If the update is technically feasible, we'll likely make the fix and release the updated Agent.  Regardless of the root cause, you'll be able to track the progress of your issue (and look at any others you may find interesting).  
+
+
+Q:  I've got a great idea for new functionality...or, there's an indexing site that I use all the time that you haven't provided an agent for.  What should I do?
+
+A:  Open a new Issue.  We love to be challenged with creating new agents or making the current set of agents more robust.  However, we 1) won't create studio specific agents (e.g., SeanCody.com) or 2) likely won't create agents for sites that don't offer consistent quality posterart (IAFD being an obvious exception).  Our goal is to never, or nearly never, have to manually index content.  If you know a site, let us know.  We'll gratefully and happily see if it is feasibly scrapable for Plex metadata.  
+
+
+Q:  Does the code for the Agents ever change/get updated?
+
+A:  Yes!  We are always developing new agents.  For existing agents, new functionality may be added (e.g., language translation support), or site updates to an index may break the Agent's ability to search.  It is a good practice to periodically check back and install the latest set of code.  Remember to stop and restart your Plex Media Server (PMS) in order for the new/updated Agents to take effect.  
 
 
 Q:  Any best practices for backing up your Plex libraries and settings? I backup all my video files but wondering if there's another step I should do to make sure my metadata and album artwork is backed up in case of a drive failure. What do you guys do?
