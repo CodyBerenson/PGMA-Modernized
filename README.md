@@ -183,7 +183,7 @@ Q:  Why would I want to create separate libraries for movies and scenes?  Why wo
 
 A:  There are pros and cons to each approach. You may want to consider questions such as How many files do you have?  How well-organized is your content?  
 
-Cons of separate libraries include:
+Separate libraries:
 1.  Pro:  A TimTales library is just that.  You don't have to further filter the library if all you want at that moment is your TimTales content.
 2.  Con:  if you click on the actor it only returns matches for that particular library...you'll need to type in the name in the general search engine which will return all libraries;
 
