@@ -15,7 +15,8 @@ The metadata that contributes to this agent comes from the following websites:
     7. GayWorld
     8. Homo Active
     9. Internet Adult Film Database
-   10. RadVideo
+   10. PornTeam
+   11. RadVideo
 
 The metadata that contributes to this agent comes from the following blogs:
     1. Fagalicious

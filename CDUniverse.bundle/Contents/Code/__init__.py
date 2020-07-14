@@ -10,14 +10,17 @@
     31 Dec 2019   2019.12.31.01    Creation
     01 Jun 2020   2019.12.31.02    Implemented translation of summary
                                    improved getIAFDActor search
+    27 Jun 2020   2019.12.31.03    Improvement to Summary Translation: Translate into Plex Library Language
+                                   stripping of intenet domain suffixes from studio names when matching
+                                   handling of unicode characters in film titles and comparision string normalisation
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
-import datetime, linecache, platform, os, re, string, sys, urllib
+import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.12.31.02'
+VERSION_NO = '2019.12.31.03'
 PLUGIN_LOG_TITLE = 'CD Universe'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -25,9 +28,6 @@ REGEX = Prefs['regex']
 
 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DELAY = int(Prefs['delay'])
-
-# The summary of the film title will be translated into this language
-LANGUAGE = Prefs['language']
 
 # detect the language the summary appears in on the web page
 DETECT = Prefs['detect']
@@ -39,6 +39,9 @@ BASE_SEARCH_URL = BASE_URL + '/sresult.asp?HT_Search_Info={0}&HT_SEARCH=TITLE&st
 # Date Formats used by website
 DATE_YMD = '%Y%m%d'
 DATEFORMAT = '%b %d, %Y'
+
+# Website Language
+SITE_LANGUAGE = 'en'
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def Start():
@@ -85,20 +88,14 @@ class CDUniverse(Agent.Movies):
         ''' match file studio name against website studio name: Boolean Return '''
         siteStudioName = self.NormaliseComparisonString(siteStudioName)
 
-        # remove spaces in comparison variables and check for equality
-        noSpaces_siteStudioName = siteStudioName.replace(' ', '')
-        noSpaces_fileStudioName = fileStudioName.replace(' ', '')
-
         if siteStudioName == fileStudioName:
-            self.log('SELF:: Studio: Full Word Match: Site: {0} = File: {1}'.format(siteStudioName, fileStudioName))
-        elif noSpaces_siteStudioName == noSpaces_fileStudioName:
             self.log('SELF:: Studio: Full Word Match: Site: {0} = File: {1}'.format(siteStudioName, fileStudioName))
         elif siteStudioName in fileStudioName:
             self.log('SELF:: Studio: Part Word Match: Site: {0} IN File: {1}'.format(siteStudioName, fileStudioName))
         elif fileStudioName in siteStudioName:
             self.log('SELF:: Studio: Part Word Match: File: {0} IN Site: {1}'.format(fileStudioName, siteStudioName))
         else:
-            raise Exception('Match Failure: Site: {0}'.format(siteStudioName))
+            raise Exception('Match Failure: File: {0} != Site: {1} '.format(fileStudioName, siteStudioName))
 
         return True
 
@@ -123,23 +120,22 @@ class CDUniverse(Agent.Movies):
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def NormaliseComparisonString(self, myString):
-        ''' Normalise string for Comparison, strip all non alphanumeric characters, Vol., Volume, Part, and 1 in series '''
+        ''' Normalise string for, strip uneeded characters for comparison of web site values to file name regex group values '''
         # convert to lower case and trim
         myString = myString.strip().lower()
 
-        # remove vol/volume/part and vol.1 etc wording as filenames dont have these to maintain a uniform search across all websites and remove all non alphanumeric characters
-        myString = myString.replace('&', 'and').replace(' vol. ', '').replace(' volume ', '')
+        # normalise unicode characters
+        myString = unicode(myString)
+        myString = unicodedata.normalize('NFD', myString).encode('ascii', 'ignore')
 
-        # remove all standalone "1's"
-        regex = re.compile(r'(?<!\d)1(?!\d)')
-        myString = regex.sub('', myString)
+        # replace ampersand with 'and'
+        myString = myString.replace('&', 'and')
 
-        # strip diacritics
-        myString = String.StripDiacritics(myString)
+        # strip domain suffixes, vol., volume from string, standalone "1's"
+        pattern = ur'[.](org|com|net|co[.][a-z]{2})|Vol[.]|\bPart\b|\bVolume\b|(?<!\d)1(?!\d)|[^A-Za-z0-9]+'
+        myString = re.sub(pattern, '', myString, flags=re.IGNORECASE)
 
-        # remove all non alphanumeric chars
-        regex = re.compile(r'\W+')
-        return regex.sub('', myString)
+        return myString
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
@@ -147,7 +143,7 @@ class CDUniverse(Agent.Movies):
         self.log('SELF:: Original Search Query [{0}]'.format(myString))
 
         myString = myString.strip().lower()
-        myString = myString.replace('-', '').replace('–', '-')
+        myString = myString.replace('-', '').replace(ur'\u2013', '').replace(ur'\u2014', '')
         myString = ' '.join(myString.split())   # remove continous white space
 
         myString = String.StripDiacritics(myString)
@@ -160,19 +156,38 @@ class CDUniverse(Agent.Movies):
         return myString
 
     # -------------------------------------------------------------------------------------------------------------------------------
-    def TranslateString(self, myString):
-        ''' Determine if translation should be done '''
+    def TranslateString(self, myString, language):
+        ''' Translate string into Library language '''
         myString = myString.strip()
-        if myString:
-            translator = Translator()
-            runTranslation = (LANGUAGE != 'en')
-            self.log('SELF:: Default Language: [%s], Run Translation: [%s]', LANGUAGE, runTranslation)
+        if language == 'xn' or language == 'xx':    # no language or language unknown
+            self.log('SELF:: Library Language: [%s], Run Translation: [False]', 'No Language' if language == 'xn' else 'Unknown')
+        elif myString:
+            translator = Translator(service_urls=['translate.google.com', 'translate.google.ca', 'translate.google.co.uk',
+                                                  'translate.google.com.au', 'translate.google.co.za', 'translate.google.br.com',
+                                                  'translate.google.pt', 'translate.google.es', 'translate.google.com.mx',
+                                                  'translate.google.it', 'translate.google.nl', 'translate.google.be',
+                                                  'translate.google.de', 'translate.google.ch', 'translate.google.at',
+                                                  'translate.google.ru', 'translate.google.pl', 'translate.google.bg',
+                                                  'translate.google.com.eg', 'translate.google.co.il', 'translate.google.co.jp',
+                                                  'translate.google.co.kr', 'translate.google.fr', 'translate.google.dk'])
+            runTranslation = (language != SITE_LANGUAGE)
+            self.log('SELF:: [Library:Site] Language: [%s:%s], Run Translation: [%s]', language, SITE_LANGUAGE, runTranslation)
             if DETECT:
-                detected = translator.detect(myString)
-                runTranslation = (LANGUAGE != detected.lang)
-                self.log('SELF:: Detect source Language: [%s] Run Translation: [%s]', detected.lang, runTranslation)
-            myString = translator.translate(myString, dest=LANGUAGE).text if runTranslation else myString
-            self.log('SELF:: Translated [%s] Summary Found: %s', runTranslation, myString)
+                detectString = re.findall(ur'.*?[.!?]', myString)[:4]   # take first 4 sentences of string to detect language
+                detectString = ''.join(detectString)
+                self.log('SELF:: Detect Site Language [%s] using this text: %s', DETECT, detectString)
+                try:
+                    detected = translator.detect(detectString)
+                    runTranslation = (language != detected.lang)
+                    self.log('SELF:: Detected Language: [%s] Run Translation: [%s]', detected.lang, runTranslation)
+                except Exception as e:
+                    self.log('SELF:: Error Detecting Text Language: %s', e)
+
+            try:
+                myString = translator.translate(myString, dest=language).text if runTranslation else myString
+                self.log('SELF:: Translated [%s] Summary Found: %s', runTranslation, myString)
+            except Exception as e:
+                self.log('SELF:: Error Translating Text: %s', e)
 
         return myString if myString else ' '     # return single space to initialise metadata summary field
 
@@ -230,7 +245,7 @@ class CDUniverse(Agent.Movies):
                     break
             except Exception as e:
                 photourl = ''
-                self.log('SELF:: Search %s Result: Could not retrieve IAFD Actor Page, %s', count, e)
+                self.log('SELF:: Error: Search %s Result: Could not retrieve IAFD Actor Page, %s', count, e)
                 continue
 
         return photourl
@@ -238,7 +253,10 @@ class CDUniverse(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def log(self, message, *args):
         ''' log messages '''
-        Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+        if re.search('ERROR', message, re.IGNORECASE):
+            Log.Error(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+        else:
+            Log.Info(PLUGIN_LOG_TITLE + ' - ' + message, *args)
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
@@ -248,16 +266,16 @@ class CDUniverse(Agent.Movies):
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
 
         self.log('-----------------------------------------------------------------------')
-        self.log('SEARCH:: Version         : v.%s', VERSION_NO)
-        self.log('SEARCH:: Python          : %s', sys.version_info)
-        self.log('SEARCH:: Platform        : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs->delay    : %s', DELAY)
-        self.log('SEARCH::      ->detect   : %s', DETECT)
-        self.log('SEARCH::      ->language : %s', LANGUAGE)
-        self.log('SEARCH::      ->regex    : %s', REGEX)
-        self.log('SEARCH:: media.title     : %s', media.title)
-        self.log('SEARCH:: File Name       : %s', filename)
-        self.log('SEARCH:: File Folder     : %s', folder)
+        self.log('SEARCH:: Version               : v.%s', VERSION_NO)
+        self.log('SEARCH:: Python                : %s', sys.version_info)
+        self.log('SEARCH:: Platform              : %s %s', platform.system(), platform.release())
+        self.log('SEARCH:: Prefs-> delay         : %s', DELAY)
+        self.log('SEARCH::      -> detect        : %s', DETECT)
+        self.log('SEARCH::      -> regex         : %s', REGEX)
+        self.log('SEARCH:: Library:Site Language : %s:%s', lang, SITE_LANGUAGE)
+        self.log('SEARCH:: Media Title           : %s', media.title)
+        self.log('SEARCH:: File Name             : %s', filename)
+        self.log('SEARCH:: File Folder           : %s', folder)
         self.log('-----------------------------------------------------------------------')
 
         # Check filename format
@@ -265,7 +283,7 @@ class CDUniverse(Agent.Movies):
             FilmStudio, FilmTitle, FilmYear = self.matchFilename(filename)
             self.log('SEARCH:: Processing: Studio: %s   Title: %s   Year: %s', FilmStudio, FilmTitle, FilmYear)
         except Exception as e:
-            self.log('SEARCH:: Skipping %s', e)
+            self.log('SEARCH:: Error: %s', e)
             return
 
         # Compare Variables used to check against the studio name on website: remove all umlauts, accents and ligatures
@@ -329,7 +347,7 @@ class CDUniverse(Agent.Movies):
                 try:
                     siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteReleaseDate)
                 except Exception as e:
-                    self.log('SEARCH:: Exception Site URL Release Date: %s', e)
+                    self.log('SEARCH:: Error getting Site URL Release Date: %s', e)
                     continue
             except:
                 self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
@@ -354,7 +372,7 @@ class CDUniverse(Agent.Movies):
             FilmStudio, FilmTitle, FilmYear = self.matchFilename(filename)
             self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', FilmStudio, FilmTitle, FilmYear)
         except Exception as e:
-            self.log('UPDATE:: Skipping %s', e)
+            self.log('UPDATE:: Error: %s', e)
             return
 
         # Fetch HTML.
@@ -398,7 +416,7 @@ class CDUniverse(Agent.Movies):
         try:
             summary = html.xpath('.//div[@id="Description"]/span/text()')[0]
             self.log('UPDATE:: Summary Found: %s', summary)
-            metadata.summary = self.TranslateString(summary)
+            metadata.summary = self.TranslateString(summary, lang)
         except Exception as e:
             self.log('UPDATE:: Error getting Summary: %s', e)
 
@@ -437,7 +455,7 @@ class CDUniverse(Agent.Movies):
                 role.name = key
                 role.photo = castdict[key]
         except Exception as e:
-            self.log('UPDATE - Error getting Cast: %s', e)
+            self.log('UPDATE:: Error getting Cast: %s', e)
 
         # 2d.   Genres
         try:

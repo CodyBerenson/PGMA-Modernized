@@ -1,5 +1,9 @@
 # Announcements
 
+07/14/2020:  AEBN News!  We have removed the legacy AEBNii from the repository of agents as we described below on 6/01.  Further, we have renamed the AEBN agent to AEBNiii, for those of you who wish to use both our AEBN agent and MrPlow254's AEBN agent.  You now have the best of both AEBN worlds!
+
+07/11/2020:  We are relasing a new Agent!  PornTeam. This agent indexes the site pornteam.com.  We try to give you many options to index your content, and PornTeam is an additional option.  One note:  the site doesn't allow all of their content to be searched.  They have plenty of titles that are browsable, but not searchable (unsure if it is by design or mistake).  If a title is not able to be searched, it will be unable to be matched by the agent...even if the title, its metadata, and posterart are on the site (not unlike RAD and homoactive).  
+
 06/13/2020:  Phase 2 of optional Language Translation now available!  All PGMA-Modernized Indexes now include the ability to translate film/scene summaries from/to alternative languages.  See below for a more detailed explanation.
 
 06/12/2020:  Phase 1 of optional Language Translation now available!  For WayBig, Fagalicious, QueerClick, and IAFD Agents, we now offer optional language translation!   Perhaps you'd prefer not have the movie/scene summary in its native French?  Or, perhaps you'd prefer to get all movie/scene summaries translated to your native German, Korean, or Chinese?  You now have that option for your favorite scenes, and soon you'll soon have these options for all Agents, Agent by Agent. See below for a more detailed explanation.  
@@ -70,7 +74,7 @@ The matching agent will return a scene poster and relevant metadata,actor thumbn
 
 GEVI has a TREMENDOUS amount of indexed content, but has some quirks that are easy to navigate, if you follow a couple rules, beginning with the filing naming convention (Studio) - Title (Year).ext.  
 
-1.  In GEVI as in the other Agents, if on windows, one cannot use a colon (:) in a filename.  If the site uses a colon either in the Studio or Title replace with space dasy space, i.e. " - ".
+1.  In GEVI as in the other Agents, if on windows, one cannot use a colon (:) in a filename.  If the site uses a colon either in the Studio or Title replace with space dash space, i.e. " - ".
 
 2.  When manually searching for a movie, GEVI's results page will display the Company (i.e. Distributor), not the Studio.  The Agent *now* allows you to use either.  Select the movie and click into the movie page.  However, make note of the Title from the Results list.  In this case, the filename should be **(BoyCrush) - Big Uncut Fuckfest, Kyler Moss's (2013).mp4**
 
@@ -84,7 +88,7 @@ GEVI has a TREMENDOUS amount of indexed content, but has some quirks that are ea
 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/results1.jpg)
 
-4.  There are times when the movie page may have one or more AKA titles.  **Use the Title from the Title on the movie page...not the results list as in the previous examples**.  This last example is a good one.  Two movie titles.  Three company names.  A correct filename is **(Pietro Filmes) - Mãos à Obra (2001).mp4** (but remember, you can now use Studio or Distributor)
+4.  There are times when the movie page may have one or more AKA titles.  **Use the Title from the Title on the movie page...not the results list as in the previous examples**.  This last example is a good one.  Two movie titles.  Three company names.  The correct filename is **(Pietro Filmes) - Mãos à Obra (2001).mp4** (but remember, you can now use Studio or Distributor)
 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/results2.jpg)
 
@@ -115,10 +119,34 @@ Another type of local media assets are the tags that may be embedded within a fi
 
 ### Language Translation
 
-All PGMA-Modernized Agents now provide optional language translation functionality.  Perhaps you're an English speaker and you'd prefer the Summary metadata for your libraries to be in English and not the native French from the index (e.g., https://www.gayeroticvideoindex.com/V/6/49506.html).  Conversely, you'd prefer to have Film and Scene summaries translated to your native German.  Use the translation settings now offered in each Agent.  In most cases, once you make a change to an Agent's Settings, you will need to Stop and then Re-Start your Plex Media Server (PMS) for your changes to take effect.   
+All PGMA-Modernized Agents now provide optional language translation functionality.  Perhaps you're an English speaker and you'd prefer the Summary metadata for your libraries to be in English and not the native French from the index (e.g., https://www.gayeroticvideoindex.com/V/6/49506.html).  Conversely, you'd prefer to have Film and Scene summaries translated to your native German.  Perhaps you wish to duplicate and share one of your libraries with a friend who's native language is different than yours.  
 
-![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/translation.jpg)
+When you create a new library or update an existing library, choose the language that you prefer the library's summaries to be translated to (if translation is necessary).  
+
+![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/language01.png)
+
+When the agent matches the file, if the library language choice (in this Example, Dutch) is NOT the same as the website's default language (English for example, if using the AEBN agent), the agent will translate the summary to Dutch.  
+
+![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/language02.png)
  
+You may optionally force an agent to check the source language before attempting to translate.  In the GEVI example above, by checking this setting the GEVI agent will translate the native French summary to your library's language, even though GEVI's default language is English.  
+
+![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/language01.jpg)
+
+### Rationalizing Movies in a series, .com, etc.
+
+If a title from an index site includes "Vol" or "Volume" or "Part", it is optional to include in the filename.  E.g.,  the film  "Raw! Vol. 5: Pounded" on Gay-world.org.  Valid filenames which will match include:
+
+(CockyBoys) - Raw! 5 - Pounded (2019).mp4
+
+or
+
+(CockyBoys) - Raw! Vol. 5 - Pounded (2020).mp4 
+
+Further, including 1 when the first part of a series is optional.  e.g., (Studio) - title 1 (2020) can be written as 
+(Studio) - title (2020)
+
+Re: .com, .org, .net, .co.xx internet names like men.com, including the .xxx is optional.  So instead of (men.com) - film title (2020) You can have (men) - film title (2020)
 
 ### Some final tips:  
 

@@ -13,15 +13,8 @@
         "default": "0"
     },
     {
-        "id": "language",
-        "label": "Translate movie summary into the selected language",
-        "type": "enum",
-        "values": ["en", "cs", "da", "de", "el", "es", "fi", "fr", "he", "hr", "hu", "it", "ja", "ko", "nl", "no", "pl", "pt", "ru", "sl", "sv", "tr", "zh"],
-        "default": "en"
-    },
-    {
         "id": "detect",
-        "label": "Always check source language before attempting translate? Select yes if movie summaries are presented in different languages",
+        "label": "Always check source language before attempting translate? Useful if film summaries are sometimes presented in a different language",
         "type": "bool",
         "default": "false"
     }

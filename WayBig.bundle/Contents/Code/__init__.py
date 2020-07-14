@@ -20,14 +20,17 @@
     26 May 2020   2019.08.12.18    Corrected error in summary scrape
     01 Jun 2020   2019.08.12.19    Implemented translation of summary
                                    improved getIAFDActor search
+    26 Jun 2020   2019.08.12.20    Improvement to Summary Translation: Translate into Plex Library Language
+                                   stripping of intenet domain suffixes from studio names when matching
+                                   handling of unicode characters in film titles and comparision string normalisation
 
 ---------------------------------------------------------------------------------------------------------------
 '''
-import datetime, linecache, platform, os, re, string, sys, urllib, subprocess
+import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.12.22.19'
+VERSION_NO = '2019.12.22.20'
 PLUGIN_LOG_TITLE = 'WayBig'
 
 # PLEX API
@@ -38,9 +41,6 @@ REGEX = Prefs['regex']
 
 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DELAY = int(Prefs['delay'])
-
-# The summary of the film title will be translated into this language
-LANGUAGE = Prefs['language']
 
 # detect the language the summary appears in on the web page
 DETECT = Prefs['detect']
@@ -58,6 +58,9 @@ BASE_SEARCH_URL = BASE_URL + '/blog/index.php?s={0}'
 # Date Formats used by website
 DATE_YMD = '%Y%m%d'
 DATEFORMAT = '%B %d, %Y'
+
+# Website Language
+SITE_LANGUAGE = 'en'
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def Start():
@@ -87,6 +90,14 @@ class WayBig(Agent.Movies):
     preference = True
     media_types = ['Movie']
     contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultScenes']
+    languages = [Locale.Language.Arabic, Locale.Language.Catalan, Locale.Language.Chinese, Locale.Language.Czech, Locale.Language.Danish,
+                 Locale.Language.Dutch, Locale.Language.English, Locale.Language.Estonian, Locale.Language.Finnish, Locale.Language.French,
+                 Locale.Language.German, Locale.Language.Greek, Locale.Language.Hebrew, Locale.Language.Hindi, Locale.Language.Hungarian,
+                 Locale.Language.Indonesian, Locale.Language.Italian, Locale.Language.Japanese, Locale.Language.Korean, Locale.Language.Latvian,
+                 Locale.Language.Norwegian, Locale.Language.Persian, Locale.Language.Polish, Locale.Language.Portuguese, Locale.Language.Romanian,
+                 Locale.Language.Russian, Locale.Language.Slovak, Locale.Language.Spanish, Locale.Language.Swahili, Locale.Language.Swedish,
+                 Locale.Language.Thai, Locale.Language.Turkish, Locale.Language.Ukrainian, Locale.Language.Vietnamese,
+                 Locale.Language.NoLanguage, Locale.Language.Unknown]
 
     #-------------------------------------------------------------------------------------------------------------------------------
     def matchFilename(self, filename):
@@ -120,23 +131,22 @@ class WayBig(Agent.Movies):
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def NormaliseComparisonString(self, myString):
-        ''' Normalise string for Comparison, strip all non alphanumeric characters, Vol., Volume, Part, and 1 in series '''
+        ''' Normalise string for, strip uneeded characters for comparison of web site values to file name regex group values '''
         # convert to lower case and trim
         myString = myString.strip().lower()
 
-        # remove vol/volume/part and vol.1 etc wording as filenames dont have these to maintain a uniform search across all websites and remove all non alphanumeric characters
-        myString = myString.replace('&', 'and').replace(' vol.', '').replace(' volume', '').replace(',', '')
+        # normalise unicode characters
+        myString = unicode(myString)
+        myString = unicodedata.normalize('NFD', myString).encode('ascii', 'ignore')
 
-        # remove all standalone "1's"
-        regex = re.compile(r'(?<!\d)1(?!\d)')
-        myString = regex.sub('', myString)
+        # replace ampersand with 'and'
+        myString = myString.replace('&', 'and')
 
-        # strip diacritics
-        myString = String.StripDiacritics(myString)
+        # strip domain suffixes, vol., volume from string, standalone "1's"
+        pattern = ur'[.](org|com|net|co[.][a-z]{2})|Vol[.]|\bPart\b|\bVolume\b|(?<!\d)1(?!\d)|[^A-Za-z0-9]+'
+        myString = re.sub(pattern, '', myString, flags=re.IGNORECASE)
 
-        # remove all non alphanumeric chars
-        regex = re.compile(r'\W+')
-        return regex.sub('', myString)
+        return myString
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
@@ -149,7 +159,7 @@ class WayBig(Agent.Movies):
         myString = myString.replace(' - ', ': ')
 
         # replace curly apostrophes with straight as strip diacritics will remove these
-        quoteChars = [u'\u2018', u'\u2019']
+        quoteChars = [ur'\u2018', ur'\u2019']
         pattern = u'({0})'.format('|'.join(quoteChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
@@ -160,9 +170,9 @@ class WayBig(Agent.Movies):
         else:
             self.log('SELF:: Search Query:: String has none of these {0}'.format(pattern))
 
-        # WayBig seems to fail to find Titles which have invalid chars in them split at first incident and take first split, just to search but not compare
+        # WayBig seems to fail to find Titles which have invalid chars in them, split at first incident and take first split, just to search but not compare
         # the back tick is added to the list as users who can not include quotes in their filenames can use these to replace them without changing the scrappers code
-        badChars = ["'", '"', '`', u'\u201c', u'\u201d', u'\u2018', u'\u2019']
+        badChars = ["'", '"', '`', ur'\u201c', ur'\u201d', ur'\u2018', ur'\u2019']
         pattern = u'({0})'.format('|'.join(badChars))
         myWords = myString.split()
         matched = re.search(pattern, myWords[0]) # match against first word
@@ -204,19 +214,38 @@ class WayBig(Agent.Movies):
         return myString
 
     # -------------------------------------------------------------------------------------------------------------------------------
-    def TranslateString(self, myString):
-        ''' Determine if translation should be done '''
+    def TranslateString(self, myString, language):
+        ''' Translate string into Library language '''
         myString = myString.strip()
-        if myString:
-            translator = Translator()
-            runTranslation = (LANGUAGE != 'en')
-            self.log('SELF:: Default Language: [%s], Run Translation: [%s]', LANGUAGE, runTranslation)
+        if language == 'xn' or language == 'xx':    # no language or language unknown
+            self.log('SELF:: Library Language: [%s], Run Translation: [False]', 'No Language' if language == 'xn' else 'Unknown')
+        elif myString:
+            translator = Translator(service_urls=['translate.google.com', 'translate.google.ca', 'translate.google.co.uk',
+                                                  'translate.google.com.au', 'translate.google.co.za', 'translate.google.br.com',
+                                                  'translate.google.pt', 'translate.google.es', 'translate.google.com.mx',
+                                                  'translate.google.it', 'translate.google.nl', 'translate.google.be',
+                                                  'translate.google.de', 'translate.google.ch', 'translate.google.at',
+                                                  'translate.google.ru', 'translate.google.pl', 'translate.google.bg',
+                                                  'translate.google.com.eg', 'translate.google.co.il', 'translate.google.co.jp',
+                                                  'translate.google.co.kr', 'translate.google.fr', 'translate.google.dk'])
+            runTranslation = (language != SITE_LANGUAGE)
+            self.log('SELF:: [Library:Site] Language: [%s:%s], Run Translation: [%s]', language, SITE_LANGUAGE, runTranslation)
             if DETECT:
-                detected = translator.detect(myString)
-                runTranslation = (LANGUAGE != detected.lang)
-                self.log('SELF:: Detect source Language: [%s] Run Translation: [%s]', detected.lang, runTranslation)
-            myString = translator.translate(myString, dest=LANGUAGE).text if runTranslation else myString
-            self.log('SELF:: Translated [%s] Summary Found: %s', runTranslation, myString)
+                detectString = re.findall(ur'.*?[.!?]', myString)[:4]   # take first 4 sentences of string to detect language
+                detectString = ''.join(detectString)
+                self.log('SELF:: Detect Site Language [%s] using this text: %s', DETECT, detectString)
+                try:
+                    detected = translator.detect(detectString)
+                    runTranslation = (language != detected.lang)
+                    self.log('SELF:: Detected Language: [%s] Run Translation: [%s]', detected.lang, runTranslation)
+                except Exception as e:
+                    self.log('SELF:: Error Detecting Text Language: %s', e)
+
+            try:
+                myString = translator.translate(myString, dest=language).text if runTranslation else myString
+                self.log('SELF:: Translated [%s] Summary Found: %s', runTranslation, myString)
+            except Exception as e:
+                self.log('SELF:: Error Translating Text: %s', e)
 
         return myString if myString else ' '     # return single space to initialise metadata summary field
 
@@ -274,7 +303,7 @@ class WayBig(Agent.Movies):
                     break
             except Exception as e:
                 photourl = ''
-                self.log('SELF:: Search %s Result: Could not retrieve IAFD Actor Page, %s', count, e)
+                self.log('SELF:: Error: Search %s Result: Could not retrieve IAFD Actor Page, %s', count, e)
                 continue
 
         return photourl
@@ -282,7 +311,10 @@ class WayBig(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def log(self, message, *args):
         ''' log messages '''
-        Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+        if re.search('ERROR', message, re.IGNORECASE):
+            Log.Error(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+        else:
+            Log.Info(PLUGIN_LOG_TITLE + ' - ' + message, *args)
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
@@ -292,17 +324,17 @@ class WayBig(Agent.Movies):
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
 
         self.log('-----------------------------------------------------------------------')
-        self.log('SEARCH:: Version         : v.%s', VERSION_NO)
-        self.log('SEARCH:: Python          : %s', sys.version_info)
-        self.log('SEARCH:: Platform        : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs->delay    : %s', DELAY)
-        self.log('SEARCH::      ->detect   : %s', DETECT)
-        self.log('SEARCH::      ->language : %s', LANGUAGE)
-        self.log('SEARCH::      ->regex    : %s', REGEX)
-        self.log('SEARCH::      ->thumbor  : %s', THUMBOR)
-        self.log('SEARCH:: media.title     : %s', media.title)
-        self.log('SEARCH:: File Name       : %s', filename)
-        self.log('SEARCH:: File Folder     : %s', folder)
+        self.log('SEARCH:: Version               : v.%s', VERSION_NO)
+        self.log('SEARCH:: Python                : %s', sys.version_info)
+        self.log('SEARCH:: Platform              : %s %s', platform.system(), platform.release())
+        self.log('SEARCH:: Prefs-> delay         : %s', DELAY)
+        self.log('SEARCH::      -> detect        : %s', DETECT)
+        self.log('SEARCH::      -> regex         : %s', REGEX)
+        self.log('SEARCH::      -> thumbor       : %s', THUMBOR)
+        self.log('SEARCH:: Library:Site Language : %s:%s', lang, SITE_LANGUAGE)
+        self.log('SEARCH:: Media Title           : %s', media.title)
+        self.log('SEARCH:: File Name             : %s', filename)
+        self.log('SEARCH:: File Folder           : %s', folder)
         self.log('-----------------------------------------------------------------------')
 
         # Check filename format
@@ -310,7 +342,7 @@ class WayBig(Agent.Movies):
             FilmStudio, FilmTitle, FilmYear = self.matchFilename(filename)
             self.log('SEARCH:: Processing: Studio: %s   Title: %s   Year: %s', FilmStudio, FilmTitle, FilmYear)
         except Exception as e:
-            self.log('SEARCH:: Skipping %s', e)
+            self.log('SEARCH:: Error: %s', e)
             return
 
         # Compare Variables used to check against the studio name on website: remove all umlauts, accents and ligatures
@@ -319,75 +351,89 @@ class WayBig(Agent.Movies):
         compareReleaseDate = datetime.datetime(int(FilmYear), 12, 31)
 
         # Search Query - for use to search the internet, remove all non alphabetic characters as GayMovie site returns no results if apostrophes or commas exist etc..
-        searchTitle = self.CleanSearchString(FilmTitle)
-        searchQuery = BASE_SEARCH_URL.format(searchTitle)
+        searchByList = ["Studio & Title", "Title at Studio", "Title"]
+        searchTitleList = []
+        searchTitleList.append('{0} {1}'.format(FilmStudio, FilmTitle))
+        searchTitleList.append('{0} at {1}'.format(FilmTitle, FilmStudio))
+        searchTitleList.append(FilmTitle)
 
-        morePages = True
-        while morePages:
-            self.log('SEARCH:: Search Query: %s', searchQuery)
-            try:
-                html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
-            except Exception as e:
-                self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
-                return
+        for i, searchTitle in enumerate(searchTitleList):
+            self.log('SEARCH:: Search Title: %s', searchTitle)
+            compareTitle = self.NormaliseComparisonString(searchTitle)
+            regex = ur'{0}|at {0}'.format(re.escape(compareStudio))
+            pattern = re.compile(regex, re.IGNORECASE)
+            compareTitle = re.sub(pattern, '', compareTitle)
 
-            try:
-                searchQuery = html.xpath('//div[@class="nav-links"]/a[@class="next page-numbers"]/@href')[0]
-                self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
-                pageNumber = int(html.xpath('//div[@class="nav-links"]/span[@class="page-numbers current"]/text()[normalize-space()]')[0])
-                morePages = True if pageNumber <= 10 else False
-            except:
-                searchQuery = ''
-                self.log('SEARCH:: No More Pages Found')
-                pageNumber = 1
-                morePages = False
+            searchTitle = self.CleanSearchString(searchTitle)
+            searchQuery = BASE_SEARCH_URL.format(searchTitle)
+            self.log('SEARCH:: Search By %s. [%s]: Search Query: %s', i + 1, searchByList[i], searchQuery)
 
-            titleList = html.xpath('.//div[@class="row"]/div[@class="content-col col"]/article')
-            self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
-
-            for title in titleList:
-                # some studios are sometimes listed with no spaces.. Next Door Ebony as NextDoorEbony
-                # remove all spaces and studio name and compare and possible added ":"
+            morePages = True
+            while morePages:
+                self.log('SEARCH:: Search Query: %s', searchQuery)
                 try:
-                    siteTitle = title.xpath('./a/h2[@class="entry-title"]/text()')[0].strip()
-                    self.log('SEARCH:: Site Title: %s', siteTitle)
-                    # clean Site Title
-                    regex = r'{0}:|{1}:|at {0}|at {1}'.format(FilmStudio, compareStudio)
-                    pattern = re.compile(regex, re.IGNORECASE)
-                    siteTitle = re.sub(pattern, '', siteTitle)
-                    siteTitle = self.NormaliseComparisonString(siteTitle)
-                    self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
-                    if siteTitle != compareTitle:
-                        continue
+                    html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
                 except Exception as e:
-                    self.log('SEARCH:: Error getting Site Title: %s', e)
-                    continue
+                    self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+                    return
 
                 try:
-                    siteURL = title.xpath('./a[@rel="bookmark"]/@href')[0]
-                    self.log('SEARCH:: Site Title URL: %s', siteURL)
-                except Exception as e:
-                    self.log('SEARCH:: Error getting Site Title URL: %s', e)
-                    continue
-
-                # Site Release Date
-                try:
-                    siteReleaseDate = title.xpath('./div/span[@class="meta-date"]/strong/text()[normalize-space()]')[0]
-                    self.log('SEARCH:: Site URL Release Date: %s', siteReleaseDate)
-                    try:
-                        siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteReleaseDate)
-                    except Exception as e:
-                        self.log('SEARCH:: Exception Site URL Release Date: %s', e)
-                        continue
+                    searchQuery = html.xpath('//div[@class="nav-links"]/a[@class="next page-numbers"]/@href')[0]
+                    self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
+                    pageNumber = int(html.xpath('//div[@class="nav-links"]/span[@class="page-numbers current"]/text()[normalize-space()]')[0])
+                    morePages = True if pageNumber <= 10 else False
                 except:
-                    self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
-                    siteReleaseDate = compareReleaseDate
+                    searchQuery = ''
+                    self.log('SEARCH:: No More Pages Found')
+                    pageNumber = 1
+                    morePages = False
 
-                # we should have a match on both studio and title now
-                results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name=FilmTitle, score=100, lang=lang))
+                titleList = html.xpath('.//div[@class="row"]/div[@class="content-col col"]/article')
+                self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
 
-                # we have found a title that matches quit loop
-                return
+                for title in titleList:
+                    # some studios are sometimes listed with no spaces.. Next Door Ebony as NextDoorEbony
+                    # remove all spaces and studio name and compare and possible added ":"
+                    try:
+                        siteTitle = title.xpath('./a/h2[@class="entry-title"]/text()')[0].strip()
+                        self.log('SEARCH:: Site Title: %s', siteTitle)
+                        # clean Site Title
+                        regex = ur'{0}: |at {0}'.format(re.escape(FilmStudio))
+                        pattern = re.compile(regex, re.IGNORECASE)
+                        siteTitle = re.sub(pattern, '', siteTitle)
+                        siteTitle = self.NormaliseComparisonString(siteTitle)
+                        self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
+                        if siteTitle != compareTitle:
+                            continue
+                    except Exception as e:
+                        self.log('SEARCH:: Error getting Site Title: %s', e)
+                        continue
+
+                    try:
+                        siteURL = title.xpath('./a[@rel="bookmark"]/@href')[0]
+                        self.log('SEARCH:: Site Title URL: %s', siteURL)
+                    except Exception as e:
+                        self.log('SEARCH:: Error getting Site Title URL: %s', e)
+                        continue
+
+                    # Site Release Date
+                    try:
+                        siteReleaseDate = title.xpath('./div/span[@class="meta-date"]/strong/text()[normalize-space()]')[0]
+                        self.log('SEARCH:: Site URL Release Date: %s', siteReleaseDate)
+                        try:
+                            siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteReleaseDate)
+                        except Exception as e:
+                            self.log('SEARCH:: Error getting Site URL Release Date: %s', e)
+                            continue
+                    except:
+                        self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
+                        siteReleaseDate = compareReleaseDate
+
+                    # we should have a match on both studio and title now
+                    results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name=FilmTitle, score=100, lang=lang))
+
+                    # we have found a title that matches quit loop
+                    return
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
@@ -404,7 +450,7 @@ class WayBig(Agent.Movies):
             FilmStudio, FilmTitle, FilmYear = self.matchFilename(filename)
             self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', FilmStudio, FilmTitle, FilmYear)
         except Exception as e:
-            self.log('UPDATE:: Skipping %s', e)
+            self.log('UPDATE:: Error: %s', e)
             return
 
         # Fetch HTML.
@@ -449,7 +495,7 @@ class WayBig(Agent.Movies):
             for item in htmlsummary:
                 summary = '{0}{1}\n'.format(summary, item.text_content())
             self.log('UPDATE:: Summary Found: %s', summary)
-            metadata.summary = self.TranslateString(summary)
+            metadata.summary = self.TranslateString(summary, lang)
         except:
             self.log('UPDATE:: Error getting Summary')
 
@@ -488,7 +534,7 @@ class WayBig(Agent.Movies):
                 width = int(imageList[index].get('width'))
             except:
                 width = 800
-                self.log('UPDATE:: No Width Attribute, default to; "%s"', width)
+                self.log('UPDATE:: Error: No Width Attribute, default to; "%s"', width)
 
             # width:height ratio 1:1.5
             maxHeight = int(width * 1.5)
@@ -496,7 +542,7 @@ class WayBig(Agent.Movies):
                 height = int(imageList[index].get('height'))
             except:
                 height = maxHeight
-                self.log('UPDATE:: No Height Attribute, default to; "%s"', height)
+                self.log('UPDATE:: Error: No Height Attribute, default to; "%s"', height)
 
             self.log('UPDATE:: Movie Poster Found: w x h; %sx%s address; "%s"', width, height, image)
 
@@ -508,7 +554,7 @@ class WayBig(Agent.Movies):
                     testImage = THUMBOR.format(width, height, image)
                     testImageContent = HTTP.Request(testImage).content
                 except Exception as e:
-                    self.log('UPDATE:: Thumbor Failure: %s', e)
+                    self.log('UPDATE:: Error: Thumbor Failure: %s', e)
                     try:
                         testImageContent = self.cropImage(image, height)
                         if os.name == 'nt':
@@ -522,7 +568,7 @@ class WayBig(Agent.Movies):
                             testImageContent = load_file(testImage)
 
                     except Exception as e:
-                        self.log('UPDATE:: Crop Script Failure: %s', e)
+                        self.log('UPDATE:: Error: Crop Script Failure: %s', e)
                     else:
                         fromWhere = 'SCRIPT'
                         image = testImage
@@ -554,7 +600,7 @@ class WayBig(Agent.Movies):
                 width = int(imageList[index].get('width'))
             except:
                 width = 800
-                self.log('UPDATE:: No Width Attribute, default to; "%s"', width)
+                self.log('UPDATE:: Error: No Width Attribute, default to; "%s"', width)
 
             # width:height ratio 16:9
             maxHeight = int(width * 0.5625)
@@ -562,7 +608,7 @@ class WayBig(Agent.Movies):
                 height = int(imageList[index].get('height'))
             except:
                 height = maxHeight
-                self.log('UPDATE:: No Height Attribute, default to; "%s"', height)
+                self.log('UPDATE:: Error: No Height Attribute, default to; "%s"', height)
 
             self.log('UPDATE:: Background Art Found: w x h; %sx%s address; "%s"', width, height, image)
 
@@ -574,7 +620,7 @@ class WayBig(Agent.Movies):
                     testImage = THUMBOR.format(width, height, image)
                     testImageContent = HTTP.Request(testImage).content
                 except Exception as e:
-                    self.log('UPDATE:: Thumbor Failure: %s', e)
+                    self.log('UPDATE:: Error: Thumbor Failure: %s', e)
                     try:
                         testImageContent = self.cropImage(image, height)
                         if os.name == 'nt':
@@ -587,7 +633,7 @@ class WayBig(Agent.Movies):
                             subprocess.call(cmd)
                             testImageContent = load_file(testImage)
                     except Exception as e:
-                        self.log('UPDATE:: Crop Script Failure: %s', e)
+                        self.log('UPDATE:: Error: Crop Script Failure: %s', e)
                     else:
                         fromWhere = 'SCRIPT'
                         image = testImage

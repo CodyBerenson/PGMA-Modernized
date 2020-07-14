@@ -10,14 +10,17 @@
     12 Aug 2019   2019.08.12.01    Creation
     01 Jun 2020   2019.08.12.02    Implemented translation of summary
                                    improved getIAFDActor search
+    27 Jun 2020   2019.08.12.03    Improvement to Summary Translation: Translate into Plex Library Language
+                                   stripping of intenet domain suffixes from studio names when matching
+                                   handling of unicode characters in film titles and comparision string normalisation
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
-import datetime, linecache, platform, os, re, string, sys, urllib
+import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.02'
+VERSION_NO = '2019.08.12.03'
 PLUGIN_LOG_TITLE = 'HomoActive'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -26,19 +29,19 @@ REGEX = Prefs['regex']
 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DELAY = int(Prefs['delay'])
 
-# The summary of the film title will be translated into this language
-LANGUAGE = Prefs['language']
-
 # detect the language the summary appears in on the web page
 DETECT = Prefs['detect']
 
 # URLS
 BASE_URL = 'https://www.homoactive.com'
-BASE_SEARCH_URL = BASE_URL + '/catalogsearch/result/?q=%s'
+BASE_SEARCH_URL = BASE_URL + '/catalogsearch/result/?q={0}'
 
 # Date Formats used by website
 DATE_YMD = '%Y%m%d'
 DATEFORMAT = '%d-%m-%Y'
+
+# Website Language
+SITE_LANGUAGE = 'en'
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def Start():
@@ -85,20 +88,14 @@ class HomoActive(Agent.Movies):
         ''' match file studio name against website studio name: Boolean Return '''
         siteStudioName = self.NormaliseComparisonString(siteStudioName)
 
-        # remove spaces in comparison variables and check for equality
-        noSpaces_siteStudioName = siteStudioName.replace(' ', '')
-        noSpaces_fileStudioName = fileStudioName.replace(' ', '')
-
         if siteStudioName == fileStudioName:
-            self.log('SELF:: Studio: Full Word Match: Site: {0} = File: {1}'.format(siteStudioName, fileStudioName))
-        elif noSpaces_siteStudioName == noSpaces_fileStudioName:
             self.log('SELF:: Studio: Full Word Match: Site: {0} = File: {1}'.format(siteStudioName, fileStudioName))
         elif siteStudioName in fileStudioName:
             self.log('SELF:: Studio: Part Word Match: Site: {0} IN File: {1}'.format(siteStudioName, fileStudioName))
         elif fileStudioName in siteStudioName:
             self.log('SELF:: Studio: Part Word Match: File: {0} IN Site: {1}'.format(fileStudioName, siteStudioName))
         else:
-            raise Exception('Match Failure: Site: {0}'.format(siteStudioName))
+            raise Exception('Match Failure: File: {0} != Site: {1} '.format(fileStudioName, siteStudioName))
 
         return True
 
@@ -147,7 +144,7 @@ class HomoActive(Agent.Movies):
         self.log('SELF:: Original Search Query [{0}]'.format(myString))
 
         myString = myString.strip().lower()
-        myString = myString.replace(' -', ':').replace('–', '-').replace('& ', '')
+        myString = myString.replace(' -', ':').replace(ur'\u2013', '-').replace(ur'\u2014', '-').replace('& ', '')
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString)
@@ -159,19 +156,38 @@ class HomoActive(Agent.Movies):
         return myString
 
     # -------------------------------------------------------------------------------------------------------------------------------
-    def TranslateString(self, myString):
-        ''' Determine if translation should be done '''
+    def TranslateString(self, myString, language):
+        ''' Translate string into Library language '''
         myString = myString.strip()
-        if myString:
-            translator = Translator()
-            runTranslation = (LANGUAGE != 'en')
-            self.log('SELF:: Default Language: [%s], Run Translation: [%s]', LANGUAGE, runTranslation)
+        if language == 'xn' or language == 'xx':    # no language or language unknown
+            self.log('SELF:: Library Language: [%s], Run Translation: [False]', 'No Language' if language == 'xn' else 'Unknown')
+        elif myString:
+            translator = Translator(service_urls=['translate.google.com', 'translate.google.ca', 'translate.google.co.uk',
+                                                  'translate.google.com.au', 'translate.google.co.za', 'translate.google.br.com',
+                                                  'translate.google.pt', 'translate.google.es', 'translate.google.com.mx',
+                                                  'translate.google.it', 'translate.google.nl', 'translate.google.be',
+                                                  'translate.google.de', 'translate.google.ch', 'translate.google.at',
+                                                  'translate.google.ru', 'translate.google.pl', 'translate.google.bg',
+                                                  'translate.google.com.eg', 'translate.google.co.il', 'translate.google.co.jp',
+                                                  'translate.google.co.kr', 'translate.google.fr', 'translate.google.dk'])
+            runTranslation = (language != SITE_LANGUAGE)
+            self.log('SELF:: [Library:Site] Language: [%s:%s], Run Translation: [%s]', language, SITE_LANGUAGE, runTranslation)
             if DETECT:
-                detected = translator.detect(myString)
-                runTranslation = (LANGUAGE != detected.lang)
-                self.log('SELF:: Detect source Language: [%s] Run Translation: [%s]', detected.lang, runTranslation)
-            myString = translator.translate(myString, dest=LANGUAGE).text if runTranslation else myString
-            self.log('SELF:: Translated [%s] Summary Found: %s', runTranslation, myString)
+                detectString = re.findall(ur'.*?[.!?]', myString)[:4]   # take first 4 sentences of string to detect language
+                detectString = ''.join(detectString)
+                self.log('SELF:: Detect Site Language [%s] using this text: %s', DETECT, detectString)
+                try:
+                    detected = translator.detect(detectString)
+                    runTranslation = (language != detected.lang)
+                    self.log('SELF:: Detected Language: [%s] Run Translation: [%s]', detected.lang, runTranslation)
+                except Exception as e:
+                    self.log('SELF:: Error Detecting Text Language: %s', e)
+
+            try:
+                myString = translator.translate(myString, dest=language).text if runTranslation else myString
+                self.log('SELF:: Translated [%s] Summary Found: %s', runTranslation, myString)
+            except Exception as e:
+                self.log('SELF:: Error Translating Text: %s', e)
 
         return myString if myString else ' '     # return single space to initialise metadata summary field
 
@@ -229,7 +245,7 @@ class HomoActive(Agent.Movies):
                     break
             except Exception as e:
                 photourl = ''
-                self.log('SELF:: Search %s Result: Could not retrieve IAFD Actor Page, %s', count, e)
+                self.log('SELF:: Error: Search %s Result: Could not retrieve IAFD Actor Page, %s', count, e)
                 continue
 
         return photourl
@@ -237,7 +253,10 @@ class HomoActive(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def log(self, message, *args):
         ''' log messages '''
-        Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+        if re.search('ERROR', message, re.IGNORECASE):
+            Log.Error(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+        else:
+            Log.Info(PLUGIN_LOG_TITLE + ' - ' + message, *args)
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
@@ -247,16 +266,16 @@ class HomoActive(Agent.Movies):
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
 
         self.log('-----------------------------------------------------------------------')
-        self.log('SEARCH:: Version         : v.%s', VERSION_NO)
-        self.log('SEARCH:: Python          : %s', sys.version_info)
-        self.log('SEARCH:: Platform        : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs->delay    : %s', DELAY)
-        self.log('SEARCH::      ->detect   : %s', DETECT)
-        self.log('SEARCH::      ->language : %s', LANGUAGE)
-        self.log('SEARCH::      ->regex    : %s', REGEX)
-        self.log('SEARCH:: media.title     : %s', media.title)
-        self.log('SEARCH:: File Name       : %s', filename)
-        self.log('SEARCH:: File Folder     : %s', folder)
+        self.log('SEARCH:: Version               : v.%s', VERSION_NO)
+        self.log('SEARCH:: Python                : %s', sys.version_info)
+        self.log('SEARCH:: Platform              : %s %s', platform.system(), platform.release())
+        self.log('SEARCH:: Prefs-> delay         : %s', DELAY)
+        self.log('SEARCH::      -> detect        : %s', DETECT)
+        self.log('SEARCH::      -> regex         : %s', REGEX)
+        self.log('SEARCH:: Library:Site Language : %s:%s', lang, SITE_LANGUAGE)
+        self.log('SEARCH:: Media Title           : %s', media.title)
+        self.log('SEARCH:: File Name             : %s', filename)
+        self.log('SEARCH:: File Folder           : %s', folder)
         self.log('-----------------------------------------------------------------------')
 
         # Check filename format
@@ -264,7 +283,7 @@ class HomoActive(Agent.Movies):
             FilmStudio, FilmTitle, FilmYear = self.matchFilename(filename)
             self.log('SEARCH:: Processing: Studio: %s   Title: %s   Year: %s', FilmStudio, FilmTitle, FilmYear)
         except Exception as e:
-            self.log('SEARCH:: Skipping %s', e)
+            self.log('SEARCH:: Error: %s', e)
             return
 
         # Compare Variables used to check against the studio name on website: remove all umlauts, accents and ligatures
@@ -324,14 +343,14 @@ class HomoActive(Agent.Movies):
                 try:
                     siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteReleaseDate)
                 except Exception as e:
-                    self.log('SEARCH:: Exception Site URL Release Date: %s', e)
+                    self.log('SEARCH:: Error getting Site URL Release Date: %s', e)
                     continue
             except:
                 self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
                 siteReleaseDate = compareReleaseDate
 
             # we should have a match on studio, title and year now
-            results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name=saveTitle, score=100, lang=lang))
+            results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name=FilmTitle, score=100, lang=lang))
             return
 
     # -------------------------------------------------------------------------------------------------------------------------------
@@ -349,7 +368,7 @@ class HomoActive(Agent.Movies):
             FilmStudio, FilmTitle, FilmYear = self.matchFilename(filename)
             self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', FilmStudio, FilmTitle, FilmYear)
         except Exception as e:
-            self.log('UPDATE:: Skipping %s', e)
+            self.log('UPDATE:: Error: %s', e)
             return
 
         # Fetch HTML.
@@ -395,7 +414,7 @@ class HomoActive(Agent.Movies):
             summary = " ".join(summary)
             summary = summary.replace('\n', '').replace('\r', '').strip()
             self.log('UPDATE:: Summary Found: %s', summary)
-            metadata.summary = self.TranslateString(summary)
+            metadata.summary = self.TranslateString(summary, lang)
         except:
             self.log('UPDATE:: Error getting Summary: %s')
 
@@ -435,7 +454,7 @@ class HomoActive(Agent.Movies):
                 role.name = key
                 role.photo = castdict[key]
         except Exception as e:
-            self.log('UPDATE - Error getting Cast: %s', e)
+            self.log('UPDATE:: Error getting Cast: %s', e)
 
         # 2d.   Country
         try:
