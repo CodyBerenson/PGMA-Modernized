@@ -13,6 +13,8 @@
                                    stripping of intenet domain suffixes from studio names when matching
                                    handling of unicode characters in film titles and comparision string normalisation
 	01 Jul 2020   2020.05.21.03	   Renamed to AEBNiii
+    14 Jul 2020   2020.05.21.04    Enhanced seach to also look through the exact matches, as AEBN does not always put these
+                                   in the general search results
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -20,7 +22,7 @@ import datetime, linecache, platform, os, re, string, subprocess, sys, unicodeda
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.05.21.03'
+VERSION_NO = '2020.05.21.04'
 PLUGIN_LOG_TITLE = 'AEBN iii'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -34,7 +36,7 @@ DETECT = Prefs['detect']
 
 # URLS
 BASE_URL = 'https://gay.aebn.com'
-BASE_SEARCH_URL = BASE_URL + '/gay/search/movies/page/1?sysQuery={0}&criteria=%7B%22sort%22%3A%22Relevance%22%7D'
+BASE_SEARCH_URL = [BASE_URL + '/gay/search/?sysQuery={0}', BASE_URL + '/gay/search/movies/page/1?sysQuery={0}&criteria=%7B%22sort%22%3A%22Relevance%22%7D']
 
 # Date Formats used by website
 DATE_YMD = '%Y%m%d'
@@ -117,6 +119,95 @@ class AEBNiii(Agent.Movies):
             self.log('SELF:: Release Date: {0}'.format(msg))
 
         return siteDate
+
+    # -------------------------------------------------------------------------------------------------------------------------------
+    def matchTitle(self, ExactMatches, title, compareDict):
+        ''' match Film in list returned by running the query '''
+        matched = True
+        TitleDict = {}
+
+        # set comparison values
+        compareTitle = compareDict['Title']
+        compareStudio = compareDict['Studio']
+        compareReleaseDate = compareDict['ReleaseDate']
+
+        # Site Title
+        try:
+            siteTitle = title.xpath('./section//h1/a/text()')[0] if ExactMatches else title.xpath('./a//img/@title')[0]
+            siteTitle = self.NormaliseComparisonString(siteTitle)
+            self.log('SELF:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
+            if siteTitle != compareTitle:
+                matched = False
+        except:
+            self.log('SELF:: Error getting Site Title')
+            matched = False
+
+        # Site Title URL
+        if matched:
+            try:
+                siteURL = title.xpath('./section//h1/a/@href')[0] if ExactMatches else title.xpath('./a/@href')[0]
+                siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
+                self.log('SELF:: Site Title url: %s', siteURL)
+            except:
+                self.log('SELF:: Error getting Site Title Url')
+                matched = False
+
+        # Access Site URL for Studio and Release Date information only when looking at non exact match titles
+        if matched:
+            if not ExactMatches:
+                try:
+                    html = HTML.ElementFromURL(siteURL, sleep=DELAY)
+                except Exception as e:
+                    self.log('SELF:: Error reading Site URL page: %s', e)
+                    matched = False
+
+        # Site Studio
+        if matched:
+            try:
+                foundStudio = False
+                htmlSiteStudio = title.xpath('./section//li[contains(@class,"item-studio")]/a/text()') if ExactMatches else html.xpath('//div[@class="dts-studio-name-wrapper"]/a/text()')
+                self.log('SELF:: %s Site URL Studios: %s', len(htmlSiteStudio), htmlSiteStudio)
+                for siteStudio in htmlSiteStudio:
+                    try:
+                        self.matchStudioName(compareStudio, siteStudio)
+                        self.log('SELF:: %s Compare with: %s', compareStudio, siteStudio)
+                        foundStudio = True
+                    except Exception as e:
+                        self.log('SELF:: Error: %s', e)
+
+                    if foundStudio:
+                        break
+            except Exception as e:
+                self.log('SELF:: Error getting Site Studio %s', e)
+                matched = False
+
+            if not foundStudio:
+                self.log('SELF:: Error No Matching Site Studio')
+                matched = False
+
+        # Site Release Date
+        if matched:
+            try:
+                siteReleaseDate = title.xpath('./section//li[contains(@class,"item-release-date")]/text()')[0] if ExactMatches else html.xpath('//li[contains(@class,"item-release-date")]/text()')[0]
+                siteReleaseDate = siteReleaseDate.strip().lower()
+                siteReleaseDate = siteReleaseDate.replace('sept ', 'sep ').replace('july ', 'jul ')
+                self.log('SELF:: Site URL Release Date: %s', siteReleaseDate)
+                try:
+                    siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteReleaseDate)
+                except Exception as e:
+                    self.log('SELF:: Error getting Site URL Release Date: %s', e)
+                    matched = False
+            except:
+                self.log('SELF:: Error getting Site URL Release Date: Default to Filename Date')
+                siteReleaseDate = compareReleaseDate
+
+        if matched:
+            TitleDict['Title'] = siteTitle
+            TitleDict['Studio'] = siteStudio
+            TitleDict['ReleaseDate'] = siteReleaseDate
+            TitleDict['URL'] = siteURL
+
+        return TitleDict
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def NormaliseComparisonString(self, myString):
@@ -287,16 +378,36 @@ class AEBNiii(Agent.Movies):
             return
 
         # Compare Variables used to check against the studio name on website: remove all umlauts, accents and ligatures
-        compareStudio = self.NormaliseComparisonString(FilmStudio)
-        compareTitle = self.NormaliseComparisonString(FilmTitle)
-        compareReleaseDate = datetime.datetime(int(FilmYear), 12, 31)  # default to 31 Dec of Filename year
+        compareDict = {}
+        compareDict['Studio'] = self.NormaliseComparisonString(FilmStudio)
+        compareDict['Title'] = self.NormaliseComparisonString(FilmTitle)
+        compareDict['ReleaseDate'] = datetime.datetime(int(FilmYear), 12, 31)  # default to 31 Dec of Filename year
 
         # Search Query - for use to search the internet
         searchTitleList = self.CleanSearchString(FilmTitle)
         for count, searchTitle in enumerate(searchTitleList, start=1):
-            searchQuery = BASE_SEARCH_URL.format(searchTitle)
-            self.log('SEARCH:: %s. Search Query: %s', count, searchQuery)
+            searchQuery = BASE_SEARCH_URL[0].format(searchTitle)
+            self.log('SEARCH:: %s. Exact Match Search Query: %s', count, searchQuery)
 
+            # first check exact matches
+
+            try:
+                html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
+                titleList = html.xpath('//section[contains(@class,"dts-panel-exact-match")]/div[@class="dts-panel-content"]')
+                for title in titleList:
+                    # get film variables in dictionary format: if dict is filled we have a match
+                    TitleDict = self.matchTitle(True, title, compareDict)
+                    if TitleDict:
+                        siteURL = TitleDict['URL']
+                        siteReleaseDate = TitleDict['ReleaseDate']
+                        results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name=FilmTitle, score=100, lang=lang))
+                        return
+            except Exception as e:
+                self.log('SEARCH:: Error: Search Query did find any Exact Movie Matches: %s', e)
+
+            # if we get here there were no exact matches returned by the search query, so search through the rest
+            searchQuery = BASE_SEARCH_URL[1].format(searchTitle)
+            self.log('SEARCH:: %s. General Search Query: %s', count, searchQuery)
             morePages = True
             while morePages:
                 self.log('SEARCH:: Search Query: %s', searchQuery)
@@ -324,74 +435,13 @@ class AEBNiii(Agent.Movies):
 
                 self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
                 for title in titleList:
-                    # Site Title
-                    try:
-                        siteTitle = title.xpath('./a//img/@title')[0]
-                        siteTitle = self.NormaliseComparisonString(siteTitle)
-                        self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
-                        if siteTitle != compareTitle:
-                            continue
-                    except:
-                        self.log('SEARCH:: Error getting Site Title')
-                        continue
-
-                    # Site Title URL
-                    try:
-                        siteURL = title.xpath('./a/@href')[0]
-                        siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
-                        self.log('SEARCH:: Site Title url: %s', siteURL)
-                    except:
-                        self.log('SEARCH:: Error getting Site Title Url')
-                        continue
-
-                    # Access Site URL for Studio and Release Date information
-                    try:
-                        html = HTML.ElementFromURL(siteURL, sleep=DELAY)
-                    except Exception as e:
-                        self.log('SEARCH:: Error reading Site URL page: %s', e)
-                        continue
-
-                    # Site Studio
-                    try:
-                        foundStudio = False
-                        htmlSiteStudio = html.xpath('//div[@class="dts-studio-name-wrapper"]/a/text()')
-                        self.log('SEARCH:: %s Site URL Studios: %s', len(htmlSiteStudio), htmlSiteStudio)
-                        for siteStudio in htmlSiteStudio:
-                            try:
-                                self.matchStudioName(compareStudio, siteStudio)
-                                self.log('SEARCH:: %s Compare with: %s', compareStudio, siteStudio)
-                                foundStudio = True
-                            except Exception as e:
-                                self.log('SEARCH:: Error: %s', e)
-                                continue
-
-                            if foundStudio:
-                                break
-                    except Exception as e:
-                        self.log('SEARCH:: Error getting Site Studio %s', e)
-                        continue
-
-                    if not foundStudio:
-                        self.log('SEARCH:: Error No Matching Site Studio')
-                        continue
-
-                    # Site Release Date
-                    try:
-                        siteReleaseDate = html.xpath('//li[@class="section-detail-list-item-release-date"]/text()')[0].strip().lower()
-                        siteReleaseDate = siteReleaseDate.replace('sept ', 'sep ').replace('july ', 'jul ')
-                        self.log('SEARCH:: Site URL Release Date: %s', siteReleaseDate)
-                        try:
-                            siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteReleaseDate)
-                        except Exception as e:
-                            self.log('SEARCH:: Error getting Site URL Release Date: %s', e)
-                            continue
-                    except:
-                        self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
-                        siteReleaseDate = compareReleaseDate
-
-                    # we should have a match on studio, title and year now
-                    results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name=FilmTitle, score=100, lang=lang))
-                    return
+                    # get film variables in dictionary format: if dict is filled we have a match
+                    TitleDict = self.matchTitle(False, title, compareDict)
+                    if TitleDict:
+                        siteURL = TitleDict['URL']
+                        siteReleaseDate = TitleDict['ReleaseDate']
+                        results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name=FilmTitle, score=100, lang=lang))
+                        return
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
