@@ -8,12 +8,6 @@
                                                   ---------------
     Date            Version                         Modification
     22 Dec 2019   2019.12.22.1     Corrected scrapping of collections
-    14 Apr 2020   2019.08.12.14    Corrected xPath to properly identify titles in result list
-                                   Dropped first word of title with invalid characters i.e "'"
-                                   Improved title matching and logging around it
-                                   Search multiple result pages
-    17 Apr 2020   2019.08.12.15    Removed disable debug logging preference
-                                   corrected logic around image cropping
     28 Apr 2020   2019.08.12.16    update IAFD routine
     08 May 2020   2019.08.12.17    Added [ and ] to characters not be be url encoded as titles were not returning results
                                    updated removal of stand alone '1' in comparison routine
@@ -23,14 +17,15 @@
     26 Jun 2020   2019.08.12.20    Improvement to Summary Translation: Translate into Plex Library Language
                                    stripping of intenet domain suffixes from studio names when matching
                                    handling of unicode characters in film titles and comparision string normalisation
-
+    14 Aug 2020   2019.08.12.21    Change to regex matching code - site titles which had studio name in them were failing to match to 
+                                   file titles as regex was different between the two
 ---------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.12.22.20'
+VERSION_NO = '2019.12.22.21'
 PLUGIN_LOG_TITLE = 'WayBig'
 
 # PLEX API
@@ -359,10 +354,10 @@ class WayBig(Agent.Movies):
 
         for i, searchTitle in enumerate(searchTitleList):
             self.log('SEARCH:: Search Title: %s', searchTitle)
-            compareTitle = self.NormaliseComparisonString(searchTitle)
-            regex = ur'{0}|at {0}'.format(re.escape(compareStudio))
+            regex = ur'^{0} |at {0}$'.format(re.escape(compareStudio))
             pattern = re.compile(regex, re.IGNORECASE)
-            compareTitle = re.sub(pattern, '', compareTitle)
+            compareTitle = re.sub(pattern, '', searchTitle)
+            compareTitle = self.NormaliseComparisonString(compareTitle)
 
             searchTitle = self.CleanSearchString(searchTitle)
             searchQuery = BASE_SEARCH_URL.format(searchTitle)
@@ -398,7 +393,7 @@ class WayBig(Agent.Movies):
                         siteTitle = title.xpath('./a/h2[@class="entry-title"]/text()')[0].strip()
                         self.log('SEARCH:: Site Title: %s', siteTitle)
                         # clean Site Title
-                        regex = ur'{0}: |at {0}'.format(re.escape(FilmStudio))
+                        regex = ur'^{0}: |at {0}$'.format(re.escape(compareStudio))
                         pattern = re.compile(regex, re.IGNORECASE)
                         siteTitle = re.sub(pattern, '', siteTitle)
                         siteTitle = self.NormaliseComparisonString(siteTitle)

@@ -16,15 +16,17 @@
     25 Jun 2020   2020.02.14.13    Improvement to Summary Translation: Translate into Plex Library Language
                                    stripping of intenet domain suffixes from studio names when matching
                                    handling of unicode characters in film titles and comparision string normalisation
-
-
+    25 Jul 2020   2020.02.14.14    changed replacement of hyphens etc to null with hyphens to space when building 
+                                   the search string, added chars u\2011 (nonbreaking hyphen) and u\2012 (figure dash)
+    25 Jul 2020   2020.02.14.15    Change to regex matching code - site titles which had studio name in them were failing to match to 
+                                   file titles as regex was different between the two
 ---------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.02.14.13'
+VERSION_NO = '2020.02.14.15'
 PLUGIN_LOG_TITLE = 'QueerClick'
 
 # PLEX API
@@ -177,12 +179,12 @@ class QueerClick(Agent.Movies):
         else:
             self.log('SELF:: Search Query:: String has none of these {0}'.format(pattern))
 
-        nullChars = [',', '-', ur'\u2013', ur'\u2014'] # for titles with commas, colons in them on disk represented as ' - '
-        pattern = u'({0})'.format('|'.join(nullChars))
+        spaceChars = [',', '-', ur'\u2011', ur'\u2012', ur'\u2013', ur'\u2014'] # for titles with commas, colons in them on disk represented as ' - '
+        pattern = u'({0})'.format('|'.join(spaceChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             self.log('SELF:: Search Query:: Replacing characters in string. Found one of these {0}'.format(pattern))
-            myString = re.sub(pattern, '', myString)
+            myString = re.sub(pattern, ' ', myString)
             myString = ' '.join(myString.split())   # remove continous white space
             self.log('SELF:: Amended Search Query [{0}]'.format(myString))
         else:
@@ -371,7 +373,7 @@ class QueerClick(Agent.Movies):
         for i, searchTitle in enumerate(searchTitleList):
             self.log('SEARCH:: Search Title: %s', searchTitle)
             compareTitle = self.NormaliseComparisonString(searchTitle)
-            regex = ur'{0}|at {0}'.format(re.escape(compareStudio))
+            regex = ur'^{0}|at {0}$'.format(re.escape(compareStudio))
             pattern = re.compile(regex, re.IGNORECASE)
             compareTitle = re.sub(pattern, '', compareTitle)
 
@@ -407,7 +409,7 @@ class QueerClick(Agent.Movies):
                     try:
                         siteEntry = title.xpath('./h2[@class="entry-title"]/a/text()')[0]
                         self.log('SEARCH:: Site Entry: %s', siteEntry)
-                        regex = ur'{0}:|{1}:|at {0}|at {1}| - .+| \u2013 .+'.format(FilmStudio, compareStudio)
+                        regex = ur'^{0}:|^{1}:|at {0}$|at {1}$| - .+| \u2013 .+'.format(FilmStudio, compareStudio)
                         pattern = re.compile(regex, re.IGNORECASE)
                         matched = re.search(pattern, siteEntry)  # match against whole string
                         if matched:
@@ -430,7 +432,7 @@ class QueerClick(Agent.Movies):
                         self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
                         if siteTitle != compareTitle:
                             continue
-                    except:
+                    except Exception as e:
                         self.log('SEARCH:: Error getting Site Title: %s', e)
                         continue
 
@@ -537,8 +539,8 @@ class QueerClick(Agent.Movies):
 
         # 2b/c.   Cast
         #         QueerClick stores the cast as links in the summary text
+        castdict = {}
         try:
-            castdict = {}
             htmlcast = html.xpath('//div[@class="taxonomy"]/a/@title|//article[@id and @class]/p/a/text()[normalize-space()]')
 
             # standardise apostrophe's then remove duplicates
