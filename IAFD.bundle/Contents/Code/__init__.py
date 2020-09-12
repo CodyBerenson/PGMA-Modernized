@@ -19,6 +19,8 @@
     27 Jun 2020   2020.04.22.05    Improvement to Summary Translation: Translate into Plex Library Language
                                    stripping of intenet domain suffixes from studio names when matching
                                    handling of unicode characters in film titles and comparision string normalisation
+    12 Sep 2020   2020.04.22.06    Titles with hyphens failing as these were converted to ":"
+                                   corrected by splitting and using string upto that position as search...
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -26,7 +28,7 @@ import datetime, linecache, platform, os, re, string, subprocess, sys, unicodeda
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.04.22.05'
+VERSION_NO = '2020.04.22.06'
 PLUGIN_LOG_TITLE = 'IAFD'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -131,14 +133,6 @@ class IAFD(Agent.Movies):
         # convert to lower case and trim
         myString = myString.strip().lower()
 
-        # remove articles from beginning of string
-        if myString[:4] == 'the ':
-            myString = myString[4:]
-        if myString[:3] == 'an ':
-            myString = myString[3:]
-        if myString[:2] == 'a ':
-            myString = myString[2:]
-
         # normalise unicode characters
         myString = unicode(myString)
         myString = unicodedata.normalize('NFD', myString).encode('ascii', 'ignore')
@@ -159,14 +153,18 @@ class IAFD(Agent.Movies):
 
         myString = myString.strip().lower()
 
-        if myString[:4] == 'the ':
-            myString = myString[4:]
-        if myString[:3] == 'an ':
-            myString = myString[3:]
-        if myString[:2] == 'a ':
-            myString = myString[2:]
+        # split and take up to first occurence of character
+        splitChars = ['-', ur'\u2013', ur'\u2014']
+        pattern = u'[{0}]'.format(''.join(splitChars))
+        matched = re.search(pattern, myString)  # match against whole string
+        if matched:
+            numPos = matched.start()
+            self.log('SELF:: Search Query:: Splitting at position [{0}]. Found one of these {1}'.format(numPos, pattern))
+            myString = myString[:numPos]
+            self.log('SELF:: Amended Search Query [{0}]'.format(myString))
+        else:
+            self.log('SELF:: Search Query:: Split not attempted. String has none of these {0}'.format(pattern))
 
-        myString = myString.replace(" - ", ": ")
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString)
 

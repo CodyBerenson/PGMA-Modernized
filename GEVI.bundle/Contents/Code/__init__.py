@@ -23,12 +23,15 @@
                                    removed references from summary relating to where scene can be found in compilation or other movie
     28 May 2020   2019.12.25.13    Took into account Brackets () in Title - characters replaced by Space
                                    GEVI will now compare file studio name against both site distributor and site studio names
-    01 Jun 2020   2019.06.01.14    Implemented translation of summary
+    01 Jun 2020   2019.12.25.14    Implemented translation of summary
                                    improved getIAFDActor search
-    24 Jun 2020   2019.06.01.15    Improvement to Summary Translation: Translate into Plex Library Language
+    24 Jun 2020   2019.12.25.15    Improvement to Summary Translation: Translate into Plex Library Language
                                    stripping of intenet domain suffixes from studio names when matching
                                    handling of unicode characters in film titles
-    12 Jul 2020   2019.06.01.16    drop first word of title if numeric to search
+    12 Jul 2020   2019.12.25.16    drop first word of title if numeric to search
+    30 Aug 2020   2019.12.25.17    Handling of Roman Numerals in Titles to Match Arabic Numerals
+    12 Sep 2020   2019.12.25.18    Error in creating search string whilst handling Ampersands, 
+                                   these were replaced with a null string instead of splitting at the position as in numerals
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -36,7 +39,7 @@ import datetime, linecache, platform, os, re, string, subprocess, sys, unicodeda
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.16'
+VERSION_NO = '2019.12.25.18'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 REGEX = Prefs['regex']
@@ -85,14 +88,6 @@ class GEVI(Agent.Movies):
     preference = True
     media_types = ['Movie']
     contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultFilms']
-    languages = [Locale.Language.Arabic, Locale.Language.Catalan, Locale.Language.Chinese, Locale.Language.Czech, Locale.Language.Danish,
-                 Locale.Language.Dutch, Locale.Language.English, Locale.Language.Estonian, Locale.Language.Finnish, Locale.Language.French,
-                 Locale.Language.German, Locale.Language.Greek, Locale.Language.Hebrew, Locale.Language.Hindi, Locale.Language.Hungarian,
-                 Locale.Language.Indonesian, Locale.Language.Italian, Locale.Language.Japanese, Locale.Language.Korean, Locale.Language.Latvian,
-                 Locale.Language.Norwegian, Locale.Language.Persian, Locale.Language.Polish, Locale.Language.Portuguese, Locale.Language.Romanian,
-                 Locale.Language.Russian, Locale.Language.Slovak, Locale.Language.Spanish, Locale.Language.Swahili, Locale.Language.Swedish,
-                 Locale.Language.Thai, Locale.Language.Turkish, Locale.Language.Ukrainian, Locale.Language.Vietnamese,
-                 Locale.Language.NoLanguage, Locale.Language.Unknown]
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def matchFilename(self, filename):
@@ -143,6 +138,25 @@ class GEVI(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def NormaliseComparisonString(self, myString):
         ''' Normalise string for, strip uneeded characters for comparison of web site values to file name regex group values '''
+        # Check if string has roman numerals as in a series; note the letter I will be converted
+        myString = '{0} '.format(myString)  # append space at end of string to match last characters 
+        pattern = '\s(?=[MDCLXVI])M*(C[MD]|D?C{0,3})(X[CL]|L?X{0,3})(I[XV]|V?I{0,3})\s'
+        matches = re.findall(pattern, myString, re.IGNORECASE)  # match against string
+        if matches:
+            RomanValues = {'I':1, 'V':5, 'X':10, 'L':50, 'C':100, 'D':500, 'M':1000}
+            for count, match in enumerate(matches):
+                myRoman = ''.join(match).upper()
+                self.log('SELF:: Found Roman Numeral: {0}.. {1} len[{2}]'.format(count, myRoman, len(myRoman)))
+                myArabic = RomanValues[myRoman[-1]]
+                for i in range(len(myRoman) - 1, 0, -1):
+                    if RomanValues[myRoman[i]] > RomanValues[myRoman[i - 1]]:
+                        myArabic = myArabic - RomanValues[myRoman[i - 1]]
+                    else:
+                        myArabic = myArabic + RomanValues[myRoman[i - 1]]
+                romanString = ' {0}'.format(myRoman)
+                arabicString = ' {0}'.format(myArabic)
+                myString = myString.replace(romanString, arabicString)
+
         # convert to lower case and trim
         myString = myString.strip().lower()
 
@@ -164,11 +178,11 @@ class GEVI(Agent.Movies):
         ''' Prepare Video title for search query '''
         self.log('SELF:: Original Search Query [{0}]'.format(myString))
 
-        # convert to lower case and trim and strip diacritics
+        # convert to lower case and trim
         myString = myString.lower().strip()
         myBackupString = myString
 
-        nullChars = ["'", ',' '&', '!', '.', '#'] # to be replaced with null
+        nullChars = ["'", ',', '!', '.', '#'] # to be replaced with null
         pattern = u'[{0}]'.format(''.join(nullChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
@@ -201,7 +215,7 @@ class GEVI(Agent.Movies):
         else:
             self.log('SELF:: Search Query:: First word is not numeric')
 
-        pattern = r'[0-9]'
+        pattern = r'[0-9&]'
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             numPos = matched.start()
@@ -288,7 +302,7 @@ class GEVI(Agent.Movies):
     def getIAFDActorImage(self, myString, FilmYear):
         ''' check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not '''
 
-        actorname = myString
+        actorname = myString.strip()
         myString = String.StripDiacritics(myString).lower()
 
         # build list containing three possible cast links 1. Full Search in case of AKAs 2. as Performer 3. as Director
@@ -304,8 +318,8 @@ class GEVI(Agent.Movies):
         url = 'http://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
         urlList.append(url)
 
+        photourl = ''
         for count, url in enumerate(urlList, start=1):
-            photourl = ''
             try:
                 self.log('SELF:: %s. IAFD Actor search string [ %s ]', count, url)
                 html = HTML.ElementFromURL(url)
@@ -475,7 +489,9 @@ class GEVI(Agent.Movies):
 
                     # get the release dates - if not numeric replace with file year
                     htmlReleaseDate = html.xpath('//td[.="released" or .="produced"]/following-sibling::td[1]/text()[normalize-space()]')
-                    htmlReleaseDate = [x if unicode(x, 'utf-8').isnumeric() else x.split('-')[0] if '-' in x else x.split(',')[0] if ',' in x else FilmYear for x in htmlReleaseDate]
+                    #htmlReleaseDate = [x if unicode(x, 'utf-8').isnumeric() else x.split('-')[0] if '-' in x else x.split(',')[0] if ',' in x else FilmYear for x in htmlReleaseDate]
+                    htmlReleaseDate = [x if unicode(x, 'utf-8').isnumeric() else x.split('-')[0] if '-' in x else x.split(',')[0] if ',' in x else '' for x in htmlReleaseDate]
+                    htmlReleaseDate = [x for x in htmlReleaseDate if x]
                     htmlReleaseDate = list(set(htmlReleaseDate))
                     self.log('SEARCH:: %s Site URL Release Dates: %s', len(htmlReleaseDate), htmlReleaseDate)
                     for ReleaseDate in htmlReleaseDate:
@@ -489,11 +505,10 @@ class GEVI(Agent.Movies):
                             continue
                         if foundReleaseDate:
                             break
-
+                    # no date found - default to Film Year
                     if not foundReleaseDate:
-                        self.log('SEARCH:: Error No Matching Site Release Date')
-                        continue
-
+                        self.log('SEARCH:: Error No Matching Site Release Date: Default to Filename Date')
+                        siteReleaseDate = compareReleaseDate
 
                 except Exception as e:
                     self.log('SEARCH:: Error getting Release Date %s', e)

@@ -17,6 +17,10 @@
     27 Jun 2020   2019.08.12.05    Improvement to Summary Translation: Translate into Plex Library Language
                                    stripping of intenet domain suffixes from studio names when matching
                                    handling of unicode characters in film titles and comparision string normalisation
+    30 Aug 2020   2019.08.12.06    Handling of Roman Numerals in Titles to Match Arabic Numerals
+                                   dodgy xpath around site studio name corrected
+    12 Sep 2020   2019.08.12.07    Improved search facility - titles with non alphabetic characters like "!" 
+                                   were failing to search... took code from GEVI
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -24,7 +28,7 @@ import datetime, linecache, platform, os, re, string, subprocess, sys, unicodeda
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.05'
+VERSION_NO = '2019.08.12.07'
 PLUGIN_LOG_TITLE = 'GayHotMovies'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -125,6 +129,25 @@ class GayHotMovies(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def NormaliseComparisonString(self, myString):
         ''' Normalise string for, strip uneeded characters for comparison of web site values to file name regex group values '''
+        # Check if string has roman numerals as in a series; note the letter I will be converted
+        myString = '{0} '.format(myString)  # append space at end of string to match last characters 
+        pattern = '\s(?=[MDCLXVI])M*(C[MD]|D?C{0,3})(X[CL]|L?X{0,3})(I[XV]|V?I{0,3})\s'
+        matches = re.findall(pattern, myString, re.IGNORECASE)  # match against string
+        if matches:
+            RomanValues = {'I':1, 'V':5, 'X':10, 'L':50, 'C':100, 'D':500, 'M':1000}
+            for count, match in enumerate(matches):
+                myRoman = ''.join(match)
+                self.log('SELF:: Found Roman Numeral: {0}. {1}'.format(count, myRoman))
+                myArabic = RomanValues[myRoman[len(myRoman) - 1]]
+                for i in range(len(myRoman) - 1, 0, -1):
+                    if RomanValues[myRoman[i]] > RomanValues[myRoman[i - 1]]:
+                        myArabic = myArabic - RomanValues[myRoman[i - 1]]
+                    else:
+                        myArabic = myArabic + RomanValues[myRoman[i - 1]]
+                romanString = ' {0}'.format(myRoman)
+                arabicString = ' {0}'.format(myArabic)
+                myString = myString.replace(romanString, arabicString)
+
         # convert to lower case and trim
         myString = myString.strip().lower()
 
@@ -147,7 +170,27 @@ class GayHotMovies(Agent.Movies):
         self.log('SELF:: Original Search Query [{0}]'.format(myString))
 
         myString = myString.strip().lower()
-        myString = myString.replace(' -', ':').replace(ur'\u2013', '-').replace(ur'\u2014', '-').replace('& ', '')
+        nullChars = ["'", ',' '&', '!', '.', '#'] # to be replaced with null
+        pattern = u'[{0}]'.format(''.join(nullChars))
+        matched = re.search(pattern, myString)  # match against whole string
+        if matched:
+            self.log('SELF:: Search Query:: Replacing characters in string. Found one of these {0}'.format(pattern))
+            myString = re.sub(pattern, '', myString)
+            myString = ' '.join(myString.split())   # remove continous white space
+            self.log('SELF:: Amended Search Query [{0}]'.format(myString))
+        else:
+            self.log('SELF:: Search Query:: String has none of these {0}'.format(pattern))
+
+        spaceChars = ['-', ur'\u2013', ur'\u2014', '(', ')']  # to be replaced with space
+        pattern = u'[{0}]'.format(''.join(spaceChars))
+        matched = re.search(pattern, myString)  # match against whole string
+        if matched:
+            self.log('SELF:: Search Query:: Replacing characters with Space. Found one of these {0}'.format(pattern))
+            myString = re.sub(pattern, ' ', myString)
+            myString = ' '.join(myString.split())   # remove continous white space
+            self.log('SELF:: Amended Search Query [{0}]'.format(myString))
+        else:
+            self.log('SELF:: Search Query:: String has none of these {0}'.format(pattern))
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString)
@@ -343,7 +386,7 @@ class GayHotMovies(Agent.Movies):
 
                 # Site Studio Name
                 try:
-                    siteStudio = title.xpath('./div/div/span[@class="studio_left"]/a/text()')[0].strip()
+                    siteStudio = title.xpath('./div/div/span/strong[text()="Studio:"]/following::a[contains(@title,"Studio name:")]/text()')[0].strip()
                     self.matchStudioName(compareStudio, siteStudio)
                 except Exception as e:
                     self.log('SEARCH:: Error getting Site Studio: %s', e)
