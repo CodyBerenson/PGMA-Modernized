@@ -1,6 +1,6 @@
 # GayAdult.bundle
 
-2020-05-10
+2020-08-14
 https://github.com/CodyBerenson/PGMA-Modernized
 
 GAY ADULT:
@@ -12,13 +12,14 @@ The metadata that contributes to this agent comes from the following websites:
     4. Gay Entertainment Video Index
     5. Gay Hot Movies
     6. GayMovie
-    7. GayWorld
-    8. Homo Active
-    9. Internet Adult Film Database
-   10. PornTeam
+    7. GayRado
+    8. GayWorld
+    9. Homo Active
+   10. Internet Adult Film Database
    11. RadVideo
 
 The metadata that contributes to this agent comes from the following blogs:
-    1. Fagalicious
-	2. QueerClick
-    3. WayBig
+    1. BestExclusivePorn
+    2. Fagalicious
+	3. QueerClick
+    4. WayBig

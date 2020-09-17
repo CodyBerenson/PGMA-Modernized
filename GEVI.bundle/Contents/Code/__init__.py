@@ -32,14 +32,14 @@
     30 Aug 2020   2019.12.25.17    Handling of Roman Numerals in Titles to Match Arabic Numerals
     12 Sep 2020   2019.12.25.18    Error in creating search string whilst handling Ampersands, 
                                    these were replaced with a null string instead of splitting at the position as in numerals
-
+    17 Sep 2020   2019.12.25.19    Error in determining default date
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.18'
+VERSION_NO = '2019.12.25.19'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 REGEX = Prefs['regex']
@@ -417,7 +417,7 @@ class GEVI(Agent.Movies):
                 searchQuery = "{0}/{1}".format(BASE_URL, searchQuery)   # href does not have base_url in it
                 self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
                 pageNumber = int(searchQuery.split('&where')[0].split('page=')[1]) - 1
-                morePages = True if pageNumber <= 10 else False
+                morePages = True if pageNumber <= 15 else False
             except:
                 searchQuery = ''
                 self.log('SEARCH:: No More Pages Found')
@@ -484,12 +484,10 @@ class GEVI(Agent.Movies):
 
                 # Release Date
                 try:
-                    foundReleaseDate = False
                     siteReleaseDate = ''
 
-                    # get the release dates - if not numeric replace with file year
+                    # get the release dates
                     htmlReleaseDate = html.xpath('//td[.="released" or .="produced"]/following-sibling::td[1]/text()[normalize-space()]')
-                    #htmlReleaseDate = [x if unicode(x, 'utf-8').isnumeric() else x.split('-')[0] if '-' in x else x.split(',')[0] if ',' in x else FilmYear for x in htmlReleaseDate]
                     htmlReleaseDate = [x if unicode(x, 'utf-8').isnumeric() else x.split('-')[0] if '-' in x else x.split(',')[0] if ',' in x else '' for x in htmlReleaseDate]
                     htmlReleaseDate = [x for x in htmlReleaseDate if x]
                     htmlReleaseDate = list(set(htmlReleaseDate))
@@ -498,21 +496,16 @@ class GEVI(Agent.Movies):
                         try:
                             self.log('SEARCH:: Release Date: %s Compare against: %s', compareReleaseDate, ReleaseDate)
                             ReleaseDate = self.matchReleaseDate(compareReleaseDate, ReleaseDate)
-                            foundReleaseDate = True
                             siteReleaseDate = ReleaseDate
+                            break
                         except Exception as e:
                             self.log('SEARCH:: Error: %s', e)
                             continue
-                        if foundReleaseDate:
-                            break
-                    # no date found - default to Film Year
-                    if not foundReleaseDate:
-                        self.log('SEARCH:: Error No Matching Site Release Date: Default to Filename Date')
-                        siteReleaseDate = compareReleaseDate
-
-                except Exception as e:
-                    self.log('SEARCH:: Error getting Release Date %s', e)
-                    continue
+                    if not siteReleaseDate:
+                        continue
+                except:
+                    self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
+                    siteReleaseDate = compareReleaseDate
 
                 # we should have a match on studio, title and year now
                 results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name=FilmTitle, score=100, lang=lang))
