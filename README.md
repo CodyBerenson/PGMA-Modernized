@@ -1,9 +1,9 @@
 # Announcements
 9/17/2020:  Our two new agents, GayRado and BestExclusivePorn have been fully tested and are now included in our repository of Agents!  A couple specifics:
 
-BestExclusivePorn:  BestExclusivePorn.com contains both blogged scenes and full films.  Although the site doesn't include metadata for the names of the performers, the agent will look for performers in the title and use as metadata, when there's a match.  See instructions below for further details.
+**BestExclusivePorn:**  BestExclusivePorn.com contains both blogged scenes and full films.  Although the site doesn't include metadata for the names of the performers, the agent will look for performers in the title and use as metadata, when there's a match.  See instructions below for further details.
 
-GayRado:  GayRado.com is a site with scrapable metadata for full films.  A note of caution:  Similar to some other sites (RADVideo, HomoActive), the site has a terrible search.  Many titles are browsable but not searchable.  Therefore the agent will not be able to scrape metadata from a title that cannot be searched.
+**GayRado:**  GayRado.com is a site with scrapable metadata for full films.  A note of caution:  Similar to some other sites (RADVideo, HomoActive), the site has a terrible search.  Many titles are browsable but not searchable.  Therefore the agent will not be able to scrape metadata from a title that cannot be searched.
 
 8/15/2020:  Jason has coded two new Agents:  GayRado and BestExclusivePorn.  The latter includes blogged scenes...perhaps an additional stopgap until Fagalicious can be remediated.  Both of the Agents are being tested and will be released soon, to add to your arsenal of Gay Porn Agents.  :)
 
@@ -129,9 +129,9 @@ Another type of local media assets are the tags that may be embedded within a fi
 
 Unlike other blog sites, this site does not include metadata for performers names.  A workaround, specifically for scenes, has been built into the agent.  The agent will look for sets of two words both beginning with Upper Case, assume they're an actor's name, and look for a match in IAFD.  
 
-For example, (NextDoorRaw) - Don’t Stop Dacotah Red fucks Zak Bishop bareback (2020).mp4....the agent will see if it can find matches for "Don't Stop", "Dacotah Red" and "Zak Bishop" as it parses thru congruent sets of two capitalized words.  Not finding a match for "Don't Stop", the agent will properly build metadata and actor information and headshot for the remaining two matches (Dacotah Red and Zak Bishop).  
+For example, (NextDoorRaw) - **D**on’t **S**top **D**acotah **R**ed fucks **Z**ak **B**ishop bareback (2020).mp4....the agent will see if it can find matches for "Don't Stop", "Dacotah Red" and "Zak Bishop" as it parses thru congruent sets of two capitalized words.  Not finding a match for "Don't Stop", the agent will properly build metadata and actor information and headshot for the remaining two matches (Dacotah Red and Zak Bishop).  
 
-However, if, for example the title was (NextDoorRaw) - Please Don’t Stop Dacotah Red fucks Zak Bishop bareback (2020).mp4, you would manually have to change the case on "Stop"...otherwise, the agent will look for the following actors:  Please Don't, Stop Dacotah, and Zak Bishop.  By changing the case of "Stop" to "stop", the agent will look for the following actors:  Please Don't, Dacotah Red, and Zak Bishop, and return matched metadata/headshots for Dacotah and Zak.  
+However, if, for example the title was (NextDoorRaw) - **P**lease **D**on’t **S**top **D**acotah **R**ed fucks **Z**ak **B**ishop bareback (2020).mp4, in order to properly return preformaer metadata/headshots you would manually have to change the case on "**S**top"...otherwise, the agent will look for the following actors:  Please Don't, Stop Dacotah, and Zak Bishop (therefore only finding one actual performer).  By changing the case of "**S**top" to "**s**top", the agent will look for the following actors:  Please Don't, Dacotah Red, and Zak Bishop, and return matched metadata/headshots for Dacotah and Zak.  
 
 ### Language Translation
 
