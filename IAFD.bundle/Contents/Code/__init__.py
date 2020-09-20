@@ -21,6 +21,7 @@
                                    handling of unicode characters in film titles and comparision string normalisation
     12 Sep 2020   2020.04.22.06    Titles with hyphens failing as these were converted to ":"
                                    corrected by splitting and using string upto that position as search...
+    20 Sep 2020   2020.04.22.07    Titles with '[', '(' were corrected by splitting and using string upto that position as search...
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -28,7 +29,7 @@ import datetime, linecache, platform, os, re, string, subprocess, sys, unicodeda
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.04.22.06'
+VERSION_NO = '2020.04.22.07'
 PLUGIN_LOG_TITLE = 'IAFD'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -154,7 +155,7 @@ class IAFD(Agent.Movies):
         myString = myString.strip().lower()
 
         # split and take up to first occurence of character
-        splitChars = ['-', ur'\u2013', ur'\u2014']
+        splitChars = ['-', '[', '(', ur'\u2013', ur'\u2014']
         pattern = u'[{0}]'.format(''.join(splitChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
