@@ -19,13 +19,15 @@
                                    handling of unicode characters in film titles and comparision string normalisation
     14 Aug 2020   2019.08.12.21    Change to regex matching code - site titles which had studio name in them were failing to match to 
                                    file titles as regex was different between the two
+    22 Sep 2020   2019.08.12.22    correction to summary xpath to cater for different layouts
+
 ---------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.12.22.21'
+VERSION_NO = '2019.12.22.22'
 PLUGIN_LOG_TITLE = 'WayBig'
 
 # PLEX API
@@ -486,7 +488,7 @@ class WayBig(Agent.Movies):
         # 2a.   Summary
         try:
             summary = ''
-            htmlsummary = html.xpath('//div[@class="entry-content"]/p[not(descendant::script) and not(descendant::a[@target and @rel])]')
+            htmlsummary = html.xpath('//div[@class="entry-content"]/p[not(descendant::script) and not(contains(., "Watch as"))]')
             for item in htmlsummary:
                 summary = '{0}{1}\n'.format(summary, item.text_content())
             self.log('UPDATE:: Summary Found: %s', summary)
@@ -498,14 +500,14 @@ class WayBig(Agent.Movies):
         try:
             castdict = {}
             htmlcast = html.xpath('//a[contains(@href,"https://www.waybig.com/blog/tag/")]/text()')
+            htmlcast = [x.split('(')[0] for x in htmlcast]
+            htmlcast = [x.replace(u'\u2019s', '') for x in htmlcast]
+            htmlcast = [x.strip() for x in htmlcast]
+            htmlcast = [x for x in htmlcast if x]
             htmlcast = list(set(htmlcast))
             self.log('UPDATE:: Cast List %s', htmlcast)
-            for castname in htmlcast:
-                cast = castname.replace(u'\u2019s', '').strip()
-                if '(' in cast:
-                    cast = cast.split('(')[0]
-                if cast:
-                    castdict[cast] = self.getIAFDActorImage(cast, FilmYear)
+            for cast in htmlcast:
+                castdict[cast] = self.getIAFDActorImage(cast, FilmYear)
 
             # sort the dictionary and add kv to metadata
             metadata.roles.clear()

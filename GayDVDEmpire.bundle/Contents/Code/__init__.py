@@ -13,16 +13,20 @@
     01 Jun 2020   2019.08.12.05    Implemented translation of summary
                                    improved getIAFDActor search
     27 Jun 2020   2019.08.12.06    Improvement to Summary Translation: Translate into Plex Library Language
-                                   stripping of intenet domain suffixes from studio names when matching
+                                   stripping of internet domain suffixes from studio names when matching
                                    handling of unicode characters in film titles and comparision string normalisation
+    30 Aug 2020   2019.08.12.07    Handling of Roman Numerals in Titles to Match Arabic Numerals
+                                   Errors in getting production year and release dates corrected
+    22 Sep 2020   2019.08.12.08    Correction to regex string to handle titles in Sort Order trailing determinates
 
 ---------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
+from platform import architecture
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.06'
+VERSION_NO = '2019.08.12.08'
 PLUGIN_LOG_TITLE = 'GayDVDEmpire'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -36,12 +40,10 @@ DETECT = Prefs['detect']
 
 # URLS
 BASE_URL = 'http://www.gaydvdempire.com'
-BASE_SEARCH_URL = BASE_URL + '/AllSearch/Search?view=list&q={0}'
-SEARCH_URL = BASE_URL + '/AllSearch/Search'
-
+BASE_SEARCH_URL = BASE_URL + '/AllSearch/Search?view=list&?exactMatch={0}&q={0}'
 # Date Formats used by website
 DATE_YMD = '%Y%m%d'
-DATEFORMAT = '%b %d %Y'
+DATEFORMAT = '%m/%d/%Y'
 
 # Website Language
 SITE_LANGUAGE = 'en'
@@ -124,16 +126,27 @@ class GayDVDEmpire(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def NormaliseComparisonString(self, myString):
         ''' Normalise string for Comparison, strip all non alphanumeric characters, Vol., Volume, Part, and 1 in series '''
+        # Check if string has roman numerals as in a series; note the letter I will be converted
+        myString = '{0} '.format(myString)  # append space at end of string to match last characters 
+        pattern = '\s(?=[MDCLXVI])M*(C[MD]|D?C{0,3})(X[CL]|L?X{0,3})(I[XV]|V?I{0,3})\s'
+        matches = re.findall(pattern, myString, re.IGNORECASE)  # match against string
+        if matches:
+            RomanValues = {'I':1, 'V':5, 'X':10, 'L':50, 'C':100, 'D':500, 'M':1000}
+            for count, match in enumerate(matches):
+                myRoman = ''.join(match)
+                self.log('SELF:: Found Roman Numeral: {0}. {1}'.format(count, myRoman))
+                myArabic = RomanValues[myRoman[len(myRoman) - 1]]
+                for i in range(len(myRoman) - 1, 0, -1):
+                    if RomanValues[myRoman[i]] > RomanValues[myRoman[i - 1]]:
+                        myArabic = myArabic - RomanValues[myRoman[i - 1]]
+                    else:
+                        myArabic = myArabic + RomanValues[myRoman[i - 1]]
+                romanString = ' {0}'.format(myRoman)
+                arabicString = ' {0}'.format(myArabic)
+                myString = myString.replace(romanString, arabicString)
+
         # convert to lower case and trim
         myString = myString.strip().lower()
-
-        # convert sort order version to normal version i.e "Best of Zak Spears, The -> the Best of Zak Spears"
-        if myString.count(', the'):
-            myString = 'the ' + myString.replace(', the', '', 1)
-        if myString.count(', an'):
-            myString = 'an ' + myString.replace(', an', '', 1)
-        if myString.count(', a'):
-            myString = 'a ' + myString.replace(', a', '', 1)
 
         # normalise unicode characters
         myString = unicode(myString)
@@ -316,8 +329,10 @@ class GayDVDEmpire(Agent.Movies):
 
             try:
                 searchQuery = html.xpath('.//a[@title="Next"]/@href')[0]
-                searchQuery = (SEARCH_URL if SEARCH_URL not in searchQuery else '') + searchQuery
-                pageNumber = int(searchQuery.split('&')[0].split('=')[1]) - 1
+                pageNumber = int(searchQuery.split('page=')[1]) # next page number
+                searchQuery = BASE_SEARCH_URL.format(searchTitle) + '&page={0}'.format(pageNumber)
+                pageNumber = pageNumber - 1
+                self.log('SEARCH:: Search Query: %s', searchQuery)
                 morePages = True if pageNumber <= 10 else False
             except:
                 pageNumber = 1
@@ -325,11 +340,20 @@ class GayDVDEmpire(Agent.Movies):
 
             titleList = html.xpath('.//div[contains(@class,"row list-view-item")]')
             self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
-
             for title in titleList:
                 # siteTitle = The text in the 'title' - Gay DVDEmpire - displays its titles in SORT order
                 try:
                     siteTitle = title.xpath('./div/h3/a[@category and @label="Title"]/@title')[0]
+                    # convert sort order version to normal version i.e "Best of Zak Spears, The -> the Best of Zak Spears"
+                    pattern = u', (The|An|A)$'
+                    matched = re.search(pattern, siteTitle, re.IGNORECASE)  # match against string
+                    if matched:
+                        self.log('SEARCH:: Found Determinate: {0}'.format(matched.group()))
+                        determinate = matched.group().replace(', ', '')
+                        siteTitle = re.sub(pattern, '', siteTitle)
+                        siteTitle = '{0} {1}'.format(determinate, siteTitle)
+                        self.log('SEARCH:: Re-ordered Site Title: {0}'.format(siteTitle))
+
                     siteTitle = self.NormaliseComparisonString(siteTitle)
                     self.log('SEARCH:: Title Match: [{0}] Compare Title - Site Title "{1} - {2}"'.format((compareTitle == siteTitle), compareTitle, siteTitle))
                     if siteTitle != compareTitle:
@@ -345,17 +369,25 @@ class GayDVDEmpire(Agent.Movies):
                     self.log('SEARCH:: Error getting Site Studio: %s', e)
                     continue
 
-                # Get the production year if exists - if it does not match to the compareReleaseDate year AKA FilmYear - next!
+                # Site Release Date
+                # Get the production year if exists - if it does not match to the compareReleaseDate try the release date
                 try:
-                    siteProductionYear = title.xpath('./h3/small[contains(.,"(")]')[0]
+                    siteProductionYear = title.xpath('./div/h3/small[contains(.,"(")]/text()')[0]
                     siteProductionYear = siteProductionYear.replace('(', '').replace(')', '')
-                    if siteProductionYear != FilmYear:
-                        self.log('SEARCH:: Production Year: {0} != does not match File Year: {1}'.format(siteProductionYear, FilmYear))
+                    self.log('SEARCH:: Site Production Year: %s', siteProductionYear)
+                    siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteProductionYear)
+                # use the Site Release Date, if this also does not match to comparereleasedate - next
+                except Exception as e:
+                    self.log('SEARCH:: Error getting Production Year try Release Date: %s', e)
+                    try:
+                        siteReleaseDate = title.xpath('./div/ul/li/span/small[text()="released"]/following-sibling::text()')[0].strip()
+                        self.log('SEARCH:: Site Release Date: %s', siteReleaseDate)
+                        siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteReleaseDate)
+                    except Exception as e:
+                        self.log('SEARCH:: Error getting Site Release Date: %s', e)
                         continue
-                # we will use the site release date further on
-                except:
-                    pass
 
+                self.log('SEARCH:: My Site Release Date: %s', siteReleaseDate)
                 # Site Title URL
                 try:
                     siteURL = title.xpath('./div/h3/a[@label="Title"]/@href')[0]
@@ -364,20 +396,6 @@ class GayDVDEmpire(Agent.Movies):
                 except:
                     self.log('SEARCH:: Error getting Site Title Url')
                     continue
-
-                # Site Release Date
-                try:
-                    siteReleaseDate = html.xpath('//li[@class="section-detail-list-item-release-date"]/text()')[0].strip().lower()
-                    siteReleaseDate = siteReleaseDate.replace('sept ', 'sep ').replace('july ', 'jul ')
-                    self.log('SEARCH:: Site URL Release Date: %s', siteReleaseDate)
-                    try:
-                        siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteReleaseDate)
-                    except Exception as e:
-                        self.log('SEARCH:: Error getting Site URL Release Date: %s', e)
-                        continue
-                except:
-                    self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
-                    siteReleaseDate = compareReleaseDate
 
                 # we should have a match on studio, title and year now
                 results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATEFORMAT), name=FilmTitle, score=100, lang=lang))
@@ -456,7 +474,7 @@ class GayDVDEmpire(Agent.Movies):
         # 2c.   Directors
         try:
             directors = []
-            htmldirector = html.xpath('//a[contains(@label, "Director - details")]/text()')
+            htmldirector = html.xpath('//a[contains(@label, "Director - details")]/text())[normalize-space()]')
             self.log('UPDATE:: Director List %s', htmldirector)
             for director in htmldirector:
                 director = director.strip()
@@ -475,7 +493,7 @@ class GayDVDEmpire(Agent.Movies):
         # 2d.   Cast
         try:
             castdict = {}
-            htmlcast = html.xpath('//a[contains(@class,"PerformerName")]/text()')
+            htmlcast = html.xpath('//a[contains(@class,"PerformerName")]/text()[normalize-space(.)]')
             self.log('UPDATE:: Cast List %s', htmlcast)
             for castname in htmlcast:
                 cast = castname.strip()
@@ -495,7 +513,7 @@ class GayDVDEmpire(Agent.Movies):
         try:
             ignoreGenres = ['Sale', '4K Ultra HD']
             genres = []
-            htmlgenres = html.xpath('//ul[@class="list-unstyled m-b-2"]//a[@label="Category"]/text()')
+            htmlgenres = html.xpath('//ul[@class="list-unstyled m-b-2"]//a[@label="Category"]/text())[normalize-space()]')
             self.log('UPDATE:: %s Genres Found: %s', len(htmlgenres), htmlgenres)
             for genre in htmlgenres:
                 genre = genre.strip()
@@ -515,7 +533,7 @@ class GayDVDEmpire(Agent.Movies):
         # 2f.   Collections
         try:
             metadata.collections.clear()
-            htmlcollections = html.xpath('//a[contains(@label, "Series")]/text()')
+            htmlcollections = html.xpath('//a[contains(@label, "Series")]/text())[normalize-space()]')
             self.log('UPDATE:: %s Collections Found: "%s"', len(htmlcollections), htmlcollections)
             for collection in htmlcollections:
                 collection = collection.replace('"', '').replace('Series', '').strip()
