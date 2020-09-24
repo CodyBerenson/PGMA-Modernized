@@ -43,9 +43,7 @@
 7. In Settings > Server > Agents order the agents by your personal preference (e.g., if most of your movies are found in AEBN, consider putting AEBN first); check Local Media Assets (Movies) if you include your own poster artwork (see below).
 8. Create a new library or change the agent of an existing library to the "Gay Adult" or "Gay Adult Scenes" or "Gay Adult Films" agent, then refresh all metadata.
 
-**View the README inside the studio folders to correctly label your files**
-
-### Please Read
+### Please Read to correctly label your files ###
 **Usage for the Agents:**
 
 **Feature Films:**
