@@ -50,6 +50,7 @@
 
 (Studio) - Title (Year).ext
 
+Find your film on one of the Index sites (e.g., AEBN.com or gayeroticvideoindex.com).  Name your file **using the specific title from the Index site**
 e.g.  
 
 (Titan Media) - Copperhead Canyon (2008).mp4
@@ -58,12 +59,15 @@ e.g.
 
 (Men) - Camp Chaos (2019).mp4
 
-The matching agent will return the movie poster annd relevant metadata,actor thumbnails (matched from IAFD.com) 
+The matching agent will return the movie poster and relevant metadata,actor thumbnails (matched from IAFD.com) 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/film.jpg)
 
 **Scenes from blogs:**
 
 (Studio) - Title (Year).ext
+
+Find your scene on one of the Index sites (e.g., WayBig.com, QueerClick.com).  Name your file **using the specific title from the Index site**
+
 e.g., 
 
 (Men Series) - Bellamy Bradley, Alex Fortin, William Seed and Morgan Blake in 'Battle Buddies, Part 4' (2017).mp4
