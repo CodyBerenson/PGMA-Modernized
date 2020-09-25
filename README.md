@@ -185,28 +185,28 @@ A:  Start small.  Before renaming every file in your system, start with one and 
 
 1.  Start small.
 
-a.  Create a new folder with the file you want to match against.  Find a match for this file on an index site, such as AEBN.com, gayeroticvideoindex.com, etc.  Name this file in the proper format (Studio) - Title (YYYY) ensuring this matches the studio, title, and date from the website.  
+   a.  Create a new folder with the file you want to match against.  Find a match for this file on an index site, such as AEBN.com, gayeroticvideoindex.com, etc.  Name this file in the proper format (Studio) - Title (YYYY) ensuring this matches the studio, title, and date from the website.  
 
-b. Go into your PMS settings and choose only the film or scene agent whose website you just found the match to (i.e., AEBN, GEVI or WayBig.)  Unselect all others.  
+   b. Go into your PMS settings and choose only the film or scene agent whose website you just found the match to (i.e., AEBN, GEVI or WayBig.)  Unselect all others.  
 
-c. Stop your PMS.
+   c. Stop your PMS.
 
-d. Go to  PMS Plugin Logs folder and delete all the deletable log files.  Not sure where they're located, click here:  https://support.plex.tv/articles/201106148-channel-log-files/
+   d. Go to  PMS Plugin Logs folder and delete all the deletable log files.  Not sure where they're located, click here:  https://support.plex.tv/articles/201106148-channel-log-files/
 (e.g., in windows they are typically found in C:\Users\user\AppData\Local\Plex Media Server\Logs\PMS Plugin Logs)
 
-e.  Restart your PMS.
+   e.  Restart your PMS.
 
 2.  Create a new Plex library pointing to the folder you just created in the "add folders" step and choose the appropriate Agent i.e GayAdultFilms or GayAdultScenes that you had configured in 1b in the "advanced" step.  When you complete the wizard and click "Add Library" Plex will scan the new library and attempt to match the file using the agent that you selected. Hopefully your match will be successful.  
 
 3. If the match was unsucessful, please open an issue and include:
 
-a.  The specific operating system/device you have PMS installed on.
+   a.  The specific operating system/device you have PMS installed on.
 
-b.  The logs--attach all the newly created logs from both the \Logs and the \Logs\PMS Plugin Logs directories (see 1d). 
+   b.  The logs--attach all the newly created logs from both the \Logs and the \Logs\PMS Plugin Logs directories (see 1d). 
 
-c.  The specific url of the film or scene title on the Agent's index site.d.  A brief discussion of anything you deem pertinent, including any questions you may have
+   c.  The specific url of the film or scene title on the Agent's index site.d.  A brief discussion of anything you deem pertinent, including any questions you may have
 
-e.  Please do not include adult-content images.
+   e.  Please do not include adult-content images.
 
 Q:  When choosing the agent in the library setup window, when it asks for scanner, which scanner option should I choose? Plex Movie Scanner, Plex Video Files, or Plex Video Files Scanner. I'm not sure which one works/works best with this.
 
