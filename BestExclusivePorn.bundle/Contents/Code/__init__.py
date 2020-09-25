@@ -11,6 +11,7 @@
     07 Sep 2020   2020.08.09.02    Improved matching on film titles with apostrophes
                                    added cast scraping - actors restricted to 2 names
     15 Sep 2020   2020.08.09.03    removed enquotes around search string
+    25 Sep 2020   2020.08.09.04    search string can only have a max of 59 characters
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
@@ -18,7 +19,7 @@ import site
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.08.09.03'
+VERSION_NO = '2020.08.09.04'
 PLUGIN_LOG_TITLE = 'BestExclusivePorn'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -154,6 +155,10 @@ class BestExclusivePorn(Agent.Movies):
             self.log('SELF:: Amended Search Query [{0}]'.format(myString))
         else:
             self.log('SELF:: Search Query:: String has none of these {0}'.format(pattern))
+
+        # Best Exclusive uses a maximum of 60 characters when searching
+        myString = myString[:59].strip()
+        myString = myString if myString[-1] != '%' else myString[:58]
 
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string 
         myString = String.StripDiacritics(myString)
