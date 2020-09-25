@@ -30,7 +30,7 @@
 05/11/2020 and 05/18/2020:  GayWorld and GayMovie agents were added to the already robust set of Films agents.  While both have limitations in the metadata available, both offer a decent portfolio of movies to match from, and both have superior poster artwork.  
 
 # Plex Metadata Agents for Gay Adult Video
-**Please read all this document before usage**
+**Please read all this document before usage.  If you need help, please read below**
 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/preview.gif)
 ### How to install
@@ -177,7 +177,20 @@ Re: .com, .org, .net, .co.xx internet names like men.com, including the .xxx is 
 4.  If you have any challenges or struggles, open a new issue.  Please describe your challenge as thoroughly as possible, including which agent you were targeting, the filename and include the log, if you can. **Note:** please, no screenshots that contain graphic content. 
 
 
-### FAQ:
+### FAQ, Troubleshooting, and What to Do if you Require Assistance:
+
+Q:  I'm new.  I've installed PMS.  I've downloaded all of the Agents and put into the Plex Plugins Directory.  I can't get it to work...I just can't get Plex to Match.  Help!
+
+A:  Start small.  Before renaming every file in your system, start with one and work with it until you can get Plex to match it.  Trust us, you'll learn valuable insights from what didn't work that could cause a massive amount of rework if you've already renamed all your files.  If you still can't get it to work, we are happy to help!  Please open an Issue and be specific:  
+
+1. Tell us the specific operating system/device you have PMS installed on.
+2. Please stop your PMS and then restart it. Create a new library with only 1 file in it.
+3. Run "Scan Library Files"
+4. Attach the logs that were just created after you restarted your PMS.  Not sure where to find them?  Click here:  https://support.plex.tv/articles/200250417-plex-media-server-log-files/
+Also, be sure to include the logs created after you restarted your PMS in the PMS Plugin Logs subfolder.
+5.  Tell us the specific Agent(s) you were attempting to match against.
+6.  Tell us the specific url of the film or scene title on the Agent's index site.
+7.  Please do not include adult-content images.
 
 Q:  When choosing the agent in the library setup window, when it asks for scanner, which scanner option should I choose? Plex Movie Scanner, Plex Video Files, or Plex Video Files Scanner. I'm not sure which one works/works best with this.
 
