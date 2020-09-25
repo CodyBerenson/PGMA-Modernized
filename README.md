@@ -196,7 +196,7 @@ A:  Start small.  Before renaming every file in your system, start with one and 
 
    e.  Restart your PMS.
 
-2.  Create a new Plex library pointing to the folder you just created in the "add folders" step and choose the appropriate Agent i.e GayAdultFilms or GayAdultScenes that you had configured in 1b in the "advanced" step.  When you complete the wizard and click "Add Library" Plex will scan the new library and attempt to match the file using the agent that you selected. Hopefully your match will be successful.  
+2.  Create a new Plex library:  in the "add folders" step, point to the folder you just created; in the "advanced" step, choose the appropriate Agent i.e GayAdultFilms or GayAdultScenes that you had configured in 1b.  Click "Add Library" to complete the wizard.  Plex will create and scan the new library and attempt to match the file using the agent that you selected. Hopefully your match will be successful.  
 
 3. If the match was unsucessful, please open an issue and include:
 
@@ -204,7 +204,9 @@ A:  Start small.  Before renaming every file in your system, start with one and 
 
    b.  The logs--attach all the newly created logs from both the \Logs and the \Logs\PMS Plugin Logs directories (see 1d). 
 
-   c.  The specific url of the film or scene title on the Agent's index site.d.  A brief discussion of anything you deem pertinent, including any questions you may have
+   c.  The specific url of the film or scene title on the Agent's index site.
+   
+   d.  Any information you deem pertinent, error messages you may have received, and any questions you may have
 
    e.  Please do not include adult-content images.
 
