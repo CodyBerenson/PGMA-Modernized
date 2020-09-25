@@ -43,15 +43,14 @@
 7. In Settings > Server > Agents order the agents by your personal preference (e.g., if most of your movies are found in AEBN, consider putting AEBN first); check Local Media Assets (Movies) if you include your own poster artwork (see below).
 8. Create a new library or change the agent of an existing library to the "Gay Adult" or "Gay Adult Scenes" or "Gay Adult Films" agent, then refresh all metadata.
 
-**View the README inside the studio folders to correctly label your files**
-
-### Please Read
+### Please Read to correctly label your files ###
 **Usage for the Agents:**
 
 **Feature Films:**
 
 (Studio) - Title (Year).ext
 
+Find your film on one of the Index sites (e.g., AEBN.com or gayeroticvideoindex.com).  Name your file **using the specific title from the Index site**
 e.g.  
 
 (Titan Media) - Copperhead Canyon (2008).mp4
@@ -60,12 +59,15 @@ e.g.
 
 (Men) - Camp Chaos (2019).mp4
 
-The matching agent will return the movie poster annd relevant metadata,actor thumbnails (matched from IAFD.com) 
+The matching agent will return the movie poster and relevant metadata,actor thumbnails (matched from IAFD.com) 
 ![](https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/film.jpg)
 
 **Scenes from blogs:**
 
 (Studio) - Title (Year).ext
+
+Find your scene on one of the Index sites (e.g., WayBig.com, QueerClick.com).  Name your file **using the specific title from the Index site**
+
 e.g., 
 
 (Men Series) - Bellamy Bradley, Alex Fortin, William Seed and Morgan Blake in 'Battle Buddies, Part 4' (2017).mp4
