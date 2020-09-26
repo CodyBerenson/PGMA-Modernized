@@ -3,7 +3,7 @@
 
 **BestExclusivePorn:**  BestExclusivePorn.com contains both blogged scenes and full films.  Although the site doesn't include metadata for the names of the performers, the agent will look for performers in the title and use as metadata, when there's a match.  See instructions below for further details.
 
-**GayRado:**  GayRado.com is a site with scrapable metadata for full films.  A note of caution:  Similar to some other sites (RADVideo, HomoActive), the site has a terrible search.  Many titles are browsable but not searchable.  Therefore the agent will not be able to scrape metadata from a title that cannot be searched.
+**GayRado:**  GayRado.com is a site with scrapeable metadata for full films.  A note of caution:  Similar to some other sites (RADVideo, HomoActive), the site has a terrible search.  Many titles are browsable but not searchable.  Therefore the agent will not be able to scrape metadata from a title that cannot be searched.
 
 8/15/2020:  Jason has coded two new Agents:  GayRado and BestExclusivePorn.  The latter includes blogged scenes...perhaps an additional stopgap until Fagalicious can be remediated.  Both of the Agents are being tested and will be released soon, to add to your arsenal of Gay Porn Agents.  :)
 
@@ -242,7 +242,7 @@ A:  Open a new Issue.  Please describe the challenge, include the URL for the fi
 
 Q:  I've got a great idea for new functionality...or, there's an indexing site that I use all the time that you haven't provided an agent for.  What should I do?
 
-A:  Open a new Issue.  We love to be challenged with creating new agents or making the current set of agents more robust.  However, we 1) won't create studio specific agents (e.g., SeanCody.com) or 2) likely won't create agents for sites that don't offer consistent quality posterart (IAFD being an obvious exception).  Our goal is to never, or nearly never, have to manually index content.  If you know a site, let us know.  We'll gratefully and happily see if it is feasibly scrapable for Plex metadata.  
+A:  Open a new Issue.  We love to be challenged with creating new agents or making the current set of agents more robust.  However, we 1) won't create studio specific agents (e.g., SeanCody.com) or 2) likely won't create agents for sites that don't offer consistent quality posterart (IAFD being an obvious exception).  Our goal is to never, or nearly never, have to manually index content.  If you know a site, let us know.  We'll gratefully and happily see if it is feasibly scrapeable for Plex metadata.  
 
 
 Q:  Does the code for the Agents ever change/get updated?
