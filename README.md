@@ -192,7 +192,8 @@ A:  Start small.  Before renaming every file in your system, start with one and 
    c. Stop your PMS.
 
    d. Go to  PMS Plugin Logs folder and delete all the deletable log files.  Not sure where they're located, click here:  https://support.plex.tv/articles/201106148-channel-log-files/
-(e.g., in windows they are typically found in C:\Users\user\AppData\Local\Plex Media Server\Logs\PMS Plugin Logs)
+(e.g., in windows they are typically found in C:\Users\<Your User Name>
+\AppData\Local\Plex Media Server\Logs\PMS Plugin Logs)
 
    e.  Restart your PMS.
 
@@ -202,7 +203,7 @@ A:  Start small.  Before renaming every file in your system, start with one and 
 
    a.  The specific operating system/device you have PMS installed on.
 
-   b.  The logs--attach all the newly created logs from both the \Logs and the \Logs\PMS Plugin Logs directories (see 1d). 
+   b.  The logs--attach all the newly created logs from the \Logs\PMS Plugin Logs directories (see 1d). 
 
    c.  The specific url of the film or scene title on the Agent's index site.
    
@@ -234,7 +235,7 @@ Q:  I can't get the WayBig Agent to match videos.  Help!
 A:  The WayBig Agent won't scrape videos from WayBig.com, only Blog entries. If WayBig doesn't have the scene you're seeking, try Fagalicious or QueerClick.  Not on any of the three?  Try IAFD and upload your own poster.
 
 
-Q:  I've tried everything, and I can't get a particular film/scene to match.  What now?
+Q:  I've figured out the setup and have successfully matched films and/or scenes.  BUT, I've tried everything, and I can't get a particular film/scene to match.  What now?
 
 A:  Open a new Issue.  Please describe the challenge, include the URL for the film/scene, and the corresponding Agent's log file (i.e. if the film is on AEBN, please include the com.plexapp.agents.AEBN.log.) Unsure how to find the log?  This blog entry describes the log location for each PMS platform:  https://support.plex.tv/articles/200250417-plex-media-server-log-files/ The log will be in the PMS Plugin Logs subfolder.   **Please, do not upload graphic images**  Once a new issue is opened, we troubleshoot.  Most root causes turn out to be an incorectly named filename.  However, even though we have robustly tested the agents, we still find anomalies (e.g., special characters) that a particular index may infrequently use which necessitates an update to the logic in the Agent.  If the update is technically feasible, we'll likely make the fix and release the updated Agent.  Regardless of the root cause, you'll be able to track the progress of your issue (and look at any others you may find interesting).  
 
