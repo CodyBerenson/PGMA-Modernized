@@ -33,13 +33,14 @@
     12 Sep 2020   2019.12.25.18    Error in creating search string whilst handling Ampersands, 
                                    these were replaced with a null string instead of splitting at the position as in numerals
     17 Sep 2020   2019.12.25.19    Error in determining default date
+    28 Sep 2020   2019.12.25.20    Fixed dates which had a Circa in them i.e c1980
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.19'
+VERSION_NO = '2019.12.25.20'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 REGEX = Prefs['regex']
@@ -233,7 +234,8 @@ class GEVI(Agent.Movies):
             prt = ['um', 'uma', 'uns', 'umas', 'o', 'a', 'os', 'as']
             esp = ['un', 'una', 'unos', 'unas', 'el', 'la', 'los', 'las']
             ger = ['ein', 'eine', 'eines', 'einen', 'einem', 'einer', 'das', 'die', 'der', 'dem', 'den', 'des']
-            pattern = eng + fre + prt + esp + ger
+            oth = ['mr']
+            pattern = eng + fre + prt + esp + ger + oth
             myWords = myString.split()
             matched = myWords[0].lower() in pattern # match against first word
             if matched:
@@ -488,7 +490,7 @@ class GEVI(Agent.Movies):
 
                     # get the release dates
                     htmlReleaseDate = html.xpath('//td[.="released" or .="produced"]/following-sibling::td[1]/text()[normalize-space()]')
-                    htmlReleaseDate = [x if unicode(x, 'utf-8').isnumeric() else x.split('-')[0] if '-' in x else x.split(',')[0] if ',' in x else '' for x in htmlReleaseDate]
+                    htmlReleaseDate = [x if unicode(x, 'utf-8').isnumeric() else x.split('-')[0] if '-' in x else x.split(',')[0] if ',' in x else x[1:] if x[0] == 'c' else '' for x in htmlReleaseDate]
                     htmlReleaseDate = [x for x in htmlReleaseDate if x]
                     htmlReleaseDate = list(set(htmlReleaseDate))
                     self.log('SEARCH:: %s Site URL Release Dates: %s', len(htmlReleaseDate), htmlReleaseDate)
@@ -502,9 +504,10 @@ class GEVI(Agent.Movies):
                             self.log('SEARCH:: Error: %s', e)
                             continue
                     if not siteReleaseDate:
-                        continue
-                except:
-                    self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
+                        raise Exception('No Release Dates Found')
+
+                except Exception as e:
+                    self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date [%s]', e)
                     siteReleaseDate = compareReleaseDate
 
                 # we should have a match on studio, title and year now
