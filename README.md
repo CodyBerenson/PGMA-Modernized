@@ -1,4 +1,12 @@
 # Announcements
+
+**10/06/2020:** Yesterday, IAFD announced that they had site hardware challenges and in order to restore service they had to enable HTTPS.  This had two impacts to our agents, one catastrophic:
+1.  The IAFD agent now does not work.  The code needs to be tweaked to support https.  As a work around, if you're not afraid of editing code, a work around can be found here:  https://github.com/CodyBerenson/PGMA-Modernized/issues/52#issuecomment-704012596
+
+2.  All of our agents make calls to IAFD to retrieve Actor Thumbnail photos.  So, until every agent is updated to support https: for IAFD, thumbnail photos may not be returned.  
+
+We'll make and test the updates as soon as we can.  This, of course, is the risk we run when indexing sites make updates (i.e. Fagalicious two months ago and now IAFD).
+
 9/17/2020:  Our two new agents, GayRado and BestExclusivePorn have been fully tested and are now included in our repository of Agents!  A couple specifics:
 
 **BestExclusivePorn:**  BestExclusivePorn.com contains both blogged scenes and full films.  Although the site doesn't include metadata for the names of the performers, the agent will look for performers in the title and use as metadata, when there's a match.  See instructions below for further details.
