@@ -18,6 +18,9 @@
     25 Jun 2020   2020.01.18.12    Improvement to Summary Translation: Translate into Plex Library Language
                                    stripping of intenet domain suffixes from studio names when matching
                                    handling of unicode characters in film titles and comparision string normalisation
+    25 Jul 2020   2020.01.18.13    changed replacement of hyphens etc to null with hyphens to space when building 
+                                   the search string, added chars u\2011 (nonbreaking hyphen) and u\2012 (figure dash)
+    07 Oct 2020   2020.01.18.14    IAFD - change to https
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -25,7 +28,7 @@ import datetime, linecache, platform, os, re, string, subprocess, sys, unicodeda
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.12'
+VERSION_NO = '2020.01.18.14'
 PLUGIN_LOG_TITLE = 'Fagalicious'
 
 # PLEX API
@@ -48,7 +51,7 @@ CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/Fagalicious.bundle/Conte
 
 # URLS
 BASE_URL = 'https://fagalicious.com'
-BASE_SEARCH_URL = BASE_URL + '/search/{0}/'
+BASE_SEARCH_URL = BASE_URL + '/search_gcse/?q={0}'
 
 # Date Formats used by website
 DATE_YMD = '%Y%m%d'
@@ -85,14 +88,6 @@ class Fagalicious(Agent.Movies):
     preference = True
     media_types = ['Movie']
     contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultScenes']
-    languages = [Locale.Language.Arabic, Locale.Language.Catalan, Locale.Language.Chinese, Locale.Language.Czech, Locale.Language.Danish,
-                 Locale.Language.Dutch, Locale.Language.English, Locale.Language.Estonian, Locale.Language.Finnish, Locale.Language.French,
-                 Locale.Language.German, Locale.Language.Greek, Locale.Language.Hebrew, Locale.Language.Hindi, Locale.Language.Hungarian,
-                 Locale.Language.Indonesian, Locale.Language.Italian, Locale.Language.Japanese, Locale.Language.Korean, Locale.Language.Latvian,
-                 Locale.Language.Norwegian, Locale.Language.Persian, Locale.Language.Polish, Locale.Language.Portuguese, Locale.Language.Romanian,
-                 Locale.Language.Russian, Locale.Language.Slovak, Locale.Language.Spanish, Locale.Language.Swahili, Locale.Language.Swedish,
-                 Locale.Language.Thai, Locale.Language.Turkish, Locale.Language.Ukrainian, Locale.Language.Vietnamese,
-                 Locale.Language.NoLanguage, Locale.Language.Unknown]
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def matchFilename(self, filename):
@@ -178,12 +173,12 @@ class Fagalicious(Agent.Movies):
         else:
             self.log('SELF:: Search Query:: String has none of these {0}'.format(pattern))
 
-        nullChars = [',', '-', ur'\u2013', ur'\u2014'] # for titles with commas, colons in them on disk represented as ' - '
-        pattern = u'({0})'.format('|'.join(nullChars))
+        spaceChars = [',', '-', ur'\u2011', ur'\u2012', ur'\u2013', ur'\u2014'] # for titles with commas, colons in them on disk represented as ' - '
+        pattern = u'({0})'.format('|'.join(spaceChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             self.log('SELF:: Search Query:: Replacing characters in string. Found one of these {0}'.format(pattern))
-            myString = re.sub(pattern, '', myString)
+            myString = re.sub(pattern, ' ', myString)
             myString = ' '.join(myString.split())   # remove continous white space
             self.log('SELF:: Amended Search Query [{0}]'.format(myString))
         else:
@@ -271,11 +266,11 @@ class Fagalicious(Agent.Movies):
         fullname = myString.replace(' ', '').replace("'", '').replace(".", '')
         full_name = myString.replace(' ', '-').replace("'", '&apos;')
         for gender in ['m', 'd']:
-            url = 'http://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
+            url = 'https://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
             urlList.append(url)
 
         myString = String.URLEncode(myString)
-        url = 'http://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
+        url = 'https://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
         urlList.append(url)
 
         for count, url in enumerate(urlList, start=1):
@@ -304,7 +299,7 @@ class Fagalicious(Agent.Movies):
                             self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
                             if startCareer <= FilmYear:
                                 photourl = actor.xpath('./td[1]/a/img/@src')[0]
-                                photourl = 'nophoto' if photourl == 'http://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
+                                photourl = 'nophoto' if photourl == 'https://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
                                 self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
                                 break
                         except:
@@ -367,11 +362,11 @@ class Fagalicious(Agent.Movies):
         while morePages:
             self.log('SEARCH:: Search Query: %s', searchQuery)
             try:
-                html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
+                html = HTML.ElementFromURL(searchQuery, cacheTime=3, timeout=20, sleep=10)
             except Exception as e:
                 self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
                 return
-
+            '''
             try:
                 searchQuery = html.xpath('//a[@class="next page-numbers"]/@href')[0]
                 self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
@@ -382,14 +377,21 @@ class Fagalicious(Agent.Movies):
                 self.log('SEARCH:: No More Pages Found')
                 pageNumber = 1
                 morePages = False
+            '''
+            morePages = False
+            pageNumber = 0
+            # //div[@class="page-wrap"]/div[@class="page-main"]/div[@class="entry-content"]/div[@class="wgs_wrapper"]/div[@id="___gcse_1"]/div[@class="gsc-control-cse gsc-control-cse-en"]/div[@class="gsc-control-wrapper-cse"]/div[@class="gsc-results-wrapper-nooverlay gsc-results-wrapper-visible"]/div[@class="gsc-wrapper"]/div[@class="gsc-resultsbox-visible"]/div[@class="gsc-resultsRoot gsc-tabData gsc-tabdActive"]/div[@class="gsc-results gsc-webResult"]/div[@class="gsc-expansionArea"]/div[@class="gsc-webResult gsc-result"]/div[@class="gs-webResult gs-result"]/div[@class="gsc-thumbnail-inside"]/div[@class="gs-title"]/a[@class="gs-title"]
+            # //div[@class="gsc-webResult gsc-result"]/div[@class="gs-webResult gs-result"]/div[@class="gsc-thumbnail-inside"]/div[@class="gs-title"]/a[@class="gs-title"]
+            # titleList = html.xpath('//a[@class="gs-title" and not(contains(@href, "/tag"))]')
+            titleList = html.xpath('//a[@class="gs-title"]')
 
-            titleList = html.xpath('//header[@class="entry-header"]')
             self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
 
             for title in titleList:
                 # Site Entry : Composed of Studio, then Scene Title separated by a Colon
                 try:
-                    siteEntry = title.xpath('./h2/a/text()[normalize-space()]')[0]
+                    siteEntry = title.xpath('//text()')
+                    siteEntry = ''.join(siteEntry)
                     siteEntry = siteEntry.split(":")
                     self.log('SEARCH:: Site Entry: %s', siteEntry)
                 except:
@@ -516,10 +518,10 @@ class Fagalicious(Agent.Movies):
         # 2b/c.   Cast/Genre
         #       Fagalicious stores the cast and genres as tags, if tag is in title assume its a cast member else its a genre
         #       get thumbnails from IAFD as they are right dimensions for plex cast list
+        castdict = {}
+        genres = []
         try:
-            castdict = {}
             genresList = ['bareback', 'black studs', 'big dicks', 'hairy', 'daddy', 'hairy', 'interracial', 'muscle hunks', 'uncut', 'jocks', 'latino', 'gaycest', 'group']
-            genres = []
             htmltags = html.xpath('//ul/a[contains(@href, "https://fagalicious.com/tag/")]/text()')
             htmltags = list(set(htmltags))
             self.log('UPDATE:: %s Genres/Cast Tags Found: "%s"', len(htmltags), htmltags)

@@ -22,6 +22,7 @@
     12 Sep 2020   2020.04.22.06    Titles with hyphens failing as these were converted to ":"
                                    corrected by splitting and using string upto that position as search...
     20 Sep 2020   2020.04.22.07    Titles with '[', '(' were corrected by splitting and using string upto that position as search...
+    07 Oct 2020   2020.04.22.08    IAFD - change to https
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -29,7 +30,7 @@ import datetime, linecache, platform, os, re, string, subprocess, sys, unicodeda
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.04.22.07'
+VERSION_NO = '2020.04.22.08'
 PLUGIN_LOG_TITLE = 'IAFD'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -42,7 +43,7 @@ DELAY = int(Prefs['delay'])
 DETECT = Prefs['detect']
 
 # URLS
-BASE_URL = 'http://www.iafd.com'
+BASE_URL = 'https://www.iafd.com'
 BASE_SEARCH_URL = BASE_URL + '/results.asp?searchtype=comprehensive&searchstring={0}'
 
 # Date Formats used by website

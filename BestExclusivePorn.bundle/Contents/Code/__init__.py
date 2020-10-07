@@ -12,6 +12,9 @@
                                    added cast scraping - actors restricted to 2 names
     15 Sep 2020   2020.08.09.03    removed enquotes around search string
     25 Sep 2020   2020.08.09.04    search string can only have a max of 59 characters
+    07 Oct 2020   2020.08.09.05    IAFD - change to https
+                                   get cast names from statting label if present
+
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
@@ -19,7 +22,7 @@ import site
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.08.09.04'
+VERSION_NO = '2020.08.09.05'
 PLUGIN_LOG_TITLE = 'BestExclusivePorn'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -144,8 +147,8 @@ class BestExclusivePorn(Agent.Movies):
         # convert to lower case and trim
         myString = myString.lower().strip()
 
-        # remove words with apostrophes in them
-        badChars = ["'", ur'\u2018', ur'\u2019']
+        # remove words with apostrophes and commas in them
+        badChars = ["'", ur'\u2018', ur'\u2019', ',']
         pattern = u"\w*[{0}]\w*".format(''.join(badChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
@@ -217,11 +220,11 @@ class BestExclusivePorn(Agent.Movies):
         fullname = myString.replace(' ', '').replace("'", '').replace(".", '')
         full_name = myString.replace(' ', '-').replace("'", '&apos;')
         for gender in ['m', 'd']:
-            url = 'http://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
+            url = 'https://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
             urlList.append(url)
 
         myString = String.URLEncode(myString)
-        url = 'http://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
+        url = 'https://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
         urlList.append(url)
 
         photourl = ''
@@ -250,7 +253,7 @@ class BestExclusivePorn(Agent.Movies):
                             self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
                             if startCareer <= FilmYear:
                                 photourl = actor.xpath('./td[1]/a/img/@src')[0]
-                                photourl = 'nophoto' if photourl == 'http://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
+                                photourl = 'nophoto' if photourl == 'https://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
                                 self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
                                 break
                         except:
@@ -476,20 +479,34 @@ class BestExclusivePorn(Agent.Movies):
 
 
         # 2c.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
+        #             If there is a Starring heading use it to get the actors else try searching the title for the cast
+        castdict = {}
+        actors = []
         try:
-            castdict = {}
+            htmlcast = html.xpath('.//div[@class="entry"]/p/text()[contains(.,"Starring: ")]')[0].strip().replace('Starring: ', '').split(',')
+            self.log('UPDATE:: %s Cast Found: %s', len(htmlcast), htmlcast)
+            for cast in htmlcast:
+                cast = cast.strip()
+                if cast:
+                    actors.append(cast)
+        except Exception as e:
+            self.log('UPDATE - Error getting Cast: No Starring Entry - Attempt getting cast from title: %s', e)
             pattern = u'([A-Z][a-z]+|\.)(?:\s+([A-Z][a-z]+|\.))'
             matches = re.findall(pattern, FilmTitle)  # match against Film title
             self.log('UPDATE:: Matches:: {0}'.format(matches))
             if matches:
                 for count, cast in enumerate(matches, 1):
                     cast = [str(i) for i in cast]
-                    cast = ' '.join(cast)
+                    cast = ' '.join(cast).strip()
                     self.log('UPDATE:: {0}. Found Possible Cast Name:: {1}'.format(count, cast))
-                    castpicture = self.getIAFDActorImage(cast, FilmYear)
-                    if castpicture:
-                        castdict[cast] = castpicture
-                        castdict[cast] = '' if castdict[cast] == 'nophoto' else castdict[cast]
+                    if cast:
+                        actors.append(cast)
+        if actors:
+            for cast in actors:
+                castpicture = self.getIAFDActorImage(cast, FilmYear)
+                if castpicture:
+                    castdict[cast] = castpicture
+                    castdict[cast] = '' if castdict[cast] == 'nophoto' else castdict[cast]
 
             # sort the dictionary and add kv to metadata
             metadata.roles.clear()
@@ -497,8 +514,8 @@ class BestExclusivePorn(Agent.Movies):
                 role = metadata.roles.new()
                 role.name = key
                 role.photo = castdict[key]
-        except Exception as e:
-            self.log('UPDATE - Error getting Cast: %s', e)
+        else:
+            self.log('UPDATE - Error getting Cast: No Cast Found')
 
         # 2d.   Genres
         try:

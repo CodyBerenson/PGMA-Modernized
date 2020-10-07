@@ -12,9 +12,10 @@
     27 Jun 2020   2020.05.21.03    Improvement to Summary Translation: Translate into Plex Library Language
                                    stripping of intenet domain suffixes from studio names when matching
                                    handling of unicode characters in film titles and comparision string normalisation
-	01 Jul 2020   2020.05.21.03	   Renamed to AEBNiii
+    01 Jul 2020   2020.05.21.03	   Renamed to AEBNiii
     14 Jul 2020   2020.05.21.04    Enhanced seach to also look through the exact matches, as AEBN does not always put these
                                    in the general search results
+    07 Oct 2020   2020.05.21.05    IAFD - change to https
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -22,7 +23,7 @@ import datetime, linecache, platform, os, re, string, subprocess, sys, unicodeda
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.05.21.04'
+VERSION_NO = '2020.05.21.05'
 PLUGIN_LOG_TITLE = 'AEBN iii'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -163,8 +164,8 @@ class AEBNiii(Agent.Movies):
 
         # Site Studio
         if matched:
+            foundStudio = False
             try:
-                foundStudio = False
                 htmlSiteStudio = title.xpath('./section//li[contains(@class,"item-studio")]/a/text()') if ExactMatches else html.xpath('//div[@class="dts-studio-name-wrapper"]/a/text()')
                 self.log('SELF:: %s Site URL Studios: %s', len(htmlSiteStudio), htmlSiteStudio)
                 for siteStudio in htmlSiteStudio:
@@ -295,11 +296,11 @@ class AEBNiii(Agent.Movies):
         fullname = myString.replace(' ', '').replace("'", '').replace(".", '')
         full_name = myString.replace(' ', '-').replace("'", '&apos;')
         for gender in ['m', 'd']:
-            url = 'http://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
+            url = 'https://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
             urlList.append(url)
 
         myString = String.URLEncode(myString)
-        url = 'http://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
+        url = 'https://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
         urlList.append(url)
 
         for count, url in enumerate(urlList, start=1):
@@ -328,7 +329,7 @@ class AEBNiii(Agent.Movies):
                             self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
                             if startCareer <= FilmYear:
                                 photourl = actor.xpath('./td[1]/a/img/@src')[0]
-                                photourl = 'nophoto' if photourl == 'http://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
+                                photourl = 'nophoto' if photourl == 'https://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
                                 self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
                                 break
                         except:
@@ -507,11 +508,11 @@ class AEBNiii(Agent.Movies):
             self.log('UPDATE:: Error getting Synopsis: %s', e)
 
         # scene information
+        allscenes = ''
         try:
             htmlheadings = html.xpath('//header[@class="dts-panel-header"]/div/h1[contains(text(),"Scene")]/text()')
             htmlscenes = html.xpath('//div[@class="dts-scene-info dts-list-attributes"]')
             self.log('UPDATE:: %s Scenes Found: %s', len(htmlscenes), htmlscenes)
-            allscenes = ''
             for (heading, htmlscene) in zip(htmlheadings, htmlscenes):
                 settingsList = htmlscene.xpath('./ul/li[descendant::span[text()="Settings:"]]/a/text()')
                 if settingsList:

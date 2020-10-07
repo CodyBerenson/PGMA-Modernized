@@ -15,6 +15,7 @@
                                    stripping of intenet domain suffixes from studio names when matching
                                    handling of unicode characters in film titles and comparision string normalisation
     25 Jul 2020   2020.05.10.05    changed xpath strings to improve matching
+    07 Oct 2020   2020.05.10.06    IAFD - change to https
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -22,7 +23,7 @@ import datetime, linecache, platform, os, re, string, subprocess, sys, unicodeda
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.05.10.05'
+VERSION_NO = '2020.05.10.06'
 PLUGIN_LOG_TITLE = 'GayWorld'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -205,11 +206,11 @@ class GayWorld(Agent.Movies):
         fullname = myString.replace(' ', '').replace("'", '').replace(".", '')
         full_name = myString.replace(' ', '-').replace("'", '&apos;')
         for gender in ['m', 'd']:
-            url = 'http://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
+            url = 'https://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
             urlList.append(url)
 
         myString = String.URLEncode(myString)
-        url = 'http://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
+        url = 'https://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
         urlList.append(url)
 
         for count, url in enumerate(urlList, start=1):
@@ -238,7 +239,7 @@ class GayWorld(Agent.Movies):
                             self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
                             if startCareer <= FilmYear:
                                 photourl = actor.xpath('./td[1]/a/img/@src')[0]
-                                photourl = 'nophoto' if photourl == 'http://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
+                                photourl = 'nophoto' if photourl == 'https://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
                                 self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
                                 break
                         except:

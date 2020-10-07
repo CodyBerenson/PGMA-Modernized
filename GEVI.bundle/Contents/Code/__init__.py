@@ -7,22 +7,6 @@
                                                   Version History
                                                   ---------------
     Date            Version                         Modification
-    07 Apr 2020   2019.12.25.7     Changed the agent to search past the first page of results
-    08 Apr 2020   2019.12.25.8     Created new function to prepare the video title to build the search query
-    12 Apr 2020   2019.12.25.9     removed line in updating countries as it raised an error in the logs
-                                   logical error replacing full stops in title when preparing search string
-    26 Apr 2020   2019.12.25.10    corrected search string: can only be 24 characters long and be comprised of full words
-                                   search and replace of special characters in search string was not working correctly
-    28 Apr 2020   2019.12.25.11    Failed to scrap for some titles, found errors stopped execution, so code placed in try: exception
-                                   added no spaces comparison to studio found results
-                                   Added Scene breakdown scrape to summary
-                                   Added Ratings scrape
-    08 May 2020   2019.12.25.12    Enhanced the creation of the search string and the search url to return fewer but more exact results
-                                   added portugues, spanish, german - articles for removal from search title
-                                   added/merge matching string routines - filename, studio, release date
-                                   removed references from summary relating to where scene can be found in compilation or other movie
-    28 May 2020   2019.12.25.13    Took into account Brackets () in Title - characters replaced by Space
-                                   GEVI will now compare file studio name against both site distributor and site studio names
     01 Jun 2020   2019.12.25.14    Implemented translation of summary
                                    improved getIAFDActor search
     24 Jun 2020   2019.12.25.15    Improvement to Summary Translation: Translate into Plex Library Language
@@ -34,13 +18,16 @@
                                    these were replaced with a null string instead of splitting at the position as in numerals
     17 Sep 2020   2019.12.25.19    Error in determining default date
     28 Sep 2020   2019.12.25.20    Fixed dates which had a Circa in them i.e c1980
+    07 Oct 2020   2019.12.25.21    IAFD - change to https
+                                   increased pages to search results to 50 to cater for one word titles e.g (Treasure Island Media) - Fuck 8 (2017)
+
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.20'
+VERSION_NO = '2019.12.25.21'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 REGEX = Prefs['regex']
@@ -313,11 +300,11 @@ class GEVI(Agent.Movies):
         fullname = myString.replace(' ', '').replace("'", '').replace(".", '')
         full_name = myString.replace(' ', '-').replace("'", '&apos;')
         for gender in ['m', 'd']:
-            url = 'http://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
+            url = 'https://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
             urlList.append(url)
 
         myString = String.URLEncode(myString)
-        url = 'http://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
+        url = 'https://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
         urlList.append(url)
 
         photourl = ''
@@ -346,7 +333,7 @@ class GEVI(Agent.Movies):
                             self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
                             if startCareer <= FilmYear:
                                 photourl = actor.xpath('./td[1]/a/img/@src')[0]
-                                photourl = 'nophoto' if photourl == 'http://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
+                                photourl = 'nophoto' if photourl == 'https://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
                                 self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
                                 break
                         except:
@@ -419,7 +406,7 @@ class GEVI(Agent.Movies):
                 searchQuery = "{0}/{1}".format(BASE_URL, searchQuery)   # href does not have base_url in it
                 self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
                 pageNumber = int(searchQuery.split('&where')[0].split('page=')[1]) - 1
-                morePages = True if pageNumber <= 15 else False
+                morePages = True if pageNumber <= 49 else False
             except:
                 searchQuery = ''
                 self.log('SEARCH:: No More Pages Found')
