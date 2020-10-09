@@ -1,5 +1,7 @@
 # Announcements
 
+**10/07/2020:** All agents have been updated due to the change IAFD made on their site two days ago.
+
 **10/06/2020:** Yesterday, IAFD announced that they had site hardware challenges and in order to restore service they had to enable HTTPS.  This had two impacts to our agents, one catastrophic:
 1.  The IAFD agent now does not work.  The code needs to be tweaked to support https.  As a work around, if you're not afraid of editing code, a work around can be found here:  https://github.com/CodyBerenson/PGMA-Modernized/issues/52#issuecomment-704012596
 
