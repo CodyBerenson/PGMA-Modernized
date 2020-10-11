@@ -1,5 +1,9 @@
 # Announcements
 
+**10/11/2020**  Looks like October is turning out to be IAFD month.  Not in a good way.  LOL.  IAFD is having to rebuild their RAID array...never a good thing....so their site has been down for quite some time.  Impacts to our agents:  The IAFD agent will not work, nor will pulling performer's headshots for all of the other agents.  The other agents will match, pull metadata and poster, just not an actor's headshot.  Last time IAFD struggled, they moved from HTTP to HTTPS to get back online causing impacts to all of our Agents.  Fingers crossed for their return to service quickly without further impact to us.
+
+https://twitter.com/iafdcom
+
 **10/07/2020:** All agents have been updated due to the change IAFD made on their site two days ago.
 
 **10/06/2020:** Yesterday, IAFD announced that they had site hardware challenges and in order to restore service they had to enable HTTPS.  This had two impacts to our agents, one catastrophic:
