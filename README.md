@@ -1,5 +1,7 @@
 # Announcements
 
+**10/18/2020**  We are finalizing the first version of our installation and usage guide for new folks.  The guide brings together everything below, along with some of the tips and step-by-steps we've provided in the issues.  If you're new to Plex, PMS, and its agents, the guide is perfect for you.
+
 **10/11/2020**  Looks like October is turning out to be IAFD month.  Not in a good way.  LOL.  IAFD is having to rebuild their RAID array...never a good thing....so their site has been down for quite some time.  Impacts to our agents:  The IAFD agent will not work, nor will pulling performer's headshots for all of the other agents.  The other agents will match, pull metadata and poster, just not an actor's headshot.  Last time IAFD struggled, they moved from HTTP to HTTPS to get back online causing impacts to all of our Agents.  Fingers crossed for their return to service quickly without further impact to us.
 
 https://twitter.com/iafdcom
