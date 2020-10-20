@@ -1,3 +1,7 @@
+# How to Install
+
+Click here for our new Installation and Usage Guide:  https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/Plex Gay Metadata Agents - Installation and Usage Guide.pdf
+
 # Announcements
 
 **10/18/2020**  We are finalizing the first version of our installation and usage guide for new folks.  The guide brings together everything below, along with some of the tips and step-by-steps we've provided in the issues.  If you're new to Plex, PMS, and its agents, the guide is perfect for you.
