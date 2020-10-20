@@ -1,4 +1,4 @@
-# How to Install
+# Installation and Usage
 
 [Click Here](/images/PlexGayMetadataAgents-InstallationandUsageGuide.pdf)
 for our new Installation and Usage Guide.  
