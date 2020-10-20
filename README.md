@@ -1,6 +1,6 @@
 # How to Install
 
-Click here for our new Installation and Usage Guide:  https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/Plex Gay Metadata Agents - Installation and Usage Guide.pdf
+Click here for our new Installation and Usage Guide:  https://raw.githubusercontent.com/CodyBerenson/PGMA-Modernized/master/images/PlexGayMetadataAgents-InstallationandUsageGuide.pdf
 
 # Announcements
 
