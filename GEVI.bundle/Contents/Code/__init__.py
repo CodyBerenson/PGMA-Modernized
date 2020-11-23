@@ -19,15 +19,16 @@
     17 Sep 2020   2019.12.25.19    Error in determining default date
     28 Sep 2020   2019.12.25.20    Fixed dates which had a Circa in them i.e c1980
     07 Oct 2020   2019.12.25.21    IAFD - change to https
-                                   increased pages to search results to 50 to cater for one word titles e.g (Treasure Island Media) - Fuck 8 (2017)
-
+                                   GEVI now searches all returned results and stops if return is alphabetically greater than title
+    22 Nov 2020   2019.12.25.22    Improved generation of search string - previously titles like The 1000 Load Fuck would not match
+                                   as both first word and second word can not be used to search for movies in GEVI. i.e numeric and indefinite article
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.21'
+VERSION_NO = '2019.12.25.22'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 REGEX = Prefs['regex']
@@ -192,17 +193,30 @@ class GEVI(Agent.Movies):
         else:
             self.log('SELF:: Search Query:: String has none of these {0}'.format(pattern))
 
-        pattern = r'[0-9]'
-        myWords = myString.split()
-        matched = re.search(pattern, myWords[0])  # match against first word
-        if matched:
-            self.log("SELF:: Search Query:: Dropping first word [{0}], as it's numeric".format(myWords[0]))
-            myWords.remove(myWords[0])
-            myString = ' '.join(myWords)
-            self.log('SELF:: Amended Search Query [{0}]'.format(myString))
-        else:
-            self.log('SELF:: Search Query:: First word is not numeric')
+        # examine first word
+        # remove if numerical or indefinite word in french, english, portuguese, spanish, german
+        numbers = ['[0-9]+']
+        eng = ['a', 'an', 'the']
+        fre = ['un', 'une', 'des', 'le', 'la', 'les', "l'"]
+        prt = ['um', 'uma', 'uns', 'umas', 'o', 'a', 'os', 'as']
+        esp = ['un', 'una', 'unos', 'unas', 'el', 'la', 'los', 'las']
+        ger = ['ein', 'eine', 'eines', 'einen', 'einem', 'einer', 'das', 'die', 'der', 'dem', 'den', 'des']
+        oth = ['mr']
+        regexes = numbers + eng + fre + prt + esp + ger + oth
+        pattern = r'|'.join(r'\b{0}\b'.format(regex) for regex in regexes)
+        while True:
+            myWords = myString.split()
+            matched = re.search(pattern, myWords[0].lower())  # match against first word
+            if matched:
+                self.log("SELF:: Search Query:: Dropping first word [{0}]".format(myWords[0]))
+                myWords.remove(myWords[0])
+                myString = ' '.join(myWords)
+                self.log('SELF:: Amended Search Query [{0}]'.format(myString))
+            else:
+                self.log("SELF:: Search Query:: Did not match against first word [{0}]".format(myWords[0]))
+                break
 
+        # examine string for numbers and &
         pattern = r'[0-9&]'
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
@@ -212,28 +226,6 @@ class GEVI(Agent.Movies):
             self.log('SELF:: Amended Search Query [{0}]'.format(myString))
         else:
             self.log('SELF:: Search Query:: Split not attempted. String has none of these {0}'.format(pattern))
-
-        # removal of (in)definitive articles in title as it messes GEVIs search algorithm - English, French and German
-        # split myString at position of first separate digit e.g MY TITLE 7 - THE 7TH RETURN becomes MY TITLE
-        try:
-            eng = ['a', 'an', 'the']
-            fre = ['un', 'une', 'des', 'le', 'la', 'les', "l'"]
-            prt = ['um', 'uma', 'uns', 'umas', 'o', 'a', 'os', 'as']
-            esp = ['un', 'una', 'unos', 'unas', 'el', 'la', 'los', 'las']
-            ger = ['ein', 'eine', 'eines', 'einen', 'einem', 'einer', 'das', 'die', 'der', 'dem', 'den', 'des']
-            oth = ['mr']
-            pattern = eng + fre + prt + esp + ger + oth
-            myWords = myString.split()
-            matched = myWords[0].lower() in pattern # match against first word
-            if matched:
-                self.log('SELF:: Search Query:: Dropping first word [{0}], Found one of these {1}'.format(myWords[0], pattern))
-                myWords.remove(myWords[0])
-                myString = ' '.join(myWords)
-                self.log('SELF:: Amended Search Query [{0}]'.format(myString))
-            else:
-                self.log('SELF:: Search Query:: First word has none of these {0}'.format(pattern))
-        except Exception as e:
-            self.log('SELF:: Error removing initial (in)definitive articles: %s', e)
 
         # all preparation has resulted in an empty string e.g title like 35 & Up by Bacchus Releasing
         myString = re.sub(r'[^A-Za-z]', ' ', myBackupString) if not myString else myString
@@ -292,13 +284,17 @@ class GEVI(Agent.Movies):
         ''' check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not '''
 
         actorname = myString.strip()
-        myString = String.StripDiacritics(myString).lower()
+        self.log('SELF:: Actor: [%s]', actorname)
+        myString = String.StripDiacritics(myString).lower().strip()
+        self.log('SELF:: Diacritics: [%s]', myString)
 
         # build list containing three possible cast links 1. Full Search in case of AKAs 2. as Performer 3. as Director
         # the 2nd and 3rd links will only be used if there is no search result
         urlList = []
         fullname = myString.replace(' ', '').replace("'", '').replace(".", '')
+        self.log('SELF:: fullname: [%s]', fullname)
         full_name = myString.replace(' ', '-').replace("'", '&apos;')
+        self.log('SELF:: full_name: [%s]', full_name)
         for gender in ['m', 'd']:
             url = 'https://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
             urlList.append(url)
@@ -385,6 +381,7 @@ class GEVI(Agent.Movies):
         # Compare Variables used to check against the studio name on website: remove all umlauts, accents and ligatures
         compareStudio = self.NormaliseComparisonString(FilmStudio)
         compareTitle = self.NormaliseComparisonString(FilmTitle)
+        compareTitleFirstWord = compareTitle.split()[0]
         compareReleaseDate = datetime.datetime(int(FilmYear), 12, 31) # default to 31 Dec of Filename yesr
 
         # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
@@ -406,7 +403,7 @@ class GEVI(Agent.Movies):
                 searchQuery = "{0}/{1}".format(BASE_URL, searchQuery)   # href does not have base_url in it
                 self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
                 pageNumber = int(searchQuery.split('&where')[0].split('page=')[1]) - 1
-                morePages = True if pageNumber <= 49 else False
+                morePages = True
             except:
                 searchQuery = ''
                 self.log('SEARCH:: No More Pages Found')
@@ -424,6 +421,10 @@ class GEVI(Agent.Movies):
                     self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
                     if siteTitle != compareTitle:
                         continue
+                    # no need to continue comparing alphabetically
+                    if siteTitle > compareTitle:
+                        self.log('SEARCH:: alpha past')
+                        morePages = False
                 except:
                     self.log('SEARCH:: Error getting Site Title')
                     continue

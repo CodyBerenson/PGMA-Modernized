@@ -14,6 +14,7 @@
     25 Sep 2020   2020.08.09.04    search string can only have a max of 59 characters
     07 Oct 2020   2020.08.09.05    IAFD - change to https
                                    get cast names from statting label if present
+    22 Nov 2020   2020.08.09.06    leave words attached to commas in search string
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -22,7 +23,7 @@ import site
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.08.09.05'
+VERSION_NO = '2020.08.09.06'
 PLUGIN_LOG_TITLE = 'BestExclusivePorn'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -147,8 +148,8 @@ class BestExclusivePorn(Agent.Movies):
         # convert to lower case and trim
         myString = myString.lower().strip()
 
-        # remove words with apostrophes and commas in them
-        badChars = ["'", ur'\u2018', ur'\u2019', ',']
+        # remove words with apostrophes in them
+        badChars = ["'", ur'\u2018', ur'\u2019']
         pattern = u"\w*[{0}]\w*".format(''.join(badChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
