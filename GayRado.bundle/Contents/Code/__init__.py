@@ -9,6 +9,8 @@
     Date            Version                         Modification
     03 Aug 2020   2020.08.03.01    Creation
     07 Oct 2020   2020.08.03.02    IAFD - change to https
+    05 Dec 2020   2020.08.03.03    Some Titles have numbers as words eg (JNRC) - BBK Two (2012) but search string has to be BBK 2
+                                   So convert BBK Two to BBK 2 to match title 
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -16,7 +18,7 @@ import datetime, linecache, platform, os, re, string, subprocess, sys, unicodeda
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.08.03.02'
+VERSION_NO = '2020.08.03.03'
 PLUGIN_LOG_TITLE = 'GayRado'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -117,6 +119,24 @@ class GayRado(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def NormaliseComparisonString(self, myString):
         ''' Normalise string for, strip uneeded characters for comparison of web site values to file name regex group values '''
+
+        # Check if string has numerals as words in a series
+        myString = '{0} '.format(myString)  # append space at end of string to match last characters 
+        pattern = r"""(?x)                                              # Turn on free spacing mode
+            (
+                ^a(?=\s)|                                               # Here we match a at the start of string before  whitespace
+                \b                                                      # Initial word boundary 
+                (?:one|two|three|four|five|six|seven|eight|nine|ten)    # A list of alternatives
+                \b                                                      # Trailing word boundary
+            )"""
+        matches = re.findall(pattern, myString, re.IGNORECASE)  # match against string
+        if matches:
+            WordValues = {'One':'1', 'Two':'2', 'Three':'3', 'Four':'4', 'Five':'5', 'Six':'6', 'Seven':'7', 'Eight':'8', 'Nine':'9', 'Ten':'10'}
+            for count, match in enumerate(matches):
+                self.log('SELF:: Found numeral as word : {0}. [{1}]'.format(count, match))
+                arabicString = WordValues[match.title()]
+                myString = myString.replace(match, arabicString)
+
         # convert to lower case and trim
         myString = myString.strip().lower()
 
@@ -322,7 +342,6 @@ class GayRado(Agent.Movies):
                     pattern = re.compile(regex, re.IGNORECASE)
                     matched = re.search(pattern, siteEntry)  # match against whole string
                     if matched:
-                        self.log('SEARCH:: here Site Entry: %s', siteEntry)
                         siteEntryStudio = matched.group()
                         regex = ur'\(|\)|DVD '
                         pattern = re.compile(regex, re.IGNORECASE)
@@ -333,7 +352,6 @@ class GayRado(Agent.Movies):
                         pattern = re.compile(regex, re.IGNORECASE)
                         siteTitle = re.sub(pattern, '', siteEntry)
                     else:
-                        self.log('SEARCH:: not here Site Entry: %s', siteEntry)
                         continue
                 except Exception as e:
                     self.log('SEARCH:: Error getting Site Entry: %s', e)
