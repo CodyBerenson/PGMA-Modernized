@@ -25,14 +25,16 @@
     26 Dec 2020   2020.12.25.23    Improved on IAFD search, actors sexual roles if recorded are returned, if not shows a red circle.
                                    if actor is not credited on IAFD but is on Agent Site it shows as a Yellow Box below the actor
                                    sped up search by removing search by actor/director... less hits on IAFD per actor...
+    09 Jan 2021   2020.12.25.24    Adjusted poster/background image collection as website xpath had changed
+                                   change to the collection of images - first image is now poster, second image defaults to backgroun
+                                   image 3 on wards are added to both collections to give a choice.
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import datetime, platform, os, re, sys, unicodedata, json
 from googletrans import Translator
-import pprint
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.23'
+VERSION_NO = '2019.12.25.24'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 REGEX = Prefs['regex']
@@ -46,15 +48,17 @@ DETECT = Prefs['detect']
 # URLS
 BASE_URL = 'https://www.gayeroticvideoindex.com'
 BASE_SEARCH_URL = BASE_URL + '/search.php?type=t&where=b&query={0}&Search=Search&page=1'
+
+# IAFD Related variables
 IAFD_BASE = 'https://www.iafd.com'
 IAFD_SEARCH_URL = IAFD_BASE + '/results.asp?searchtype=comprehensive&searchstring={0}'
+
+IAFD_ABSENT = u'\U0001F534'  # default value: red circle - not on IAFD
+IAFD_NOROLE = u'\U0001F7E1'  # yellow circle - found actor with no role unassigned
 
 # Date Formats used by website
 DATE_YMD = '%Y%m%d'
 DATEFORMAT = '%Y%m%d'
-
-# IAFD Search Mode - ALL|CAST: Search for film and Scene titles on IAFD | Search for Actor 
-IAFD_SEARCH_MODE = 'ALL'
 
 # Website Language
 SITE_LANGUAGE = 'en'
@@ -125,6 +129,23 @@ class GEVI(Agent.Movies):
                 filmDict['CompareShortTitle'] = self.SortComparisonString(self.NormaliseComparisonString(filmDict['ShortTitle']))
                 filmDict['SearchTitle'] = filmDict['ShortTitle']
                 break   # series found exit loop
+
+        # prepare IAFD Search String
+        filmDict['IAFDSearchTitle'] = filmDict['Title'].replace(' - ', ': ')         # iafd needs colons in place to search correctly
+        filmDict['IAFDSearchTitle'] = filmDict['IAFDSearchTitle'].replace('&', 'and')         # iafd does not use &
+
+        # split and take up to first occurence of character
+        splitChars = ['-', '[', '(', ur'\u2013', ur'\u2014']
+        pattern = u'[{0}]'.format(''.join(splitChars))
+        matched = re.search(pattern, filmDict['IAFDSearchTitle'])  # match against whole string
+        if matched:
+            numPos = matched.start()
+            filmDict['IAFDSearchTitle'] = filmDict['IAFDSearchTitle'][:numPos]
+
+        # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string 
+        filmDict['IAFDSearchTitle'] = String.StripDiacritics(filmDict['IAFDSearchTitle'])
+        filmDict['IAFDSearchTitle'] = String.URLEncode(filmDict['IAFDSearchTitle'])
+        filmDict['IAFDSearchTitle'] = filmDict['IAFDSearchTitle'].replace('%25', '%').replace('*', '')
 
         # print out dictionary values
         for key in sorted(filmDict.keys()):
@@ -337,9 +358,6 @@ class GEVI(Agent.Movies):
     def getIAFD_URLElement(self, myString):
         ''' check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not '''
         if not 'www.' in myString:
-            myString = myString.replace('&', 'and')
-            myString = String.StripDiacritics(myString.lower())
-            myString = String.URLEncode(myString.strip())
             myString = IAFD_SEARCH_URL.format(myString)
 
         myException = ''
@@ -354,86 +372,6 @@ class GEVI(Agent.Movies):
         raise Exception('Failed to read IAFD URL [%s]', myException)
 
     # -------------------------------------------------------------------------------------------------------------------------------
-    def getIAFD_Actor(self, htmlcast, filmDict):
-        ''' check IAFD web site for individual actors'''
-
-        filmDict['Year'] = int(filmDict['Year'])
-        NoRoleOnIAFD = u'\U0001F7E1'  # yellow circle - found actor with no role unassigned
-        actorDict =  {}
-        AKAList = []
-
-        for cast in htmlcast:
-            splitCast = cast.lower().split()
-            splitCast.sort()
-            try:
-                html = self.getIAFD_URLElement(cast)
-
-                # return list of actors with the searched name and iterate through them
-                xPathString = '//table[@id="tblMal" or @id="tblDir"]/tbody/tr[td[contains(.,"{0}")]]//ancestor::tr'.format(cast)
-                actorList = html.xpath(xPathString)
-                actorsFound = len(actorList)
-                self.log('SELF:: [ %s ] Actors Found named \t%s', actorsFound, cast)
-                for actor in actorList:     
-                    try:
-                        actorName = actor.xpath('./td[2]/a/text()[normalize-space()]')[0]          # get actor details and compare to Agent cast
-                        self.log('SELF:: Actor:           \t%s', actorName)
-                        splitActorName = actorName.lower().split()
-                        splitActorName.sort()
-                        if splitActorName != splitCast:
-                            self.log('SELF:: Actor: Failed Name Match: Agent [%s] - IAFD [%s]', cast, actorName)
-                            continue
-
-                        actorAKA = actor.xpath('./td[2]/a/text()[normalize-space()]')[0]           # get actor AKA details 
-                        startCareer = int(actor.xpath('./td[4]/text()[normalize-space()]')[0]) - 1 # set start of career to 1 year before for pre-releases
-                        endCareer = int(actor.xpath('./td[5]/text()[normalize-space()]')[0]) + 1   # set end of career to 1 year after to cater for late releases
-
-                        # only perform career checks if more than one actor found or if title is a compilation
-                        if actorsFound > 1 and not filmDict['Compilation']:    
-                            inRange = (startCareer <= filmDict['Year'] <= endCareer)
-                            if inRange == False:
-                                self.log('SELF:: Actor: Failed Career Range Match, Start: [%s] Film Year: [%s] End: [%s]', startCareer, filmDict['Year'], endCareer)
-                                continue
-
-                        # add cast name to Also Known as List for later deletion as we display IAFD main name rather than Agent name
-                        if cast in actorAKA:
-                            self.log('SELF:: Alias:           \t%s', cast)
-                            AKAList.append(cast)
-
-                        actorURL = IAFD_BASE + actor.xpath('./td[2]/a/@href')[0]
-                        actorPhoto = actor.xpath('./td[1]/a/img/@src')[0] # actor name on agent website - retrieve picture
-                        actorPhoto = '' if 'th_iafd_ad.gif' in actorPhoto else actorPhoto.replace('thumbs/th_', '')
-                        actorRole = NoRoleOnIAFD
-
-                        self.log('SELF:: Start Career:    \t%s', startCareer)
-                        self.log('SELF:: End Career:      \t%s', endCareer)
-                        self.log('SELF:: Actor URL:       \t%s', actorURL)
-                        self.log('SELF:: Actor Photo:     \t%s', actorPhoto)
-
-                        # Assign values to dictionary
-                        myDict = {}
-                        myDict['Photo'] = actorPhoto
-                        myDict['Role'] = actorRole
-                        actorDict[actorName] = myDict
-
-                        # processed an actor in site List - break out of loop
-                        break   
-                    except Exception as e:
-                        self.log('SELF:: Error: Processing IAFD Actor List: %s', e)
-                        continue
-
-            except Exception as e:
-                self.log('SELF:: Error: Processing Agent Actor List: %s', e)
-
-        # leave actors not found on IAFD - remove AKA entries
-        htmlcast = [cast for cast in htmlcast if cast not in actorDict.keys()]
-        htmlcast = [cast for cast in htmlcast if cast not in AKAList]
-
-        self.log('SELF:: Cast Processed: Found Actors: \t%s', actorDict.keys())
-        self.log('SELF:: Cast Processed: Actors Left:  \t%s', htmlcast)
-
-        return htmlcast, actorDict
-
-    # -------------------------------------------------------------------------------------------------------------------------------
     def getIAFD_Film(self, htmlcast, filmDict):
         ''' check IAFD web site for better quality actor thumbnails per movie'''
 
@@ -441,7 +379,7 @@ class GEVI(Agent.Movies):
 
         # search for Film Title on IAFD and check off credited actors
         try:
-            html = self.getIAFD_URLElement(filmDict['ShortTitle'])
+            html = self.getIAFD_URLElement(filmDict['IAFDSearchTitle'])
             # get films listed within 1 year of what is on agent - as IAFD may have a different year recorded
             filmDict['Year'] = int(filmDict['Year'])
             filmList = html.xpath('//table[@id="titleresult"]/tbody/tr/td[2][.>="{0}" and .<="{1}"]/ancestor::tr'.format(filmDict['Year'] - 1, filmDict['Year'] + 1))
@@ -449,7 +387,6 @@ class GEVI(Agent.Movies):
             if not filmList:        # movie not on IAFD - switch to CAST Mode
                 raise Exception('No Movie by this name on IAFD')
 
-            NoRoleOnIAFD = u'\U0001F7E1'  # yellow circle - found actor with no role unassigned
             AKAList = []
             for film in filmList:
                 try:
@@ -465,7 +402,6 @@ class GEVI(Agent.Movies):
                         try:
                             akaTitle = film.xpath('./td[4]/text()')[0].strip()
                             if akaTitle:
-                                self.log('SELF:: here 2        \t%s', compareIAFDTitle)
                                 compareAKATitle = self.SortComparisonString(self.NormaliseComparisonString(akaTitle))
                                 self.log('SELF:: AKA Film Title       \t%s', akaTitle)
                                 self.log('SELF:: AKA Compare Title    \t%s', compareAKATitle)
@@ -507,7 +443,7 @@ class GEVI(Agent.Movies):
                         actorPhoto = '' if 'nophoto' in actorPhoto else actorPhoto
                         actorRole = actor.xpath('./text()')
                         actorRole = ' '.join(actorRole).strip()
-                        actorRole = actorRole if actorRole else NoRoleOnIAFD
+                        actorRole = actorRole if actorRole else IAFD_NOROLE
 
                         # if credited with other name - remove it from htmlcast
                         try:
@@ -534,14 +470,103 @@ class GEVI(Agent.Movies):
                 # if we get here we have found a match
                 break
 
-            # leave actors not found on IAFD and credited as
+
+            # determine if there are any duplicates - by removing spaces and possible '.' after initials 
+            duplicateList = []
+            for cast in htmlcast:
+                onlyAlphaCast = re.sub('[^A-Za-z]+', '', cast)
+                for key in actorDict.keys():
+                    if re.sub('[^A-Za-z]+', '', key) == onlyAlphaCast:
+                        duplicateList.append(cast)
+
+            # leave actors 'not found on IAFD' and 'AKA' and 'Duplicate'
             htmlcast = [cast for cast in htmlcast if cast not in actorDict.keys()]
             htmlcast = [cast for cast in htmlcast if cast not in AKAList]
+            htmlcast = [cast for cast in htmlcast if cast not in duplicateList]
 
             self.log('SELF:: Film Processed: Found Actors: \t%s', actorDict.keys())
             self.log('SELF:: Film Processed: Actors Left:  \t%s', htmlcast)
         except Exception as e:
             self.log('SELF:: Error: IAFD Actor Search Failure, %s', e)
+
+        return htmlcast, actorDict
+
+    # -------------------------------------------------------------------------------------------------------------------------------
+    def getIAFD_Actor(self, htmlcast, filmDict):
+        ''' check IAFD web site for individual actors'''
+
+        filmDict['Year'] = int(filmDict['Year'])
+        actorDict =  {}
+        AKAList = []
+
+        for cast in htmlcast:
+            splitCast = cast.lower().split()
+            splitCast.sort()
+            try:
+                html = self.getIAFD_URLElement(String.URLEncode(cast))
+
+                # return list of actors with the searched name and iterate through them
+                xPathString = '//table[@id="tblMal" or @id="tblDir"]/tbody/tr[td[contains(.,"{0}")]]//ancestor::tr'.format(cast)
+                actorList = html.xpath(xPathString)
+                actorsFound = len(actorList)
+                self.log('SELF:: [ %s ] Actors Found named \t%s', actorsFound, cast)
+                for actor in actorList:     
+                    try:
+                        actorName = actor.xpath('./td[2]/a/text()[normalize-space()]')[0]          # get actor details and compare to Agent cast
+                        self.log('SELF:: Actor:           \t%s', actorName)
+                        splitActorName = actorName.lower().split()
+                        splitActorName.sort()
+                        if splitActorName != splitCast:
+                            self.log('SELF:: Actor: Failed Name Match: Agent [%s] - IAFD [%s]', cast, actorName)
+                            continue
+
+                        actorAKA = actor.xpath('./td[2]/a/text()[normalize-space()]')[0]           # get actor AKA details 
+                        startCareer = int(actor.xpath('./td[4]/text()[normalize-space()]')[0]) - 1 # set start of career to 1 year before for pre-releases
+                        endCareer = int(actor.xpath('./td[5]/text()[normalize-space()]')[0]) + 1   # set end of career to 1 year after to cater for late releases
+
+                        # only perform career checks if more than one actor found or if title is a compilation
+                        if actorsFound > 1 and not filmDict['Compilation']:    
+                            inRange = (startCareer <= filmDict['Year'] <= endCareer)
+                            if inRange == False:
+                                self.log('SELF:: Actor: Failed Career Range Match, Start: [%s] Film Year: [%s] End: [%s]', startCareer, filmDict['Year'], endCareer)
+                                continue
+
+                        # add cast name to Also Known as List for later deletion as we display IAFD main name rather than Agent name
+                        if cast in actorAKA:
+                            self.log('SELF:: Alias:           \t%s', cast)
+                            AKAList.append(cast)
+
+                        actorURL = IAFD_BASE + actor.xpath('./td[2]/a/@href')[0]
+                        actorPhoto = actor.xpath('./td[1]/a/img/@src')[0] # actor name on agent website - retrieve picture
+                        actorPhoto = '' if 'th_iafd_ad.gif' in actorPhoto else actorPhoto.replace('thumbs/th_', '')
+                        actorRole = IAFD_NOROLE
+
+                        self.log('SELF:: Start Career:    \t%s', startCareer)
+                        self.log('SELF:: End Career:      \t%s', endCareer)
+                        self.log('SELF:: Actor URL:       \t%s', actorURL)
+                        self.log('SELF:: Actor Photo:     \t%s', actorPhoto)
+
+                        # Assign values to dictionary
+                        myDict = {}
+                        myDict['Photo'] = actorPhoto
+                        myDict['Role'] = actorRole
+                        actorDict[actorName] = myDict
+
+                        # processed an actor in site List - break out of loop
+                        break   
+                    except Exception as e:
+                        self.log('SELF:: Error: Processing IAFD Actor List: %s', e)
+                        continue
+
+            except Exception as e:
+                self.log('SELF:: Error: Processing Agent Actor List: %s', e)
+
+        # leave actors not found on IAFD - remove AKA entries
+        htmlcast = [cast for cast in htmlcast if cast not in actorDict.keys()]
+        htmlcast = [cast for cast in htmlcast if cast not in AKAList]
+
+        self.log('SELF:: Cast Processed: Found Actors: \t%s', actorDict.keys())
+        self.log('SELF:: Cast Processed: Actors Left:  \t%s', htmlcast)
 
         return htmlcast, actorDict
 
@@ -617,8 +642,8 @@ class GEVI(Agent.Movies):
                     siteCompareTitle = self.SortComparisonString(self.NormaliseComparisonString(siteTitle))
 
                     # standard match - full film title to site title
-                    self.log('SEARCH:: Site Title "%s"', siteTitle)
-                    self.log('SEARCH:: Compare Title "%s"', siteCompareTitle)
+                    self.log('SEARCH:: Site Title                    "%s"', siteTitle)
+                    self.log('SEARCH:: Site Compare Title            "%s"', siteCompareTitle)
                     self.log('SEARCH:: Dictionary Compare Full Title "%s"', filmDict['CompareFullTitle'])
                     self.log('SEARCH:: Dictionary Compare Short Tile "%s"', filmDict['CompareShortTitle'])
                     if siteCompareTitle == filmDict['CompareFullTitle'] or siteCompareTitle == filmDict['CompareShortTitle']:
@@ -865,14 +890,12 @@ class GEVI(Agent.Movies):
             self.log('UPDATE:: Error getting Director(s): %s', e)
 
         # 2e.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
-        AbsentOnIAFD = u'\U0001F534'  # default value: red circle - not on IAFD
         castdict = {}
         filmcastLeft = []
         try:
             htmlcast = html.xpath('//td[@class="pd"]/a/text()')
             htmlcast = [x.split('(')[0].strip() if '(' in x else x.strip() for x in htmlcast]
             htmlcast = [x for x in htmlcast if x]      
-            filmDict['Title'] = filmDict['Title'].replace(' - ', ':')         # iafd needs colons in place to search correctly
 
             # If there is a corresponding Film Entry on IAFD, process all actors recorded in the IAFD entry
             self.log('UPDATE:: Process in Film Mode: %s Recorded Actors: %s', len(htmlcast), htmlcast)
@@ -897,7 +920,7 @@ class GEVI(Agent.Movies):
             if filmcastLeft:
                 self.log('UPDATE:: %s Actors absent on IAFD: %s', len(filmcastLeft), filmcastLeft)
                 for cast in filmcastLeft:
-                    castdict[cast] = {'Photo': '', 'Role': AbsentOnIAFD}
+                    castdict[cast] = {'Photo': '', 'Role': IAFD_ABSENT}
 
             # sort the dictionary and add kv to metadata
             metadata.roles.clear()
@@ -920,37 +943,56 @@ class GEVI(Agent.Movies):
                 if genre:
                     genres.append(genre)
 
-            genres.sort()
-            metadata.genres.clear()
-            for genre in genres:
-                metadata.genres.add(genre)
+            if genres:
+                genres.sort()
+                metadata.genres.clear()
+                for genre in genres:
+                    metadata.genres.add(genre)
         except Exception as e:
             self.log('UPDATE:: Error getting Genres: %s', e)
 
         # 2g.   Posters/Background Art
+        #       GEVI does not distinguish between poster and back ground images - we assume first image is poster and second is background
+        #           if there is only 1 image - apply it to both
         try:
-            htmlimages = html.xpath('//td[@class="gp"]/a/@href')
-            posterImages = htmlimages if len(htmlimages) == 1 else htmlimages[::2]          # assume poster images first
-            backgroundImages = htmlimages if len(htmlimages) == 1 else htmlimages[1::2]     # are followed by their background images
+            htmlimages = html.xpath('//img[@class="previewCover"]/@src')
+            htmlimages = [(BASE_URL if BASE_URL not in image else '') + image for image in htmlimages] 
+            imagesFound = len(htmlimages)
+            self.log('UPDATE:: [%s] Images Found', imagesFound)
 
             validPosterList = []
-            for image in posterImages:
-                image = (BASE_URL if BASE_URL not in image else '') + image
-                self.log('UPDATE:: Movie Poster Found: %s', image)
-                validPosterList.append(image)
-                if image not in metadata.posters:
-                    metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-                #  clean up and only keep the poster we have added
-                metadata.posters.validate_keys(validPosterList)
-
             validArtList = []
-            for image in backgroundImages:
-                image = (BASE_URL if BASE_URL not in image else '') + image
-                self.log('UPDATE:: Movie Background Art Found: %s', image)
+            if imagesFound == 1:
+                image = htmlimages[0]
+                self.log('UPDATE:: Poster/Background Image Found: [1] - %s', image)
+                validPosterList.append(image)
                 validArtList.append(image)
-                if image not in metadata.art:
-                    metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-                #  clean up and only keep the Art we have added
-                metadata.art.validate_keys(validArtList)
+                metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+            elif imagesFound == 2:
+                image = htmlimages[0]
+                self.log('UPDATE:: Poster Image Found: [1] - %s', image)
+                validPosterList.append(image)
+                metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+                image = htmlimages[1]
+                self.log('UPDATE:: Background Image Found: [2] - %s', image)
+                validArtList.append(image)
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+            else:
+                for index, image in enumerate(htmlimages, start=1):
+                    self.log('UPDATE:: Image Found: [%s] - %s', index, image)
+                    if index == 2: # second image is usually a background
+                        continue
+                    validPosterList.append(image)
+                    metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=index)
+                    if index == 1: # first picture is usually the poster
+                        continue
+                    validArtList.append(image)
+                    metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order= index - 1)
+
+            #  clean up and only keep the poster/background art we have added
+            metadata.posters.validate_keys(validPosterList)
+            metadata.art.validate_keys(validArtList)
+
         except Exception as e:
             self.log('UPDATE:: Error getting Poster/Background Art: %s', e)
