@@ -28,13 +28,14 @@
     09 Jan 2021   2020.12.25.24    Adjusted poster/background image collection as website xpath had changed
                                    change to the collection of images - first image is now poster, second image defaults to backgroun
                                    image 3 on wards are added to both collections to give a choice.
+    09 Jan 2021   2020.12.25.25    change of xpath to images - it wouldn't work on some films (Bear Films) - Bears in Heat (2008)????
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import datetime, platform, os, re, sys, unicodedata, json
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.24'
+VERSION_NO = '2019.12.25.25'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 REGEX = Prefs['regex']
@@ -955,10 +956,10 @@ class GEVI(Agent.Movies):
         #       GEVI does not distinguish between poster and back ground images - we assume first image is poster and second is background
         #           if there is only 1 image - apply it to both
         try:
-            htmlimages = html.xpath('//img[@class="previewCover"]/@src')
-            htmlimages = [(BASE_URL if BASE_URL not in image else '') + image for image in htmlimages] 
+            htmlimages = html.xpath('//img/@src[contains(.,"Covers")]')
             imagesFound = len(htmlimages)
-            self.log('UPDATE:: [%s] Images Found', imagesFound)
+            self.log('UPDATE:: [%s] Images Found: %s', imagesFound, htmlimages)
+            htmlimages = [(BASE_URL if BASE_URL not in image else '') + image for image in htmlimages] 
 
             validPosterList = []
             validArtList = []
