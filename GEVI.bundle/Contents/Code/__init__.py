@@ -721,7 +721,6 @@ class GEVI(Agent.Movies):
                     self.log('SEARCH:: %s Site URL Release Dates: %s', len(htmlReleaseDate), htmlReleaseDate)
                     for ReleaseDate in htmlReleaseDate:
                         try:
-
                             self.log('SEARCH:: Release Date: %s Compare against: %s', filmDict['CompareDate'], ReleaseDate)
                             ReleaseDate = self.matchReleaseDate(filmDict['CompareDate'], ReleaseDate)
                             siteReleaseDate = ReleaseDate
@@ -799,6 +798,7 @@ class GEVI(Agent.Movies):
         # 1f. Collection
         metadata.collections.clear()
         metadata.collections.add(filmDict['Collection'])
+        self.log('UPDATE:: Collection Set From filename: %s', filmDict['Collection'])
 
         # 2a.   Summary = Promo + Scenes + Legend
         try:

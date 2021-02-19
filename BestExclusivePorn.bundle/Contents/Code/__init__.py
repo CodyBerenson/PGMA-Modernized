@@ -15,15 +15,18 @@
     07 Oct 2020   2020.08.09.05    IAFD - change to https
                                    get cast names from statting label if present
     22 Nov 2020   2020.08.09.06    leave words attached to commas in search string
+    23 Dec 2020   2020.08.09.07    Save film in Title Case mode... as this agent detects actor names from the title as they have initial caps
+    26 Dec 2020   2020.08.09.08    Improved on IAFD search, actors sexual roles if recorded are returned, if not shows a red circle.
+                                   if actor is not credited on IAFD but is on Agent Site it shows as a Yellow Box below the actor
+                                   sped up search by removing search by actor/director... less hits on IAFD per actor...
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
-import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
-import site
+import datetime, platform, os, re, sys, unicodedata
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.08.09.06'
+VERSION_NO = '2020.08.09.08'
 PLUGIN_LOG_TITLE = 'BestExclusivePorn'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -149,7 +152,7 @@ class BestExclusivePorn(Agent.Movies):
         myString = myString.lower().strip()
 
         # remove words with apostrophes in them
-        badChars = ["'", ur'\u2018', ur'\u2019']
+        badChars = ["'", ur'\u2018', ur'\u2019', '-']
         pattern = u"\w*[{0}]\w*".format(''.join(badChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
@@ -209,63 +212,70 @@ class BestExclusivePorn(Agent.Movies):
         return myString if myString else ' '     # return single space to initialise metadata summary field
 
     # -------------------------------------------------------------------------------------------------------------------------------
-    def getIAFDActorImage(self, myString, FilmYear):
+    def getIAFDActorImage(self, myString, FilmYear, compareTitle):
         ''' check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not '''
 
-        actorname = myString
+        myString = myString.strip()
+        searchActor = myString
         myString = String.StripDiacritics(myString).lower()
-
-        # build list containing three possible cast links 1. Full Search in case of AKAs 2. as Performer 3. as Director
-        # the 2nd and 3rd links will only be used if there is no search result
-        urlList = []
-        fullname = myString.replace(' ', '').replace("'", '').replace(".", '')
-        full_name = myString.replace(' ', '-').replace("'", '&apos;')
-        for gender in ['m', 'd']:
-            url = 'https://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
-            urlList.append(url)
-
         myString = String.URLEncode(myString)
         url = 'https://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
-        urlList.append(url)
 
+        FilmYear = int(FilmYear)
         photourl = ''
-        for count, url in enumerate(urlList, start=1):
-            try:
-                self.log('SELF:: %s. IAFD Actor search string [ %s ]', count, url)
-                html = HTML.ElementFromURL(url)
-                if 'gender=' in url:
-                    career = html.xpath('//p[.="Years Active"]/following-sibling::p[1]/text()[normalize-space()]')[0]
-                    try:
-                        startCareer = career.split('-')[0]
-                        self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
-                        if startCareer <= FilmYear:
-                            photourl = html.xpath('//*[@id="headshot"]/img/@src')[0]
-                            photourl = 'nophoto' if 'nophoto' in photourl else photourl
-                            self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
-                            break
-                    except:
-                        continue
-                else:
-                    xPathString = '//table[@id="tblMal" or @id="tblDir"]/tbody/tr/td[contains(normalize-space(.),"{0}")]/parent::tr'.format(actorname)
-                    actorList = html.xpath(xPathString)
-                    for actor in actorList:
-                        try:
-                            startCareer = actor.xpath('./td[4]/text()[normalize-space()]')[0]
-                            self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
-                            if startCareer <= FilmYear:
-                                photourl = actor.xpath('./td[1]/a/img/@src')[0]
-                                photourl = 'nophoto' if photourl == 'https://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
-                                self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
-                                break
-                        except:
-                            continue
+        role = ''
+        try:
+            # the IAFD website can be notoriously slow at times, so give it 3 times to search for an actor
+            for i in range(2):
+                try:
+                    html = HTML.ElementFromURL(url, timeout=20, sleep=DELAY)
                     break
-            except Exception as e:
-                photourl = ''
-                self.log('SELF:: Error: Search %s Result: Could not retrieve IAFD Actor Page, %s', count, e)
-                continue
+                except Exception as e:
+                    if i == 2:
+                        raise Exception('Failed to Search for Actor [%s]', e)
+                    continue
 
-        return photourl
+            # return list of actors with the searched name and iterate through them
+            self.log('SELF:: Search IAFD for all Actors named as [ %s ]', searchActor)
+            xPathString = '//table[@id="tblMal" or @id="tblDir"]/tbody/tr/td[contains(normalize-space(.),"{0}")]/parent::tr'.format(searchActor)
+            actorList = html.xpath(xPathString)
+            for actor in actorList:
+                try:
+                    # get actor details 
+                    startCareer = int(actor.xpath('./td[4]/text()[normalize-space()]')[0]) - 1   # set start of career to 1 year before for pre-releases
+                    endCareer = int(actor.xpath('./td[5]/text()[normalize-space()]')[0]) + 1     # set end of career to 1 year after to cater for late releases
+                    if not (startCareer <= FilmYear <= endCareer):
+                        continue
+
+                    actorName = actor.xpath('./td[2]/a/text()[normalize-space()]')[0]
+                    actorURL = 'https://www.iafd.com' + actor.xpath('./td[2]/a/@href')[0]
+                    photourl = actor.xpath('./td[1]/a/img/@src')[0] # actor name on agent website - retrieve picture
+                    photourl = 'nophoto' if photourl == 'https://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
+                    role = u'\U0001F7E8' # default: yellow square - actor not credited on IAFD
+                    self.log('SELF:: Actor: %s active from [%s to %s] --- URL %s', actorName, startCareer, endCareer, actorURL)
+                    try:
+                        actorHtml = HTML.ElementFromURL(actorURL, sleep=DELAY)
+                        htmlFilms = actorHtml.xpath('//a[@href[contains(.,"/year={0}")]]/ancestor::tr'.format(FilmYear))
+                        for filmrow in htmlFilms:
+                            film = filmrow.xpath('./td[1]/a/text()')[0].strip()
+                            compareFilm = self.NormaliseComparisonString(film)
+                            if compareFilm == compareTitle:
+                                role = filmrow.xpath('./td[4]/i/text()')[0].strip()
+                                role = u'\U0001F534' if not role else role # missing role on IAFD
+                                self.log('SELF:: Film found [ %s (%s) ] Role: [ %s ] Photo: [ %s ]', film, FilmYear, role, photourl)
+                                break
+                    except Exception as e:
+                        self.log('SELF:: Error reading Actor URL page: %s', e)
+                        continue
+                except:
+                    continue
+                break   # found an actor - break out of loop
+        except Exception as e:
+            role = ''
+            photourl = ''
+            self.log('SELF:: Error: IAFD Actor Search Failure, %s', e)
+        
+        return [photourl, role]
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def log(self, message, *args):
@@ -308,7 +318,7 @@ class BestExclusivePorn(Agent.Movies):
         compareTitle = self.NormaliseComparisonString(FilmTitle)
         compareReleaseDate = datetime.datetime(int(FilmYear), 12, 31)  # default to 31 Dec of Filename yesr
 
-        # Search Query - for use to search the internet, remove all non alphabetic characters as GayMovie site returns no results if apostrophes or commas exist etc..
+        # Search Query - for use to search the internet, remove all non alphabetic characters as returns no results if apostrophes exist etc..
         searchTitle = self.CleanSearchString(FilmTitle)
         searchQuery = BASE_SEARCH_URL.format(searchTitle)
 
@@ -439,7 +449,7 @@ class BestExclusivePorn(Agent.Movies):
         self.log('UPDATE:: Studio: "%s"' % metadata.studio)
 
         # 1b.   Set Title
-        metadata.title = FilmTitle
+        metadata.title = " ".join(word.capitalize() for word in FilmTitle.split())
         self.log('UPDATE:: Video Title: "%s"' % metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
@@ -481,40 +491,41 @@ class BestExclusivePorn(Agent.Movies):
 
         # 2c.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
         #             If there is a Starring heading use it to get the actors else try searching the title for the cast
+        compareTitle = self.NormaliseComparisonString(FilmTitle)
         castdict = {}
         actors = []
         try:
             htmlcast = html.xpath('.//div[@class="entry"]/p/text()[contains(.,"Starring: ")]')[0].strip().replace('Starring: ', '').split(',')
             self.log('UPDATE:: %s Cast Found: %s', len(htmlcast), htmlcast)
             for cast in htmlcast:
-                cast = cast.strip()
-                if cast:
-                    actors.append(cast)
+                castname = cast.strip()
+                if castname:
+                    actors.append(castname)
         except Exception as e:
             self.log('UPDATE - Error getting Cast: No Starring Entry - Attempt getting cast from title: %s', e)
             pattern = u'([A-Z][a-z]+|\.)(?:\s+([A-Z][a-z]+|\.))'
             matches = re.findall(pattern, FilmTitle)  # match against Film title
             self.log('UPDATE:: Matches:: {0}'.format(matches))
             if matches:
-                for count, cast in enumerate(matches, 1):
-                    cast = [str(i) for i in cast]
-                    cast = ' '.join(cast).strip()
-                    self.log('UPDATE:: {0}. Found Possible Cast Name:: {1}'.format(count, cast))
-                    if cast:
-                        actors.append(cast)
+                for count, castname in enumerate(matches, 1):
+                    castname = [str(i) for i in castname]
+                    castname = ' '.join(castname).strip()
+                    self.log('UPDATE:: {0}. Found Possible Cast Name:: {1}'.format(count, castname))
+                    if castname:
+                        actors.append(castname)
         if actors:
-            for cast in actors:
-                castpicture = self.getIAFDActorImage(cast, FilmYear)
-                if castpicture:
-                    castdict[cast] = castpicture
-                    castdict[cast] = '' if castdict[cast] == 'nophoto' else castdict[cast]
+            for castname in actors:
+                castlist = self.getIAFDActorImage(castname, FilmYear, compareTitle) # composed of picture and role
+                castlist[0] = '' if castlist[0] == 'nophoto' else castlist[0]
+                castdict[castname] = castlist
 
             # sort the dictionary and add kv to metadata
             metadata.roles.clear()
             for key in sorted(castdict):
-                role = metadata.roles.new()
-                role.name = key
-                role.photo = castdict[key]
+                cast = metadata.roles.new()
+                cast.photo = castdict[key][0]
+                cast.role = castdict[key][1]
+                cast.name = key
         else:
             self.log('UPDATE - Error getting Cast: No Cast Found')
 

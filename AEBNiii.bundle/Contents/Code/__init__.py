@@ -16,14 +16,15 @@
     14 Jul 2020   2020.05.21.04    Enhanced seach to also look through the exact matches, as AEBN does not always put these
                                    in the general search results
     07 Oct 2020   2020.05.21.05    IAFD - change to https
+    09 Jan 2021   2020.05.21.06    IAFD - New Search Routine + Auto Collection setting
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
-import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
+import datetime, platform, os, re, sys, unicodedata, json
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.05.21.05'
+VERSION_NO = '2020.05.21.06'
 PLUGIN_LOG_TITLE = 'AEBN iii'
 
 # Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
@@ -38,6 +39,13 @@ DETECT = Prefs['detect']
 # URLS
 BASE_URL = 'https://gay.aebn.com'
 BASE_SEARCH_URL = [BASE_URL + '/gay/search/?sysQuery={0}', BASE_URL + '/gay/search/movies/page/1?sysQuery={0}&criteria=%7B%22sort%22%3A%22Relevance%22%7D']
+
+# IAFD Related variables
+IAFD_BASE = 'https://www.iafd.com'
+IAFD_SEARCH_URL = IAFD_BASE + '/results.asp?searchtype=comprehensive&searchstring={0}'
+
+IAFD_ABSENT = u'\U0001F534'  # default value: red circle - not on IAFD
+IAFD_NOROLE = u'\U0001F7E1'  # yellow circle - found actor with no role unassigned
 
 # Date Formats used by website
 DATE_YMD = '%Y%m%d'
@@ -77,14 +85,65 @@ class AEBNiii(Agent.Movies):
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def matchFilename(self, filename):
-        ''' return groups from filename regex match else return false '''
+        ''' Check filename on disk corresponds to regex preference format '''
         pattern = re.compile(REGEX)
         matched = pattern.search(filename)
+        if not matched:
+            raise Exception("File Name [{0}] not in the expected format: (Studio) - Title (Year)".format(filename))
+
+        filmDict = {}
+        groups = matched.groupdict()
+        filmDict['Studio'] = groups['studio']
+        filmDict['CompareStudio'] = self.NormaliseComparisonString(filmDict['Studio'])
+
+        filmDict['Title'] =  groups['title']
+        filmDict['ShortTitle'] = filmDict['Title']
+        filmDict['CompareFullTitle'] = self.SortComparisonString(self.NormaliseComparisonString(filmDict['Title']))
+        filmDict['CompareShortTitle'] = filmDict['CompareFullTitle']
+        filmDict['SearchTitle'] = filmDict['Title']
+
+        filmDict['Year'] = groups['year']
+        filmDict['CompareDate'] = datetime.datetime(int(filmDict['Year']), 12, 31) # default to 31 Dec of Filename year
+
+        filmDict['Collection'] = ''
+        filmDict['Compilation'] = '' # default value to be set when movie is being matched
+
+        pattern = r'(?:[\-,]\s)'     # Films in series would either have commas or ' - ' (colons)
+        splitFilmTitle = re.compile(pattern).split(filmDict['Title'])
+        for partTitle in splitFilmTitle:
+            pattern = r'(?<![-.])\b[0-9]+\b(?!\.[0-9])$' # look for whole separate number at end of string
+            matchedSeries = re.subn(pattern, '', partTitle.strip())
+            if matchedSeries[1]:
+                filmDict['Collection'] = matchedSeries[0].strip()
+                filmDict['ShortTitle'] = re.sub('{0}|(?:[\-,]\s)'.format(partTitle), '', filmDict['Title'], flags=re.IGNORECASE)
+                if not filmDict['ShortTitle']:
+                    filmDict['ShortTitle'] = filmDict['Title']
+                filmDict['CompareShortTitle'] = self.SortComparisonString(self.NormaliseComparisonString(filmDict['ShortTitle']))
+                filmDict['SearchTitle'] = filmDict['ShortTitle']
+                break   # series found exit loop
+
+        # prepare IAFD Search String
+        filmDict['IAFDSearchTitle'] = filmDict['Title'].replace(' - ', ': ')         # iafd needs colons in place to search correctly
+        filmDict['IAFDSearchTitle'] = filmDict['IAFDSearchTitle'].replace('&', 'and')         # iafd does not use &
+
+        # split and take up to first occurence of character
+        splitChars = ['-', '[', '(', ur'\u2013', ur'\u2014']
+        pattern = u'[{0}]'.format(''.join(splitChars))
+        matched = re.search(pattern, filmDict['IAFDSearchTitle'])  # match against whole string
         if matched:
-            groups = matched.groupdict()
-            return groups['studio'], groups['title'], groups['year']
-        else:
-            raise Exception("File Name [{0}] not in the expected format: (Studio) - Title (Year)".format(file))
+            numPos = matched.start()
+            filmDict['IAFDSearchTitle'] = filmDict['IAFDSearchTitle'][:numPos]
+
+        # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string 
+        filmDict['IAFDSearchTitle'] = String.StripDiacritics(filmDict['IAFDSearchTitle'])
+        filmDict['IAFDSearchTitle'] = String.URLEncode(filmDict['IAFDSearchTitle'])
+        filmDict['IAFDSearchTitle'] = filmDict['IAFDSearchTitle'].replace('%25', '%').replace('*', '')
+
+        # print out dictionary values
+        for key in sorted(filmDict.keys()):
+            self.log('SEARCH:: {%s} = %s', key, filmDict[key])
+
+        return filmDict
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def matchStudioName(self, fileStudioName, siteStudioName):
@@ -122,22 +181,24 @@ class AEBNiii(Agent.Movies):
         return siteDate
 
     # -------------------------------------------------------------------------------------------------------------------------------
-    def matchTitle(self, ExactMatches, title, compareDict):
+    def matchTitle(self, ExactMatches, title, filmDict):
         ''' match Film in list returned by running the query '''
         matched = True
-        TitleDict = {}
-
-        # set comparison values
-        compareTitle = compareDict['Title']
-        compareStudio = compareDict['Studio']
-        compareReleaseDate = compareDict['ReleaseDate']
 
         # Site Title
         try:
             siteTitle = title.xpath('./section//h1/a/text()')[0] if ExactMatches else title.xpath('./a//img/@title')[0]
-            siteTitle = self.NormaliseComparisonString(siteTitle)
-            self.log('SELF:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
-            if siteTitle != compareTitle:
+            siteCompareTitle = self.SortComparisonString(self.NormaliseComparisonString(siteTitle))
+
+            # standard match - full film title to site title
+            self.log('SEARCH:: Site Title                    "%s"', siteTitle)
+            self.log('SEARCH:: Site Compare Title            "%s"', siteCompareTitle)
+            self.log('SEARCH:: Dictionary Compare Full Title "%s"', filmDict['CompareFullTitle'])
+            self.log('SEARCH:: Dictionary Compare Short Tile "%s"', filmDict['CompareShortTitle'])
+            if siteCompareTitle == filmDict['CompareFullTitle'] or siteCompareTitle == filmDict['CompareShortTitle']:
+                self.log('SEARCH:: Title Match [True]  : Site Title "%s"', siteTitle)
+            else:
+                self.log('SEARCH:: Title Match [False] : Site Title "%s"', siteTitle)
                 matched = False
         except:
             self.log('SELF:: Error getting Site Title')
@@ -148,6 +209,7 @@ class AEBNiii(Agent.Movies):
             try:
                 siteURL = title.xpath('./section//h1/a/@href')[0] if ExactMatches else title.xpath('./a/@href')[0]
                 siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
+                filmDict['SiteURL'] = siteURL
                 self.log('SELF:: Site Title url: %s', siteURL)
             except:
                 self.log('SELF:: Error getting Site Title Url')
@@ -157,7 +219,7 @@ class AEBNiii(Agent.Movies):
         if matched:
             if not ExactMatches:
                 try:
-                    html = HTML.ElementFromURL(siteURL, sleep=DELAY)
+                    html = HTML.ElementFromURL(filmDict['SiteURL'], sleep=DELAY)
                 except Exception as e:
                     self.log('SELF:: Error reading Site URL page: %s', e)
                     matched = False
@@ -170,8 +232,8 @@ class AEBNiii(Agent.Movies):
                 self.log('SELF:: %s Site URL Studios: %s', len(htmlSiteStudio), htmlSiteStudio)
                 for siteStudio in htmlSiteStudio:
                     try:
-                        self.matchStudioName(compareStudio, siteStudio)
-                        self.log('SELF:: %s Compare with: %s', compareStudio, siteStudio)
+                        self.log('SEARCH:: Studio: %s Compare against: %s', filmDict['CompareStudio'], siteStudio)
+                        self.matchStudioName(filmDict['CompareStudio'], siteStudio)
                         foundStudio = True
                     except Exception as e:
                         self.log('SELF:: Error: %s', e)
@@ -194,21 +256,17 @@ class AEBNiii(Agent.Movies):
                 siteReleaseDate = siteReleaseDate.replace('sept ', 'sep ').replace('july ', 'jul ')
                 self.log('SELF:: Site URL Release Date: %s', siteReleaseDate)
                 try:
-                    siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteReleaseDate)
+                    siteReleaseDate = self.matchReleaseDate(filmDict['CompareDate'], siteReleaseDate)
                 except Exception as e:
                     self.log('SELF:: Error getting Site URL Release Date: %s', e)
                     matched = False
             except:
                 self.log('SELF:: Error getting Site URL Release Date: Default to Filename Date')
-                siteReleaseDate = compareReleaseDate
+                siteReleaseDate = filmDict['CompareDate']
 
-        if matched:
-            TitleDict['Title'] = siteTitle
-            TitleDict['Studio'] = siteStudio
-            TitleDict['ReleaseDate'] = siteReleaseDate
-            TitleDict['URL'] = siteURL
+            filmDict['CompareDate'] = siteReleaseDate.strftime(DATE_YMD)
 
-        return TitleDict
+        return matched
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def NormaliseComparisonString(self, myString):
@@ -227,6 +285,17 @@ class AEBNiii(Agent.Movies):
         pattern = ur'[.](org|com|net|co[.][a-z]{2})|Vol[.]|\bPart\b|\bVolume\b|(?<!\d)1(?!\d)|[^A-Za-z0-9]+'
         myString = re.sub(pattern, '', myString, flags=re.IGNORECASE)
 
+        return myString
+
+    # -------------------------------------------------------------------------------------------------------------------------------
+    def SortComparisonString(self, myString):
+        ''' Sort Normalised string, keep numbers in the order they appear followed by other characters in sort order '''
+        numeric_string = re.sub(r'[^0-9]', '', myString).strip()
+        alphabetic_string = re.sub(r'[0-9]', '', myString).strip()
+        alphabetic_string = ''.join(sorted(alphabetic_string))
+        myString = numeric_string + alphabetic_string
+
+        #   return string as concatenation of numeric + sorted alphabet list - this keeps 32 string unequal to 23 string etc
         return myString
 
     # -------------------------------------------------------------------------------------------------------------------------------
@@ -284,63 +353,220 @@ class AEBNiii(Agent.Movies):
         return myString if myString else ' '     # return single space to initialise metadata summary field
 
     # -------------------------------------------------------------------------------------------------------------------------------
-    def getIAFDActorImage(self, myString, FilmYear):
+    def getIAFD_URLElement(self, myString):
         ''' check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not '''
+        if not 'www.' in myString:
+            myString = IAFD_SEARCH_URL.format(myString)
 
-        actorname = myString
-        myString = String.StripDiacritics(myString).lower()
-
-        # build list containing three possible cast links 1. Full Search in case of AKAs 2. as Performer 3. as Director
-        # the 2nd and 3rd links will only be used if there is no search result
-        urlList = []
-        fullname = myString.replace(' ', '').replace("'", '').replace(".", '')
-        full_name = myString.replace(' ', '-').replace("'", '&apos;')
-        for gender in ['m', 'd']:
-            url = 'https://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
-            urlList.append(url)
-
-        myString = String.URLEncode(myString)
-        url = 'https://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
-        urlList.append(url)
-
-        for count, url in enumerate(urlList, start=1):
-            photourl = ''
+        myException = ''
+        for i in range(2):
             try:
-                self.log('SELF:: %s. IAFD Actor search string [ %s ]', count, url)
-                html = HTML.ElementFromURL(url)
-                if 'gender=' in url:
-                    career = html.xpath('//p[.="Years Active"]/following-sibling::p[1]/text()[normalize-space()]')[0]
-                    try:
-                        startCareer = career.split('-')[0]
-                        self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
-                        if startCareer <= FilmYear:
-                            photourl = html.xpath('//*[@id="headshot"]/img/@src')[0]
-                            photourl = 'nophoto' if 'nophoto' in photourl else photourl
-                            self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
-                            break
-                    except:
-                        continue
-                else:
-                    xPathString = '//table[@id="tblMal" or @id="tblDir"]/tbody/tr/td[contains(normalize-space(.),"{0}")]/parent::tr'.format(actorname)
-                    actorList = html.xpath(xPathString)
-                    for actor in actorList:
-                        try:
-                            startCareer = actor.xpath('./td[4]/text()[normalize-space()]')[0]
-                            self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
-                            if startCareer <= FilmYear:
-                                photourl = actor.xpath('./td[1]/a/img/@src')[0]
-                                photourl = 'nophoto' if photourl == 'https://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
-                                self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
-                                break
-                        except:
-                            continue
-                    break
+                html = HTML.ElementFromURL(myString, timeout=20, sleep=DELAY)
+                return html
             except Exception as e:
-                photourl = ''
-                self.log('SELF:: Error: Search %s Result: Could not retrieve IAFD Actor Page, %s', count, e)
+                myException = e
                 continue
+        # failed to read page
+        raise Exception('Failed to read IAFD URL [%s]', myException)
 
-        return photourl
+    # -------------------------------------------------------------------------------------------------------------------------------
+    def getIAFD_Film(self, htmlcast, filmDict):
+        ''' check IAFD web site for better quality actor thumbnails per movie'''
+
+        actorDict =  {}
+
+        # search for Film Title on IAFD and check off credited actors
+        try:
+            html = self.getIAFD_URLElement(filmDict['IAFDSearchTitle'])
+            # get films listed within 1 year of what is on agent - as IAFD may have a different year recorded
+            filmDict['Year'] = int(filmDict['Year'])
+            filmList = html.xpath('//table[@id="titleresult"]/tbody/tr/td[2][.>="{0}" and .<="{1}"]/ancestor::tr'.format(filmDict['Year'] - 1, filmDict['Year'] + 1))
+            self.log('SELF:: [%s] IAFD Films in List', len(filmList))
+            if not filmList:        # movie not on IAFD - switch to CAST Mode
+                raise Exception('No Movie by this name on IAFD')
+
+            AKAList = []
+            for film in filmList:
+                try:
+                    iafdTitle = film.xpath('./td[1]/a/text()')[0].strip()
+                    compareIAFDTitle = self.SortComparisonString(self.NormaliseComparisonString(iafdTitle))
+                    self.log('SELF:: Film Title           \t%s', iafdTitle)
+                    self.log('SELF:: Compare Title        \t%s', compareIAFDTitle)
+                    if compareIAFDTitle != filmDict['CompareFullTitle'] and compareIAFDTitle != filmDict['CompareShortTitle']:
+                        # failed compare  match against AKA Title if present
+                        self.log('SELF:: compareIAFDTitle        \t%s', compareIAFDTitle)
+                        self.log('SELF:: compareFullTitle        \t%s', filmDict['CompareFullTitle'])
+                        self.log('SELF:: compareShortTitle       \t%s', filmDict['CompareShortTitle'])
+                        try:
+                            akaTitle = film.xpath('./td[4]/text()')[0].strip()
+                            if akaTitle:
+                                compareAKATitle = self.SortComparisonString(self.NormaliseComparisonString(akaTitle))
+                                self.log('SELF:: AKA Film Title       \t%s', akaTitle)
+                                self.log('SELF:: AKA Compare Title    \t%s', compareAKATitle)
+                                if compareAKATitle != filmDict['CompareFullTitle'] and compareAKATitle != filmDict['CompareShortTitle']:
+                                    continue
+                        except:
+                            pass
+                        continue
+                except Exception as e:
+                    self.log('SEARCH:: Error: Processing IAFD Film List: %s', e)
+                    continue
+
+                try:
+                    iafdfilmURL = IAFD_BASE + film.xpath('./td[1]/a/@href')[0]
+                    html = self.getIAFD_URLElement(iafdfilmURL)
+                except Exception as e:
+                    self.log('SEARCH:: Error: IAFD URL Studio: %s', e)
+                    continue
+
+                # compare film studio to that recorded on IAFD
+                try:
+                    siteStudio = html.xpath('//p[@class="bioheading" and text()="Studio"]//following-sibling::p[1]/a/text()')[0]
+                    self.matchStudioName(filmDict['CompareStudio'], siteStudio)
+                except Exception as e:
+                    self.log('SEARCH:: Error: Matching IAFD Studio: %s', e)
+                    try:
+                        siteDistributor = html.xpath('//p[@class="bioheading" and text()="Distributor"]//following-sibling::p[1]/a/text()')[0]
+                        self.matchStudioName(filmDict['CompareStudio'], siteDistributor)
+                    except Exception as e:
+                        self.log('SEARCH:: Error: Matching IAFD Distributor: %s', e)
+                        continue
+
+                try:
+                    actorList = html.xpath('//h3[.="Performers"]/ancestor::div[@class="panel panel-default"]//div[@class[contains(.,"castbox")]]/p')
+                    self.log('SELF:: Actors Found     \t[ %s ]', len(actorList))
+                    for actor in actorList:
+                        actorName = actor.xpath('./a/text()')[0].strip()
+                        actorPhoto = actor.xpath('./a/img/@src')[0].strip()
+                        actorPhoto = '' if 'nophoto' in actorPhoto else actorPhoto
+                        actorRole = actor.xpath('./text()')
+                        actorRole = ' '.join(actorRole).strip()
+                        actorRole = actorRole if actorRole else IAFD_NOROLE
+
+                        # if credited with other name - remove it from htmlcast
+                        try:
+                            creditedAs = actor.xpath('./i/text()')[0].split(':')[1].replace(')', '').strip()
+                            AKAList.append(creditedAs)
+                        except:
+                            pass
+
+                        self.log('SELF:: Actor:           \t%s', actorName)
+                        self.log('SELF:: Actor Photo:     \t%s', actorPhoto)
+                        self.log('SELF:: Actor Role:      \t%s', actorRole if actorRole else 'Role Not Assigned on IAFD')
+                        self.log('SELF:: =========================================')
+
+                        # Assign values to dictionary
+                        myDict = {}
+                        myDict['Photo'] = actorPhoto
+                        myDict['Role'] = actorRole
+                        actorDict[actorName] = myDict
+
+                except Exception as e:
+                    self.log('SELF:: Error: Processing IAFD Actor List: %s', e)
+                    continue
+
+                # if we get here we have found a match
+                break
+
+
+            # determine if there are any duplicates - by removing spaces and possible '.' after initials 
+            duplicateList = []
+            for cast in htmlcast:
+                onlyAlphaCast = re.sub('[^A-Za-z]+', '', cast)
+                for key in actorDict.keys():
+                    if re.sub('[^A-Za-z]+', '', key) == onlyAlphaCast:
+                        duplicateList.append(cast)
+
+            # leave actors 'not found on IAFD' and 'AKA' and 'Duplicate'
+            htmlcast = [cast for cast in htmlcast if cast not in actorDict.keys()]
+            htmlcast = [cast for cast in htmlcast if cast not in AKAList]
+            htmlcast = [cast for cast in htmlcast if cast not in duplicateList]
+
+            self.log('SELF:: Film Processed: Found Actors: \t%s', actorDict.keys())
+            self.log('SELF:: Film Processed: Actors Left:  \t%s', htmlcast)
+        except Exception as e:
+            self.log('SELF:: Error: IAFD Actor Search Failure, %s', e)
+
+        return htmlcast, actorDict
+
+    # -------------------------------------------------------------------------------------------------------------------------------
+    def getIAFD_Actor(self, htmlcast, filmDict):
+        ''' check IAFD web site for individual actors'''
+
+        filmDict['Year'] = int(filmDict['Year'])
+        actorDict =  {}
+        AKAList = []
+
+        for cast in htmlcast:
+            splitCast = cast.lower().split()
+            splitCast.sort()
+            try:
+                html = self.getIAFD_URLElement(String.URLEncode(cast))
+
+                # return list of actors with the searched name and iterate through them
+                xPathString = '//table[@id="tblMal" or @id="tblDir"]/tbody/tr[td[contains(.,"{0}")]]//ancestor::tr'.format(cast)
+                actorList = html.xpath(xPathString)
+                actorsFound = len(actorList)
+                self.log('SELF:: [ %s ] Actors Found named \t%s', actorsFound, cast)
+                for actor in actorList:     
+                    try:
+                        actorName = actor.xpath('./td[2]/a/text()[normalize-space()]')[0]          # get actor details and compare to Agent cast
+                        self.log('SELF:: Actor:           \t%s', actorName)
+                        splitActorName = actorName.lower().split()
+                        splitActorName.sort()
+                        if splitActorName != splitCast:
+                            self.log('SELF:: Actor: Failed Name Match: Agent [%s] - IAFD [%s]', cast, actorName)
+                            continue
+
+                        actorAKA = actor.xpath('./td[2]/a/text()[normalize-space()]')[0]           # get actor AKA details 
+                        startCareer = int(actor.xpath('./td[4]/text()[normalize-space()]')[0]) - 1 # set start of career to 1 year before for pre-releases
+                        endCareer = int(actor.xpath('./td[5]/text()[normalize-space()]')[0]) + 1   # set end of career to 1 year after to cater for late releases
+
+                        # only perform career checks if more than one actor found or if title is a compilation
+                        if actorsFound > 1 and not filmDict['Compilation']:    
+                            inRange = (startCareer <= filmDict['Year'] <= endCareer)
+                            if inRange == False:
+                                self.log('SELF:: Actor: Failed Career Range Match, Start: [%s] Film Year: [%s] End: [%s]', startCareer, filmDict['Year'], endCareer)
+                                continue
+
+                        # add cast name to Also Known as List for later deletion as we display IAFD main name rather than Agent name
+                        if cast in actorAKA:
+                            self.log('SELF:: Alias:           \t%s', cast)
+                            AKAList.append(cast)
+
+                        actorURL = IAFD_BASE + actor.xpath('./td[2]/a/@href')[0]
+                        actorPhoto = actor.xpath('./td[1]/a/img/@src')[0] # actor name on agent website - retrieve picture
+                        actorPhoto = '' if 'th_iafd_ad.gif' in actorPhoto else actorPhoto.replace('thumbs/th_', '')
+                        actorRole = IAFD_NOROLE
+
+                        self.log('SELF:: Start Career:    \t%s', startCareer)
+                        self.log('SELF:: End Career:      \t%s', endCareer)
+                        self.log('SELF:: Actor URL:       \t%s', actorURL)
+                        self.log('SELF:: Actor Photo:     \t%s', actorPhoto)
+
+                        # Assign values to dictionary
+                        myDict = {}
+                        myDict['Photo'] = actorPhoto
+                        myDict['Role'] = actorRole
+                        actorDict[actorName] = myDict
+
+                        # processed an actor in site List - break out of loop
+                        break   
+                    except Exception as e:
+                        self.log('SELF:: Error: Processing IAFD Actor List: %s', e)
+                        continue
+
+            except Exception as e:
+                self.log('SELF:: Error: Processing Agent Actor List: %s', e)
+
+        # leave actors not found on IAFD - remove AKA entries
+        htmlcast = [cast for cast in htmlcast if cast not in actorDict.keys()]
+        htmlcast = [cast for cast in htmlcast if cast not in AKAList]
+
+        self.log('SELF:: Cast Processed: Found Actors: \t%s', actorDict.keys())
+        self.log('SELF:: Cast Processed: Actors Left:  \t%s', htmlcast)
+
+        return htmlcast, actorDict
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def log(self, message, *args):
@@ -372,36 +598,28 @@ class AEBNiii(Agent.Movies):
 
         # Check filename format
         try:
-            FilmStudio, FilmTitle, FilmYear = self.matchFilename(filename)
-            self.log('SEARCH:: Processing: Studio: %s   Title: %s   Year: %s', FilmStudio, FilmTitle, FilmYear)
+            filmDict = self.matchFilename(filename)
         except Exception as e:
             self.log('SEARCH:: Error: %s', e)
             return
 
-        # Compare Variables used to check against the studio name on website: remove all umlauts, accents and ligatures
-        compareDict = {}
-        compareDict['Studio'] = self.NormaliseComparisonString(FilmStudio)
-        compareDict['Title'] = self.NormaliseComparisonString(FilmTitle)
-        compareDict['ReleaseDate'] = datetime.datetime(int(FilmYear), 12, 31)  # default to 31 Dec of Filename year
-
-        # Search Query - for use to search the internet
-        searchTitleList = self.CleanSearchString(FilmTitle)
+        # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
+        # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
+        searchTitleList = self.CleanSearchString(filmDict['SearchTitle'])
         for count, searchTitle in enumerate(searchTitleList, start=1):
             searchQuery = BASE_SEARCH_URL[0].format(searchTitle)
             self.log('SEARCH:: %s. Exact Match Search Query: %s', count, searchQuery)
 
             # first check exact matches
-
             try:
                 html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
                 titleList = html.xpath('//section[contains(@class,"dts-panel-exact-match")]/div[@class="dts-panel-content"]')
                 for title in titleList:
-                    # get film variables in dictionary format: if dict is filled we have a match
-                    TitleDict = self.matchTitle(True, title, compareDict)
-                    if TitleDict:
-                        siteURL = TitleDict['URL']
-                        siteReleaseDate = TitleDict['ReleaseDate']
-                        results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name=FilmTitle, score=100, lang=lang))
+                    matchedTitle = self.matchTitle(True, title, filmDict)
+
+                    # we should have a match on studio, title and year now
+                    if matchedTitle:
+                        results.Append(MetadataSearchResult(id=json.dumps(filmDict), name=filmDict['Title'], score=100, lang=lang))
                         return
             except Exception as e:
                 self.log('SEARCH:: Error: Search Query did find any Exact Movie Matches: %s', e)
@@ -437,11 +655,10 @@ class AEBNiii(Agent.Movies):
                 self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
                 for title in titleList:
                     # get film variables in dictionary format: if dict is filled we have a match
-                    TitleDict = self.matchTitle(False, title, compareDict)
-                    if TitleDict:
-                        siteURL = TitleDict['URL']
-                        siteReleaseDate = TitleDict['ReleaseDate']
-                        results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name=FilmTitle, score=100, lang=lang))
+                    matchedTitle = self.matchTitle(False, title, filmDict)
+                    if matchedTitle:
+                        # we should have a match on studio, title and year now
+                        results.Append(MetadataSearchResult(id=json.dumps(filmDict), name=filmDict['Title'], score=100, lang=lang))
                         return
 
     # -------------------------------------------------------------------------------------------------------------------------------
@@ -454,43 +671,37 @@ class AEBNiii(Agent.Movies):
         self.log('UPDATE:: File Folder: %s', folder)
         self.log('-----------------------------------------------------------------------')
 
-        # Check filename format
-        try:
-            FilmStudio, FilmTitle, FilmYear = self.matchFilename(filename)
-            self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', FilmStudio, FilmTitle, FilmYear)
-        except Exception as e:
-            self.log('UPDATE:: Error: %s', e)
-            return
-
         # Fetch HTML.
-        html = HTML.ElementFromURL(metadata.id, sleep=DELAY)
+        filmDict = json.loads(metadata.id)
+        html = HTML.ElementFromURL(filmDict['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
         #    1.  Metadata that is set by Agent as default
-        #        a. Studio               : From studio group of filename - no need to process this as is used to find it on website
+        #        a. Studio               : From studio group of filename - no need to process this as above
         #        b. Title                : From title group of filename - no need to process this as is used to find it on website
-        #        c. Tag line             : Corresponds to the url of movie
-        #        d. Originally Available : set from metadata.id (search result)
-        #        e. Content Rating       : Always X
+        #        c. Content Rating       : Always X
+        #        d. Tag line             : Corresponds to the url of movie, as Website does not show Tag lines
+        #        e. Originally Available : GayHotMovies only displays the Release Year, so use studio year
+        #        f. Collections          : from filename: can be added to from website info..
         #    2.  Metadata retrieved from website
         #        a. Summary              : Synopsis + Scene Breakdowns
-        #        b. Directors            : List of Drectors (alphabetic order)
-        #        c. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
-        #        d. Genres
-        #        e. Collections
+        #        b. Genres
+        #        c. Collections
+        #        d. Directors            : List of Drectors (alphabetic order)
+        #        e. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
         #        f. Posters/Background
 
         # 1a.   Studio - straight of the file name
-        metadata.studio = FilmStudio
+        metadata.studio = filmDict['Studio']
         self.log('UPDATE:: Studio: %s' % metadata.studio)
 
         # 1b.   Set Title
-        metadata.title = FilmTitle
+        metadata.title = filmDict['Title']
         self.log('UPDATE:: Video Title: %s' % metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
-        metadata.tagline = metadata.id.split('|')[0]
-        metadata.originally_available_at = datetime.datetime.strptime(metadata.id.split('|')[1], DATE_YMD)
+        metadata.tagline = filmDict['SiteURL']
+        metadata.originally_available_at = datetime.datetime.strptime(filmDict['CompareDate'], DATE_YMD)
         metadata.year = metadata.originally_available_at.year
         self.log('UPDATE:: Tagline: %s', metadata.tagline)
         self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
@@ -498,6 +709,11 @@ class AEBNiii(Agent.Movies):
         # 1e.   Set Content Rating to Adult
         metadata.content_rating = 'X'
         self.log('UPDATE:: Content Rating: X')
+
+        # 1f. Collection
+        metadata.collections.clear()
+        metadata.collections.add(filmDict['Collection'])
+        self.log('UPDATE:: Collection Set From filename: %s', filmDict['Collection'])
 
         # 2a.   Summary = Synopsis + Scene Information
         try:
@@ -542,7 +758,45 @@ class AEBNiii(Agent.Movies):
         summary = synopsis + allscenes
         metadata.summary = self.TranslateString(summary, lang)
 
-        # 2b.   Directors
+        # 2b.   Genres
+        try:
+            ignoreGenres = ['feature', 'exclusive', 'new release']
+            genres = []
+            htmlgenres = html.xpath('//span[@class="dts-image-display-name"]/text()')
+            self.log('UPDATE:: %s Genres Found: %s', len(htmlgenres), htmlgenres)
+            for genre in htmlgenres:
+                genre = genre.strip()
+                if not genre:
+                    continue
+                if anyOf(x in genre.lower() for x in ignoreGenres):
+                    continue
+                genres.append(genre)
+                if 'compilation' in genre.lower():
+                    filmDict['Compilation'] = 'Compilation'
+
+            genres.sort()
+            metadata.genres.clear()
+            for genre in genres:
+                metadata.genres.add(genre)
+        except Exception as e:
+            self.log('UPDATE:: Error getting Genres: %s', e)
+
+        # 2c.   Collections
+        try:
+            htmlcollections = html.xpath('//li[@class="section-detail-list-item-series"]/span/a/span/text()')
+            self.log('UPDATE:: %s Collections Found: %s', len(htmlcollections), htmlcollections)
+            for collection in htmlcollections:
+                collection = collection.strip()
+                if not collection:
+                    continue
+                if filmDict['Collection'].lower() == collection.lower():    # if set by filename its already in the list
+                    continue
+                metadata.collections.add(collection)
+                self.log('UPDATE:: %s Collection Added: %s', collection)
+        except Exception as e:
+            self.log('UPDATE:: Error getting Collections: %s', e)
+
+        # 2d.   Directors
         try:
             directors = []
             htmldirector = html.xpath('//li[@class="section-detail-list-item-director"]/span/a/span/text()')
@@ -561,61 +815,50 @@ class AEBNiii(Agent.Movies):
         except Exception as e:
             self.log('UPDATE:: Error getting Director(s): %s', e)
 
-        # 2c.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list and have more actor photos than AdultEntertainmentBroadcastNetwork
+        # 2e.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list and have more actor photos than AdultEntertainmentBroadcastNetwork
+        castdict = {}
+        filmcastLeft = []
         try:
-            castdict = {}
             htmlcast = html.xpath('//a[contains(@href,"/gay/stars/")]/@title')
+            htmlcast = [x.split('(')[0].strip() if '(' in x else x.strip() for x in htmlcast]
+            htmlcast = [x for x in htmlcast if x]      
             self.log('UPDATE:: Cast List %s', htmlcast)
-            for castname in htmlcast:
-                cast = castname.strip()
-                if not cast:
-                    continue
-                if '(' in cast:
-                    cast = cast.split('(')[0]
-                castdict[cast] = self.getIAFDActorImage(cast, FilmYear)
-                castdict[cast] = '' if castdict[cast] == 'nophoto' else castdict[cast]
+
+            # If there is a corresponding Film Entry on IAFD, process all actors recorded in the IAFD entry
+            self.log('UPDATE:: Process in Film Mode: %s Recorded Actors: %s', len(htmlcast), htmlcast)
+            try:
+                filmcastLeft, actordict = self.getIAFD_Film(htmlcast, filmDict) # composed of picture and role
+                if actordict:
+                    castdict.update(actordict)
+            except Exception as e:
+                self.log('UPDATE - Process Film Mode Error: %s', e)
+            
+            # If there is a corresponding Cast Entry on IAFD, process all actors with an entry on IAFD
+            if filmcastLeft:
+                self.log('UPDATE:: Process in Cast Mode: %s Recorded Actors: %s', len(filmcastLeft), filmcastLeft)
+                try:
+                    filmcastLeft, actordict = self.getIAFD_Actor(filmcastLeft, filmDict) # composed of picture and role
+                    if actordict:
+                        castdict.update(actordict)
+                except Exception as e:
+                        self.log('UPDATE - Process Cast Mode Error: %s', e)
+
+            # Mark any actor left in htmlcast who do not have a dictionary entry as Absent on IAFD and add them to dictionary marked thus
+            if filmcastLeft:
+                self.log('UPDATE:: %s Actors absent on IAFD: %s', len(filmcastLeft), filmcastLeft)
+                for cast in filmcastLeft:
+                    castdict[cast] = {'Photo': '', 'Role': IAFD_ABSENT}
 
             # sort the dictionary and add kv to metadata
             metadata.roles.clear()
             for key in sorted(castdict):
-                role = metadata.roles.new()
-                role.name = key
-                role.photo = castdict[key]
+                cast = metadata.roles.new()
+                cast.name = key
+                cast.photo = castdict[key]['Photo']
+                cast.role = castdict[key]['Role']
+
         except Exception as e:
             self.log('UPDATE:: Error getting Cast: %s', e)
-
-        # 2d.   Genres
-        try:
-            ignoreGenres = ['feature', 'exclusive']
-            genres = []
-            htmlgenres = html.xpath('//span[@class="dts-image-display-name"]/text()')
-            self.log('UPDATE:: %s Genres Found: %s', len(htmlgenres), htmlgenres)
-            for genre in htmlgenres:
-                genre = genre.strip()
-                if not genre:
-                    continue
-                if anyOf(x in genre.lower() for x in ignoreGenres):
-                    continue
-                genres.append(genre)
-
-            genres.sort()
-            metadata.genres.clear()
-            for genre in genres:
-                metadata.genres.add(genre)
-        except Exception as e:
-            self.log('UPDATE:: Error getting Genres: %s', e)
-
-        # 2e.   Collections
-        try:
-            metadata.collections.clear()
-            htmlcollections = html.xpath('//li[@class="section-detail-list-item-series"]/span/a/span/text()')
-            self.log('UPDATE:: %s Collections Found: %s', len(htmlcollections), htmlcollections)
-            for collection in htmlcollections:
-                collection = collection.strip()
-                if collection:
-                    metadata.collections.add(collection)
-        except Exception as e:
-            self.log('UPDATE:: Error getting Collections: %s', e)
 
         # 2f.   Posters/Background Art - Front Cover set to poster, Back Cover to background art
         # In this list we are going to save the posters that we want to keep
