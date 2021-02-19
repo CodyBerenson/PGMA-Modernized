@@ -4,6 +4,9 @@
 for our new Installation and Usage Guide.  
 # Announcements
 
+**02/18/2021**
+Jason has been actively working on a new set of agents *and* a new set of enhancements to the Agents that provide more thorough actor matching with roles from IAFD along with a handy legend in the description, enhanced logging, as well as collections being spawned for each actor and director in the studio.  In this way, one can find all titles a given actor is in across all of one's libraries via the actor's collection.  Our plan was to release all the new/enhanced agents as a major release.  Unfortunately, a recent change to AEBN and GEVI has forced us to do a point release to fix what AEBN and GEVI broke...but it has the added benefit of having the new enhancements in them as well.  So, stay tuned for the rest of the agents to catch up.
+
 **01/08/2021** 
 Happy New Year Folks!  GEVI has updated their site which has broken our Agent from pulling in poster artwork.  Jason is working on a fix. Stand by.  Also, Jason is quite close on a fix to Fagalicious.  And, he's created an umpteen # of new agents that I get to test.  Fun.
 
