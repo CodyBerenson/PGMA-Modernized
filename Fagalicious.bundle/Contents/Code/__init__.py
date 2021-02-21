@@ -20,41 +20,58 @@
                                    handling of unicode characters in film titles and comparision string normalisation
     25 Jul 2020   2020.01.18.13    changed replacement of hyphens etc to null with hyphens to space when building 
                                    the search string, added chars u\2011 (nonbreaking hyphen) and u\2012 (figure dash)
-    07 Oct 2020   2020.01.18.14    IAFD - change to https
-
----------------------------------------------------------------------------------------------------------------
+    20 Feb 2021   2020.01.18.18    Moved IAFD and general functions to other py files
+                                   Enhancements to IAFD search routine, including LevenShtein Matching on Cast names
+                                   set content_rating age to 18
+                                   Set collections from filename and cast
+                                   included studio on iafd processing of filename
+                                   Added iafd legend to summary
+                                   improved logging
+                                   Added Thumbor / PIL Image processing
+                                   improved matching on actors names - now picks Cutler X for example
+-----------------------------------------------------------------------------------------------------------------------------------
 '''
-import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata, urllib, urllib2
+import datetime, platform, os, re, sys, subprocess, json
+from unidecode import unidecode
+from PIL import Image
+from io import BytesIO
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.14'
+VERSION_NO = '2020.01.18.18'
 PLUGIN_LOG_TITLE = 'Fagalicious'
 
-# PLEX API
+LOG_BIGLINE = '------------------------------------------------------------------------------'
+LOG_SUBLINE = '      ------------------------------------------------------------------------'
+
+# PLEX API /CROP Script
 load_file = Core.storage.load
+CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/BestExclusivePorn.bundle/Contents/Code/ImageCropper.vbs" "{1}" "{2}" "{3}" "{4}"'
 
-# Pattern: (Studio) - Title (Year).ext: ^\((?P<studio>.+)\) - (?P<title>.+) \((?P<year>\d{4})\)
-REGEX = Prefs['regex']
-
-# Delay used when requesting HTML, may be good to have to prevent being banned from the site
-DELAY = int(Prefs['delay'])
-
-# detect the language the summary appears in on the web page
-DETECT = Prefs['detect']
-
-# online image cropper
-THUMBOR = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}"
-
-# backup VBScript image cropper
-CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/Fagalicious.bundle/Contents/Code/ImageCropper.vbs" "{1}" "{2}" "{3}" "{4}"'
+# Preferences
+REGEX = Prefs['regex']                          # file matching pattern
+DELAY = int(Prefs['delay'])                     # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+DETECT = Prefs['detect']                        # detect the language the summary appears in on the web page
+THUMBOR = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}" # online image cropper
 
 # URLS
 BASE_URL = 'https://fagalicious.com'
-BASE_SEARCH_URL = BASE_URL + '/search_gcse/?q={0}'
+BASE_SEARCH_URL = BASE_URL + '/search/{0}'
 
-# Date Formats used by website
-DATE_YMD = '%Y%m%d'
+# IAFD Related variables
+IAFD_BASE = 'https://www.iafd.com'
+IAFD_SEARCH_URL = IAFD_BASE + '/results.asp?searchtype=comprehensive&searchstring={0}'
+
+IAFD_ABSENT = u'\U0000274C'        # red cross mark - not on IAFD
+IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
+IAFD_THUMBSUP = u'\U0001F44D'      # thumbs up unicode character
+IAFD_THUMBSDOWN = u'\U0001F44E'    # thumbs down unicode character
+IAFD_LEGEND = u'CAST LEGEND\u2003{0} Actor not on IAFD\u2003{1} Actor on IAFD\u2003:: {2} Film on IAFD ::\n'
+
+# dictionary holding film variables
+FILMDICT = {}   
+
+# Date Format used by website
 DATEFORMAT = '%B %d, %Y'
 
 # Website Language
@@ -89,70 +106,11 @@ class Fagalicious(Agent.Movies):
     media_types = ['Movie']
     contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultScenes']
 
-    # -------------------------------------------------------------------------------------------------------------------------------
-    def matchFilename(self, filename):
-        ''' return groups from filename regex match else return false '''
-        pattern = re.compile(REGEX)
-        matched = pattern.search(filename)
-        if matched:
-            groups = matched.groupdict()
-            return groups['studio'], groups['title'], groups['year']
-        else:
-            raise Exception("File Name [{0}] not in the expected format: (Studio) - Title (Year)".format(filename))
+    # import IAFD Functions
+    from iafd import *
 
-    # -------------------------------------------------------------------------------------------------------------------------------
-    def matchStudioName(self, fileStudioName, siteStudioName):
-        ''' match file studio name against website studio name: Boolean Return '''
-        siteStudioName = self.NormaliseComparisonString(siteStudioName)
-
-        if siteStudioName == fileStudioName:
-            self.log('SELF:: Studio: Full Word Match: Site: {0} = File: {1}'.format(siteStudioName, fileStudioName))
-        elif siteStudioName in fileStudioName:
-            self.log('SELF:: Studio: Part Word Match: Site: {0} IN File: {1}'.format(siteStudioName, fileStudioName))
-        elif fileStudioName in siteStudioName:
-            self.log('SELF:: Studio: Part Word Match: File: {0} IN Site: {1}'.format(fileStudioName, siteStudioName))
-        else:
-            raise Exception('Match Failure: File: {0} != Site: {1} '.format(fileStudioName, siteStudioName))
-
-        return True
-
-    # -------------------------------------------------------------------------------------------------------------------------------
-    def matchReleaseDate(self, fileDate, siteDate):
-        ''' match file year against website release date: return formatted site date if no error or default to formated file date '''
-        if len(siteDate) == 4:      # a year has being provided - default to 31st December of that year
-            siteDate = siteDate + '1231'
-            siteDate = datetime.datetime.strptime(siteDate, DATE_YMD)
-        else:
-            siteDate = datetime.datetime.strptime(siteDate, DATEFORMAT)
-
-        # there can not be a difference more than 366 days between FileName Date and SiteDate
-        dx = abs((fileDate - siteDate).days)
-        msg = 'Match{0}: File Date [{1}] - Site Date [{2}] = Dx [{3}] days'.format(' Failure' if dx > 366 else '', fileDate.strftime('%Y %m %d'), siteDate.strftime('%Y %m %d'), dx)
-        if dx > 366:
-            raise Exception('Release Date: {0}'.format(msg))
-        else:
-            self.log('SELF:: Release Date: {0}'.format(msg))
-
-        return siteDate
-
-    # -------------------------------------------------------------------------------------------------------------------------------
-    def NormaliseComparisonString(self, myString):
-        ''' Normalise string for, strip uneeded characters for comparison of web site values to file name regex group values '''
-        # convert to lower case and trim
-        myString = myString.strip().lower()
-
-        # normalise unicode characters
-        myString = unicode(myString)
-        myString = unicodedata.normalize('NFD', myString).encode('ascii', 'ignore')
-
-        # replace ampersand with 'and'
-        myString = myString.replace('&', 'and')
-
-        # strip domain suffixes, vol., volume from string, standalone "1's"
-        pattern = ur'[.](org|com|net|co[.][a-z]{2})|Vol[.]|\bPart\b|\bVolume\b|(?<!\d)1(?!\d)|[^A-Za-z0-9]+'
-        myString = re.sub(pattern, '', myString, flags=re.IGNORECASE)
-
-        return myString
+    # import General Functions
+    from genfunctions import *
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
@@ -218,107 +176,55 @@ class Fagalicious(Agent.Movies):
         return myString
 
     # -------------------------------------------------------------------------------------------------------------------------------
-    def TranslateString(self, myString, language):
-        ''' Translate string into Library language '''
-        myString = myString.strip()
-        if language == 'xn' or language == 'xx':    # no language or language unknown
-            self.log('SELF:: Library Language: [%s], Run Translation: [False]', 'No Language' if language == 'xn' else 'Unknown')
-        elif myString:
-            translator = Translator(service_urls=['translate.google.com', 'translate.google.ca', 'translate.google.co.uk',
-                                                  'translate.google.com.au', 'translate.google.co.za', 'translate.google.br.com',
-                                                  'translate.google.pt', 'translate.google.es', 'translate.google.com.mx',
-                                                  'translate.google.it', 'translate.google.nl', 'translate.google.be',
-                                                  'translate.google.de', 'translate.google.ch', 'translate.google.at',
-                                                  'translate.google.ru', 'translate.google.pl', 'translate.google.bg',
-                                                  'translate.google.com.eg', 'translate.google.co.il', 'translate.google.co.jp',
-                                                  'translate.google.co.kr', 'translate.google.fr', 'translate.google.dk'])
-            runTranslation = (language != SITE_LANGUAGE)
-            self.log('SELF:: [Library:Site] Language: [%s:%s], Run Translation: [%s]', language, SITE_LANGUAGE, runTranslation)
-            if DETECT:
-                detectString = re.findall(ur'.*?[.!?]', myString)[:4]   # take first 4 sentences of string to detect language
-                detectString = ''.join(detectString)
-                self.log('SELF:: Detect Site Language [%s] using this text: %s', DETECT, detectString)
+    def getFilmImages(self, imageType, imageURL, whRatio):
+        ''' get Film images - posters/background art and crop if necessary '''
+        pic = imageURL
+        picInfo = Image.open(BytesIO(HTTP.Request(pic).content))
+        width, height = picInfo.size
+        dispWidth = '{:,d}'.format(width)       # thousands separator
+        dispHeight = '{:,d}'.format(height)     # thousands separator
+
+        self.log('AGNT  :: {0} Found: Width ({1}) x Height ({2}); URL: {3}'.format(imageType, dispWidth, dispHeight, imageURL))
+
+        maxHeight = float(width * whRatio)      # Maximum allowable height
+
+        cropHeight = float(maxHeight if maxHeight <= height else height)
+        cropWidth = float(cropHeight / whRatio)
+
+        DxHeight = 0.0 if cropHeight == height else (abs(cropHeight - height) / height) * 100.0
+        DxWidth = 0.0 if cropWidth == width else (abs(cropWidth - width) / width) * 100.0
+
+        cropRequired = True if DxWidth >= 10 or DxHeight >=10 else False
+        cropWidth = int(cropWidth)
+        cropHeight = int(cropHeight)
+        desiredWidth = '{0:,d}'.format(cropWidth)     # thousands separator
+        desiredHeight = '{0:,d}'.format(cropHeight)   # thousands separator
+        DxWidth = '{0:.2f}'.format(DxWidth)    # percent format
+        DxHeight = '{0:.2f}'.format(DxHeight)  # percent format
+        self.log('AGNT  :: Crop {0} {1}: Actual (w{2} x h{3}), Desired (w{4} x h{5}), % Dx = w[{6}%] x h[{7}%]'.format("Required:" if cropRequired else "Not Required:", imageType, dispWidth, dispHeight, desiredWidth, desiredHeight, DxWidth, DxHeight))
+        if cropRequired:
+            try:
+                self.log('AGNT  :: Using Thumbor to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
+                pic = THUMBOR.format(cropWidth, cropHeight, imageURL)
+                picContent = HTTP.Request(pic).content
+            except Exception as e:
+                self.log('AGNT  :: Error Thumbor Failed to Crop Image to: {0} x {1}'.format(desiredWidth, desiredHeight))
                 try:
-                    detected = translator.detect(detectString)
-                    runTranslation = (language != detected.lang)
-                    self.log('SELF:: Detected Language: [%s] Run Translation: [%s]', detected.lang, runTranslation)
+                    if os.name == 'nt':
+                        self.log('AGNT  :: Using Script to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
+                        envVar = os.environ
+                        TempFolder = envVar['TEMP']
+                        LocalAppDataFolder = envVar['LOCALAPPDATA']
+                        pic = os.path.join(TempFolder, imageURL.split("/")[-1])
+                        cmd = CROPPER.format(LocalAppDataFolder, imageURL, pic, cropWidth, cropHeight)
+                        subprocess.call(cmd)
+                        picContent = load_file(pic)
                 except Exception as e:
-                    self.log('SELF:: Error Detecting Text Language: %s', e)
-
-            try:
-                myString = translator.translate(myString, dest=language).text if runTranslation else myString
-                self.log('SELF:: Translated [%s] Summary Found: %s', runTranslation, myString)
-            except Exception as e:
-                self.log('SELF:: Error Translating Text: %s', e)
-
-        return myString if myString else ' '     # return single space to initialise metadata summary field
-
-    # -------------------------------------------------------------------------------------------------------------------------------
-    def getIAFDActorImage(self, myString, FilmYear):
-        ''' check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not '''
-
-        actorname = myString
-        myString = String.StripDiacritics(myString).lower()
-
-        # build list containing three possible cast links 1. Full Search in case of AKAs 2. as Performer 3. as Director
-        # the 2nd and 3rd links will only be used if there is no search result
-        urlList = []
-        fullname = myString.replace(' ', '').replace("'", '').replace(".", '')
-        full_name = myString.replace(' ', '-').replace("'", '&apos;')
-        for gender in ['m', 'd']:
-            url = 'https://www.iafd.com/person.rme/perfid={0}/gender={1}/{2}.htm'.format(fullname, gender, full_name)
-            urlList.append(url)
-
-        myString = String.URLEncode(myString)
-        url = 'https://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={0}'.format(myString)
-        urlList.append(url)
-
-        for count, url in enumerate(urlList, start=1):
-            photourl = ''
-            try:
-                self.log('SELF:: %s. IAFD Actor search string [ %s ]', count, url)
-                html = HTML.ElementFromURL(url)
-                if 'gender=' in url:
-                    career = html.xpath('//p[.="Years Active"]/following-sibling::p[1]/text()[normalize-space()]')[0]
-                    try:
-                        startCareer = career.split('-')[0]
-                        self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
-                        if startCareer <= FilmYear:
-                            photourl = html.xpath('//*[@id="headshot"]/img/@src')[0]
-                            photourl = 'nophoto' if 'nophoto' in photourl else photourl
-                            self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
-                            break
-                    except:
-                        continue
-                else:
-                    xPathString = '//table[@id="tblMal" or @id="tblDir"]/tbody/tr/td[contains(normalize-space(.),"{0}")]/parent::tr'.format(actorname)
-                    actorList = html.xpath(xPathString)
-                    for actor in actorList:
-                        try:
-                            startCareer = actor.xpath('./td[4]/text()[normalize-space()]')[0]
-                            self.log('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
-                            if startCareer <= FilmYear:
-                                photourl = actor.xpath('./td[1]/a/img/@src')[0]
-                                photourl = 'nophoto' if photourl == 'https://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
-                                self.log('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
-                                break
-                        except:
-                            continue
-                    break
-            except Exception as e:
-                photourl = ''
-                self.log('SELF:: Error: Search %s Result: Could not retrieve IAFD Actor Page, %s', count, e)
-                continue
-
-        return photourl
-
-    # -------------------------------------------------------------------------------------------------------------------------------
-    def log(self, message, *args):
-        ''' log messages '''
-        if re.search('ERROR', message, re.IGNORECASE):
-            Log.Error(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+                    self.log('AGNT  :: Error Script Failed to Crop Image to: {0} x {1}'.format(desiredWidth, desiredHeight))
         else:
-            Log.Info(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+            picContent = HTTP.Request(pic).content
+
+        return pic, picContent
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
@@ -327,35 +233,30 @@ class Fagalicious(Agent.Movies):
             return
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
 
-        self.log('-----------------------------------------------------------------------')
+        self.log(LOG_BIGLINE)
         self.log('SEARCH:: Version               : v.%s', VERSION_NO)
         self.log('SEARCH:: Python                : %s', sys.version_info)
-        self.log('SEARCH:: Platform              : %s %s', platform.system(), platform.release())
+        self.log('SEARCH:: Platform              : %s %s %s', platform.system(), platform.release(), platform.architecture())
         self.log('SEARCH:: Prefs-> delay         : %s', DELAY)
         self.log('SEARCH::      -> detect        : %s', DETECT)
         self.log('SEARCH::      -> regex         : %s', REGEX)
-        self.log('SEARCH::      -> thumbor       : %s', THUMBOR)
         self.log('SEARCH:: Library:Site Language : %s:%s', lang, SITE_LANGUAGE)
         self.log('SEARCH:: Media Title           : %s', media.title)
         self.log('SEARCH:: File Name             : %s', filename)
         self.log('SEARCH:: File Folder           : %s', folder)
-        self.log('-----------------------------------------------------------------------')
+        self.log(LOG_BIGLINE)
 
         # Check filename format
         try:
-            FilmStudio, FilmTitle, FilmYear = self.matchFilename(filename)
-            self.log('SEARCH:: Processing: Studio: %s   Title: %s   Year: %s', FilmStudio, FilmTitle, FilmYear)
+            FILMDICT = self.matchFilename(filename)
         except Exception as e:
             self.log('SEARCH:: Error: %s', e)
             return
+        self.log(LOG_BIGLINE)
 
-        # Compare Variables used to check against the studio name on website: remove all umlauts, accents and ligatures
-        compareStudio = self.NormaliseComparisonString(FilmStudio)
-        compareTitle = self.NormaliseComparisonString(FilmTitle)
-        compareReleaseDate = datetime.datetime(int(FilmYear), 12, 31)  # default to 31 Dec of Filename yesr
-
-        # Search Query - for use to search the internet, remove all non alphabetic characters as GayMovie site returns no results if apostrophes or commas exist etc..
-        searchTitle = self.CleanSearchString(FilmTitle)
+        # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
+        # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
+        searchTitle = self.CleanSearchString(FILMDICT['SearchTitle'])
         searchQuery = BASE_SEARCH_URL.format(searchTitle)
 
         morePages = True
@@ -366,7 +267,7 @@ class Fagalicious(Agent.Movies):
             except Exception as e:
                 self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
                 return
-            '''
+
             try:
                 searchQuery = html.xpath('//a[@class="next page-numbers"]/@href')[0]
                 self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
@@ -377,347 +278,243 @@ class Fagalicious(Agent.Movies):
                 self.log('SEARCH:: No More Pages Found')
                 pageNumber = 1
                 morePages = False
-            '''
+
             morePages = False
             pageNumber = 0
-            # //div[@class="page-wrap"]/div[@class="page-main"]/div[@class="entry-content"]/div[@class="wgs_wrapper"]/div[@id="___gcse_1"]/div[@class="gsc-control-cse gsc-control-cse-en"]/div[@class="gsc-control-wrapper-cse"]/div[@class="gsc-results-wrapper-nooverlay gsc-results-wrapper-visible"]/div[@class="gsc-wrapper"]/div[@class="gsc-resultsbox-visible"]/div[@class="gsc-resultsRoot gsc-tabData gsc-tabdActive"]/div[@class="gsc-results gsc-webResult"]/div[@class="gsc-expansionArea"]/div[@class="gsc-webResult gsc-result"]/div[@class="gs-webResult gs-result"]/div[@class="gsc-thumbnail-inside"]/div[@class="gs-title"]/a[@class="gs-title"]
-            # //div[@class="gsc-webResult gsc-result"]/div[@class="gs-webResult gs-result"]/div[@class="gsc-thumbnail-inside"]/div[@class="gs-title"]/a[@class="gs-title"]
-            # titleList = html.xpath('//a[@class="gs-title" and not(contains(@href, "/tag"))]')
-            titleList = html.xpath('//a[@class="gs-title"]')
-
+            titleList = html.xpath('//header[@class="entry-header"]')
             self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
 
             for title in titleList:
                 # Site Entry : Composed of Studio, then Scene Title separated by a Colon
                 try:
-                    siteEntry = title.xpath('//text()')
+                    siteEntry = title.xpath('./h2/a/text()')
                     siteEntry = ''.join(siteEntry)
-                    siteEntry = siteEntry.split(":")
                     self.log('SEARCH:: Site Entry: %s', siteEntry)
-                except:
+                    siteStudio, siteTitle = siteEntry.split(":", 2)
+                    self.log(LOG_BIGLINE)
+                except Exception as e:
+                    self.log('SEARCH:: Error getting Site Entry: %s', e)
+                    self.log(LOG_SUBLINE)
                     continue
 
                 # Site Title
                 try:
-                    siteTitle = ' '.join(siteEntry[1:None])
-                    self.log('SEARCH:: Site Title: %s', siteTitle)
-                    siteTitle = self.NormaliseComparisonString(siteTitle)
-                    self.log('SEARCH:: Title Match: [%s] Compare Title - Site Title "%s - %s"', (compareTitle == siteTitle), compareTitle, siteTitle)
-                    if siteTitle != compareTitle:
-                        continue
-                except:
+                    self.matchTitle(siteTitle, FILMDICT)
+                    self.log(LOG_BIGLINE)
+                except Exception as e:
+                    self.log('SEARCH:: Error getting Site Title: %s', e)
+                    self.log(LOG_SUBLINE)
                     continue
 
                 # Studio Name
                 try:
-                    siteStudio = siteEntry[0]
-                    self.matchStudioName(compareStudio, siteStudio)
+                    self.matchStudio(siteStudio, FILMDICT)
+                    self.log(LOG_BIGLINE)
                 except Exception as e:
                     self.log('SEARCH:: Error getting Site Studio: %s', e)
+                    self.log(LOG_SUBLINE)
                     continue
 
                 # Site Title URL
                 try:
                     siteURL = title.xpath('./h2/a/@href')[0]
-                    self.log('SEARCH:: Title url: %s', siteURL)
-                except:
-                    self.log('SEARCH:: Error getting Site Title Url')
+                    siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
+                    FILMDICT['SiteURL'] = siteURL
+                    self.log('SEARCH:: Site Title url                %s', siteURL)
+                    self.log(LOG_BIGLINE)
+                except Exception as e:
+                    self.log('SEARCH:: Error getting Site Title Url: %s', e)
+                    self.log(LOG_SUBLINE)
                     continue
 
                 # Site Release Date
                 try:
                     siteReleaseDate = title.xpath('./ul/li[@class="meta-date"]/a/text()[normalize-space()]')[0]
-                    self.log('SEARCH:: Site URL Release Date: %s', siteReleaseDate)
                     try:
-                        siteReleaseDate = self.matchReleaseDate(compareReleaseDate, siteReleaseDate)
+                        siteReleaseDate = self.matchReleaseDate(siteReleaseDate, FILMDICT)
+                        self.log(LOG_BIGLINE)
                     except Exception as e:
                         self.log('SEARCH:: Error getting Site URL Release Date: %s', e)
+                        self.log(LOG_SUBLINE)
                         continue
                 except:
                     self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
-                    siteReleaseDate = compareReleaseDate
+                    self.log(LOG_BIGLINE)
 
                 # we should have a match on studio, title and year now
-                results.Append(MetadataSearchResult(id=siteURL + '|' + siteReleaseDate.strftime(DATE_YMD), name=FilmTitle, score=100, lang=lang))
+                self.log('SEARCH:: Finished Search Routine')
+                self.log(LOG_BIGLINE)
+                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
                 return
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
-        self.log('-----------------------------------------------------------------------')
+        self.log(LOG_BIGLINE)
         self.log('UPDATE:: Version    : v.%s', VERSION_NO)
         self.log('UPDATE:: File Name  : %s', filename)
         self.log('UPDATE:: File Folder: %s', folder)
-        self.log('-----------------------------------------------------------------------')
-
-        # Check filename format
-        try:
-            FilmStudio, FilmTitle, FilmYear = self.matchFilename(filename)
-            self.log('UPDATE:: Processing: Studio: %s   Title: %s   Year: %s', FilmStudio, FilmTitle, FilmYear)
-        except Exception as e:
-            self.log('UPDATE:: Error: %s', e)
-            return
+        self.log(LOG_BIGLINE)
 
         # Fetch HTML.
-        html = HTML.ElementFromURL(metadata.id.split('|')[0], timeout=60, errors='ignore', sleep=DELAY)
+        FILMDICT = json.loads(metadata.id)
+        html = HTML.ElementFromURL(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
         #    1.  Metadata that is set by Agent as default
-        #        a. Studio               : From studio group of filename - no need to process this as is used to find it on website
+        #        a. Studio               : From studio group of filename - no need to process this as above
         #        b. Title                : From title group of filename - no need to process this as is used to find it on website
         #        c. Tag line             : Corresponds to the url of movie
         #        d. Originally Available : set from metadata.id (search result)
         #        e. Content Rating       : Always X
-        #    2.  Metadata retrieved from website
-        #        a. Summary
-        #        b. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
-        #        c. Genres
-        #        d. Posters
-        #        e. Background
+        #        f. Content Rating Age   : Always 18
+        #        g. Collection Info      : From title group of filename 
 
-        # 1a.   Studio - straight of the file name
-        metadata.studio = FilmStudio
-        self.log('UPDATE:: Studio: "%s"' % metadata.studio)
+        # 1a.   Set Studio
+        metadata.studio = FILMDICT['Studio']
+        self.log('UPDATE:: Studio: %s' % metadata.studio)
 
         # 1b.   Set Title
-        metadata.title = FilmTitle
-        self.log('UPDATE:: Video Title: "%s"' % metadata.title)
+        metadata.title = " ".join(word.capitalize() for word in FILMDICT['Title'].split())
+        self.log('UPDATE:: Video Title: %s' % metadata.title)
 
-        # 1c/d.   Set Tagline/Originally Available from metadata.id
-        metadata.tagline = metadata.id.split('|')[0]
-        metadata.originally_available_at = datetime.datetime.strptime(metadata.id.split('|')[1], DATE_YMD)
+        # 1c/d. Set Tagline/Originally Available from metadata.id
+        metadata.tagline = FILMDICT['SiteURL']
+        metadata.originally_available_at = datetime.datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
         metadata.year = metadata.originally_available_at.year
         self.log('UPDATE:: Tagline: %s', metadata.tagline)
         self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
-        # 1e.   Set Content Rating to Adult
+        # 1e/f. Set Content Rating to Adult/18 years
         metadata.content_rating = 'X'
-        self.log('UPDATE:: Content Rating: X')
+        metadata.content_rating_age = 18
+        self.log('UPDATE:: Content Rating - Content Rating Age: X - 18')
 
-        # 2a.   Summary
+        # 1g. Collection
+        metadata.collections.clear()
+        collections = FILMDICT['Collection']
+        for collection in collections:
+            metadata.collections.add(collection)
+        self.log('UPDATE:: Collection Set From filename: %s', collections)
+
+        #    2.  Metadata retrieved from website
+        #        a. Tags                 : composed of Genres and cast (alphabetic order)
+        #        b. Posters/Art
+        #        c. Summary
+
+        # 2a. Tags - Fagalicious stores the cast and genres as tags
+        self.log(LOG_BIGLINE)
+        castList = []
+        genreList = []
         try:
-            summary = ''
-            htmlsummary = html.xpath('//section[@class="entry-content"]/p')
-            for item in htmlsummary:
-                summary = '{0}{1}\n'.format(summary, item.text_content())
-            self.log('UPDATE:: Summary Found: %s', summary)
-
-            regex = r'.*writes:'
-            pattern = re.compile(regex, re.IGNORECASE | re.DOTALL)
-            summary = re.sub(pattern, '', summary)
-
-            regex = ur'– Get the .*|– Download the .*'
-            pattern = re.compile(regex, re.IGNORECASE)
-            summary = re.sub(pattern, '', summary)
-
-            metadata.summary = self.TranslateString(summary, lang)
-        except Exception as e:
-            self.log('UPDATE:: Error getting Summary: %s', e)
-
-        # 2b/c.   Cast/Genre
-        #       Fagalicious stores the cast and genres as tags, if tag is in title assume its a cast member else its a genre
-        #       get thumbnails from IAFD as they are right dimensions for plex cast list
-        castdict = {}
-        genres = []
-        try:
-            genresList = ['bareback', 'black studs', 'big dicks', 'hairy', 'daddy', 'hairy', 'interracial', 'muscle hunks', 'uncut', 'jocks', 'latino', 'gaycest', 'group']
+            testStudio = FILMDICT['Studio'].lower().replace(' ', '')
+            ignoreGenres = ['Raging Stallion', 'Trailers']
+            useGenres = ['bareback', 'black studs', 'big dicks', 'hairy', 'daddy', 'hairy', 'interracial', 'muscle hunks', 'uncut', 'jocks', 'latino', 'gaycest', 'group']
             htmltags = html.xpath('//ul/a[contains(@href, "https://fagalicious.com/tag/")]/text()')
-            htmltags = list(set(htmltags))
             self.log('UPDATE:: %s Genres/Cast Tags Found: "%s"', len(htmltags), htmltags)
             for tag in htmltags:
-                if anyOf(x in tag.lower() for x in genresList):
-                    genres.append(tag)
+                if '(' in tag:
+                    tag = tag.split('(')[0].strip()
+                if 'AKA' in tag:
+                    tag = tag.split('AKA')[0].strip()
+
+                if anyOf(x in tag.lower() for x in useGenres):
+                    genreList.append(tag)
+                    continue
+
+                if anyOf(x.lower() in tag.lower() for x in ignoreGenres):
                     continue
 
                 # do not process studio names in tags
-                if '.com' in tag.lower():
-                    continue
-                if tag.lower().replace(' ', '') in FilmStudio.lower().replace(' ', ''):
+                if 'Movie' in tag or 'Series' in tag or '.com' in tag or tag.lower().replace(' ', '') in testStudio:
                     continue
 
-                # process actors, assume a return of no photo is a genre
-                tagIsGenre = True
-                tag = tag.replace('AKA', '/').replace('(', '').replace(')', '') if 'AKA' in tag else tag
-                tagList = [x.strip() for x in tag.split('/')]  # if actor has AKA names, this will return a list with length > 1
-                for tag in tagList:
-                    cast = self.getIAFDActorImage(tag, FilmYear)
-                    if cast:
-                        tagIsGenre = False
-                        castdict[tagList[0]] = cast   # assign picture to main name
-                        break
-
-                if tagIsGenre:
-                    genres.append(tag)  # if not cast - then assign to genre
+                # assume rest are cast
+                castList.append(tag)
         except Exception as e:
             self.log('UPDATE:: Error getting Cast/Genres: %s', e)
 
         # Process Cast
-        # sort the dictionary and add kv to metadata
-        metadata.roles.clear()
-        for key in sorted(castdict):
-            role = metadata.roles.new()
-            role.name = key
-            role.photo = castdict[key]
+        self.log(LOG_SUBLINE)
+        try:
+            castdict = self.ProcessIAFD(castList, FILMDICT)
+
+            # sort the dictionary and add key(Name)- value(Photo, Role) to metadata - if there is no phot assume its a genre
+            metadata.roles.clear()
+            for key in sorted(castdict):
+                newRole = metadata.roles.new()
+                if castdict[key]['Photo'] or len(key.split()) == 2:          # most actors will have 2 names
+                    newRole.name = key
+                    newRole.photo = castdict[key]['Photo']
+                    newRole.role = castdict[key]['Role']
+                    # add cast name to collection
+                    metadata.collections.add(key)
+                else: 
+                    genreList.append(key)
+
+        except Exception as e:
+            self.log('UPDATE:: Error getting Cast: %s', e)
 
         # Process Genres
+        self.log(LOG_SUBLINE)
+        self.log('UPDATE:: %s Genres Found: %s', len(genreList), genreList)
         metadata.genres.clear()
-        genres.sort()
-        for genre in genres:
+        genreList.sort()
+        for genre in genreList:
             metadata.genres.add(genre)
 
-        # 2d   Posters - Front Cover set to poster
-        index = 0
+        # 2b.   Posters/Art - First Image set to Poster, next to Art
+        self.log(LOG_BIGLINE)
+        imageType = 'Poster & Art'
         try:
-            fromWhere = 'ORIGINAL'
-            imageList = html.xpath('//div[@class="mypicsgallery"]/a/img[@src and @data-src]')
-            if imageList:
-                image = imageList[index].get('data-src')
-                if '?' in image:
-                    image = image.split('?')[0]
-                imageContent = HTTP.Request(image).content
-
-                # default width is 800 as most of them are set to this
-                try:
-                    width = int(imageList[index].get('width'))
-                except:
-                    width = 800
-                    self.log('UPDATE:: Error: No Width Attribute, default to; "%s"', width)
-
-                # width:height ratio 1:1.5
-                maxHeight = int(width * 1.5)
-                try:
-                    height = int(imageList[index].get('height'))
-                except:
-                    height = maxHeight
-                    self.log('UPDATE:: Error: No Height Attribute, default to; "%s"', height)
-            else:
-                # no cropping needed as these video images are 800x450
-                image = html.xpath('//video/@poster')[0]
-                imageContent = HTTP.Request(image).content
-                width = 800
-                height = 450
-                maxHeight = height
-
-            self.log('UPDATE:: Movie Poster Found: w x h; %sx%s address; "%s"', width, height, image)
-
-            # cropping needed
-            if height >= maxHeight:
-                self.log('UPDATE:: Attempt to Crop as Image height; %s > Maximum Height; %s', height, maxHeight)
-                height = maxHeight
-                try:
-                    testImage = THUMBOR.format(width, height, image)
-                    testImageContent = HTTP.Request(testImage).content
-                except Exception as e:
-                    self.log('UPDATE:: Error: Thumbor Failure: %s', e)
-                    try:
-                        if os.name == 'nt':
-                            envVar = os.environ
-                            TempFolder = envVar['TEMP']
-                            LocalAppDataFolder = envVar['LOCALAPPDATA']
-                            testImage = os.path.join(TempFolder, image.split("/")[-1])
-                            cmd = CROPPER.format(LocalAppDataFolder, image, testImage, width, height)
-                            self.log('UPDATE:: Command: %s', cmd)
-                            subprocess.call(cmd)
-                            testImageContent = load_file(testImage)
-                    except Exception as e:
-                        self.log('UPDATE:: Error: Crop Script Failure: %s', e)
-                    else:
-                        fromWhere = 'SCRIPT'
-                        image = testImage
-                        imageContent = testImageContent
-                else:
-                    fromWhere = 'THUMBOR'
-                    image = testImage
-                    imageContent = testImageContent
-
-            #  clean up and only keep the poster we have added
-            self.log('UPDATE:: %s Image; "%s"', fromWhere, image)
-            for key in metadata.posters.keys():
-                del metadata.posters[key]
-            metadata.posters[image] = Proxy.Media(imageContent)
+            htmlimages = html.xpath('//div[@class="mypicsgallery"]/a//img/@srcset')
+            for index, image in enumerate(htmlimages):
+                if index > 1:
+                    break
+                whRatio = 1.5 if index == 0 else 0.5625
+                imageType = 'Poster' if index == 0 else 'Art'
+                imageString = '{0}'.format(htmlimages[index])
+                image = imageString.split()[0]
+                pic, picContent = self.getFilmImages(imageType, image, whRatio)    # height is 1.5 times the width for posters
+                if index == 0:      # processing posters
+                    #  clean up and only keep the posters we have added
+                    metadata.posters[pic] = Proxy.Media(picContent, sort_order=1)
+                    metadata.posters.validate_keys([pic])
+                    self.log(LOG_SUBLINE)
+                else:               # processing art
+                    metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
+                    metadata.art.validate_keys([pic])
 
         except Exception as e:
-            self.log('UPDATE:: Error getting Poster: %s', e)
+            self.log('UPDATE:: Error getting %s: %s', imageType, e)
 
-        # 2e.   Background Art - Next picture set to Background
-        #       height attribute not always provided - so crop to ratio as default - if thumbor fails use script
+        # 2c.   Summary
+        self.log(LOG_BIGLINE)
+        # synopsis
         try:
-            fromWhere = 'ORIGINAL'
-            imageList = html.xpath('//div[@class="mypicsgallery"]/a/img[@src and @data-src]')
+            synopsis = ''
+            htmlsynopsis = html.xpath('//section[@class="entry-content"]/p')
+            for item in htmlsynopsis:
+                synopsis = '{0}{1}\n'.format(synopsis, item.text_content())
+            self.log('UPDATE:: Synopsis Found: %s', synopsis)
 
-            # use second image in list as background
-            index = 1
+            regex = r'.*writes:'
+            pattern = re.compile(regex, re.IGNORECASE | re.DOTALL)
+            synopsis = re.sub(pattern, '', synopsis)
 
-            # if there is no background image in list - try this xpath and use first image as background art
-            if not imageList:
-                index = 0
-                imageList = html.xpath('//figure[@class="gallery-item"]/div/img[@src and @data-src]')
+            regex = ur'– Get the .*|– Download the .*|– Watch .*'
+            pattern = re.compile(regex, re.IGNORECASE)
+            synopsis = re.sub(pattern, '', synopsis)
 
-            if imageList:
-                image = imageList[index].get('data-src')
-                if '?' in image:
-                    image = image.split('?')[0]
-                imageContent = HTTP.Request(image).content
-
-                # default width is 800 as most of them are set to this
-                try:
-                    width = int(imageList[index].get('width'))
-                except:
-                    width = 800
-                    self.log('UPDATE:: Error: No Width Attribute, default to; "%s"', width)
-
-                # width:height ratio 1:1.5
-                maxHeight = int(width * 1.5)
-                try:
-                    height = int(imageList[index].get('height'))
-                except:
-                    height = maxHeight
-                    self.log('UPDATE:: Error: No Height Attribute, default to; "%s"', height)
-            else:
-                # no cropping needed as these video images are 800x450
-                image = html.xpath('//video/@poster')[0]
-                imageContent = HTTP.Request(image).content
-                width = 800
-                height = 450
-                maxHeight = height
-
-            self.log('UPDATE:: Background Art Found: w x h; %sx%s address; "%s"', width, height, image)
-
-            # cropping needed
-            if height >= maxHeight:
-                self.log('UPDATE:: Attempt to Crop as Image height; %s > Maximum Height; %s', height, maxHeight)
-                height = maxHeight
-                try:
-                    testImage = THUMBOR.format(width, height, image)
-                    testImageContent = HTTP.Request(testImage).content
-                except Exception as e:
-                    self.log('UPDATE:: Error: Thumbor Failure: %s', e)
-                    try:
-                        if os.name == 'nt':
-                            envVar = os.environ
-                            TempFolder = envVar['TEMP']
-                            LocalAppDataFolder = envVar['LOCALAPPDATA']
-                            testImage = os.path.join(TempFolder, image.split("/")[-1])
-                            cmd = CROPPER.format(LocalAppDataFolder, image, testImage, width, height)
-                            self.log('UPDATE:: Command: %s', cmd)
-                            subprocess.call(cmd)
-                            testImageContent = load_file(testImage)
-                    except Exception as e:
-                        self.log('UPDATE:: Error: Crop Script Failure: %s', e)
-                    else:
-                        fromWhere = 'SCRIPT'
-                        image = testImage
-                        imageContent = testImageContent
-                else:
-                    fromWhere = 'THUMBOR'
-                    image = testImage
-                    imageContent = testImageContent
-
-            #  clean up and only keep the art we have added
-            self.log('UPDATE:: %s Image; "%s"', fromWhere, image)
-            for key in metadata.art.keys():
-                del metadata.art[key]
-            metadata.art[image] = Proxy.Media(imageContent)
         except Exception as e:
-            self.log('UPDATE:: Error getting Background Art: %s', e)
+            self.log('UPDATE:: Error getting Synopsis: %s', e)
+
+        # combine and update
+        self.log(LOG_SUBLINE)
+        summary = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN) + synopsis
+        metadata.summary = self.TranslateString(summary, lang)
+
+        self.log(LOG_BIGLINE)
+        self.log('UPDATE:: Finished Update Routine')
+        self.log(LOG_BIGLINE)
