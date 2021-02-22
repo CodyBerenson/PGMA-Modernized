@@ -4,6 +4,11 @@
 for our new Installation and Usage Guide.  
 # Announcements
 
+**02/22/2021**
+We are releasing two new Agents to add to the arsenal:  WolffVideo (https://wolffvideo.com/) and AVEntertainments (https://www.aventertainments.com/subdept_products.aspx?dept_id=43&subdept_id=488&languageID=1).  
+Wolffvideo:  A niche site that mostly contains hard to find Can-Am and HardHeroes titles.
+AvEntertainments:  This site has something for everyone.  Although the link here zeroes into the gaycatalog, their site is really broken down between Japporn and Western...with Western then being broken down into straight, gay, bi, trans, etc.  For you folks with straight content or Japanese content, this may be a good option for you!
+
 **02/21/2021**
 A little more on the enhancements making their way to all of the agents.  With the updates to the agents, Jason is introducing the following enhancements to functionality:
 
@@ -19,7 +24,7 @@ d. Directors
 e. Country of Production
 
 **02/21/2021**
-Thanks to the keen eyes of @J-KTZ who Fagalicious has removed their interim search results listing which had broken our Agent. Jason made the necessary repairs, and Fagalicious is now back up and working as a Scenes matching tool in our arsenal.  Yay! 
+Thanks to the keen eyes of @J-KTZ, Fagalicious has removed their interim search results listing which had broken our Agent. Jason made the necessary repairs, and Fagalicious is now back up and working as a Scenes matching tool in our arsenal.  Yay! 
 
 **02/18/2021**
 Jason has been actively working on a new set of agents *and* a new set of enhancements to the Agents that provide more thorough actor matching with roles from IAFD along with a handy legend in the description, enhanced logging, as well as collections being spawned for each actor and director in the studio.  In this way, one can find all titles a given actor is in across all of one's libraries via the actor's collection.  Our plan was to release all the new/enhanced agents as a major release.  Unfortunately, a recent change to AEBN and GEVI has forced us to do a point release to fix what AEBN and GEVI broke...but it has the added benefit of having the new enhancements in them as well.  So, stay tuned for the rest of the agents to catch up.
