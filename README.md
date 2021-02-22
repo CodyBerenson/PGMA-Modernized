@@ -6,8 +6,8 @@ for our new Installation and Usage Guide.
 
 **02/22/2021**
 We are releasing two new Agents to add to the arsenal:  WolffVideo (https://wolffvideo.com/) and AVEntertainments (https://www.aventertainments.com/subdept_products.aspx?dept_id=43&subdept_id=488&languageID=1).  
-Wolffvideo:  A niche site that mostly contains hard to find Can-Am and HardHeroes titles.
-AvEntertainments:  This site has something for everyone.  Although the link here zeroes into the gaycatalog, their site is really broken down between Japporn and Western...with Western then being broken down into straight, gay, bi, trans, etc.  For you folks with straight content or Japanese content, this may be a good option for you!
+1.  Wolffvideo:  A niche site that mostly contains hard to find Can-Am and HardHeroes titles.
+2.  AvEntertainments:  This site has something for everyone.  Although the link here zeroes into the gaycatalog, their site is really broken down between Japporn and Western...with Western then being broken down into straight, gay, bi, trans, etc.  For you folks with straight content or Japanese content, this may be a good option for you!
 
 **02/21/2021**
 A little more on the enhancements making their way to all of the agents.  With the updates to the agents, Jason is introducing the following enhancements to functionality:
