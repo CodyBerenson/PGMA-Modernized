@@ -220,14 +220,12 @@ def getIAFD_FilmCast(self, html, agntCastList, FILMDICT):
                             self.log('IAFD  :: Remove From IAFD List:       \tPartial Match - Actor Alias: %s', actorAlias)
                 agntCastList = tempagntCastList
 
-            self.log('IAFD  :: Actors Left in Cast List: \t%s', agntCastList)
+            self.log('IAFD  :: Actors Left in List:         \t%s', agntCastList)
 
             self.log(LOG_SUBLINE)
 
     except Exception as e:
         self.log('IAFD  :: Error: Processing IAFD Film Cast: %s', e)
-    self.log('IAFD  :: Actors Left in Cast List: \t%s', agntCastList)
-    self.log('IAFD  :: Actors Left in Cast List: \t%s', agntCastList)
 
     return agntCastList, actorDict
 
@@ -271,7 +269,7 @@ def getIAFD_Actor(self, agntCastList, originalCastList, FILMDICT):
                 combinedList = mainList + aliasList
                 actorList = [j for x, j in enumerate(combinedList) if j not in combinedList[:x]]
                 actorsFound = len(actorList)
-                self.log('IAFD  :: %s Filter: %s\t[%s] Actors Found named %s on Agent Website %s', '1st' if useFullCareer else '2nd', 'Career Match   ' if useFullCareer else 'Upto Career End  ', actorsFound, cast, '[Skipping: too many found]' if actorsFound > 13 else '')
+                self.log('IAFD  :: %s Filter: %s\t[%s] Actors Found named %s on Agent Website %s', '1st' if useFullCareer else '2nd', 'Career Match     ' if useFullCareer else 'Upto Career End  ', actorsFound, cast, '[Skipping: too many found]' if actorsFound > 13 else '')
                 if (i == 0 and actorsFound > 0) or actorsFound > 13:
                     break
 
@@ -353,7 +351,7 @@ def getIAFD_Actor(self, agntCastList, originalCastList, FILMDICT):
                                         self.log('IAFD  :: Remove From IAFD Cast List:  \tPartial Match - Actor Alias: %s', actorAlias)
                              agntCastList = tempagntCastList
 
-                    self.log('IAFD  :: Actors Left in List:      \t%s', agntCastList)
+                    self.log('IAFD  :: Actors Left in List:         \t%s', agntCastList)
 
                     self.log(LOG_SUBLINE)
                     break   # break out to next actor in agent cast list (allCastList)

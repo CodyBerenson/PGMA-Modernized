@@ -428,7 +428,6 @@ class AEBNiii(Agent.Movies):
         except Exception as e:
             self.log('UPDATE:: Error getting Cast: %s', e)
 
-        self.log(LOG_BIGLINE)
 
         # 2e.   Posters/Background Art - Front Cover set to poster, Back Cover to background art
         # In this list we are going to save the posters that we want to keep

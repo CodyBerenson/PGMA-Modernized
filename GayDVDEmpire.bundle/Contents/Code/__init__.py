@@ -225,7 +225,9 @@ class GayDVDEmpire(Agent.Movies):
                     siteReleaseDate = self.matchReleaseDate(siteProductionYear, FILMDICT)
                     self.log(LOG_BIGLINE)
                 except Exception as e:
-                    self.log('SEARCH:: Error getting Site Production Year Date: Try Site Release Date: %s', e)
+                    self.log('SEARCH:: Error getting Site Production Year Date: %s', e)
+                    if e == 'Release Date Match Failure!':
+                        continue
                     try:
                         siteReleaseDate = title.xpath('.//small[text()="released"]/following-sibling::text()')[0].strip()
                         siteReleaseDate = self.matchReleaseDate(siteReleaseDate, FILMDICT)
@@ -233,7 +235,8 @@ class GayDVDEmpire(Agent.Movies):
                     except Exception as e:
                         self.log('SEARCH:: Error getting Site Release Date: %s', e)
                         self.log(LOG_SUBLINE)
-                        continue
+                        if e == 'Release Date Match Failure!':
+                            continue
 
                 # we should have a match on studio, title and year now
                 self.log('SEARCH:: Finished Search Routine')
@@ -307,7 +310,6 @@ class GayDVDEmpire(Agent.Movies):
             genres = []
             htmlgenres = html.xpath('//ul[@class="list-unstyled m-b-2"]//a[@label="Category"]/text()[normalize-space()]')
             htmlgenres = [x.strip() for x in htmlgenres if x.strip()]
-            htmlgenres = [x for x in htmlgenres if x.strip()]
             htmlgenres.sort()
             self.log('UPDATE:: %s Genres Found: %s', len(htmlgenres), htmlgenres)
             for genre in htmlgenres:
@@ -344,8 +346,6 @@ class GayDVDEmpire(Agent.Movies):
         self.log(LOG_BIGLINE)
         try:
             htmldirectors = html.xpath('//a[contains(@label, "Director - details")]/text()[normalize-space()]')
-            htmldirectors = [x.strip() for x in htmldirectors if x.strip()]
-            self.log('UPDATE:: Director List %s', htmldirectors)
             directorDict = self.getIAFD_Director(htmldirectors, FILMDICT)
             metadata.directors.clear()
             for key in sorted(directorDict):
@@ -356,7 +356,7 @@ class GayDVDEmpire(Agent.Movies):
                 metadata.collections.add(key)
 
         except Exception as e:
-            self.log('UPDATE:: Error getting Director(s): %s', e)
+            self.log('UPDATE:: Error getting Directors: %s', e)
 
         # 2d.   Cast
         self.log(LOG_BIGLINE)
@@ -382,10 +382,9 @@ class GayDVDEmpire(Agent.Movies):
         try:
             htmlimage = html.xpath('//*[@id="front-cover"]/img')[0]
             image = htmlimage.get('src')
-            self.log('UPDATE:: Movie Thumbnail Found: %s', image)
-            if image not in metadata.posters:
-                metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-            #  clean up and only keep the poster we have added
+            self.log('UPDATE:: Poster/Art Image Found: %s', image)
+            #  set poster then only keep it
+            metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.posters.validate_keys([image])
 
             image = image.replace('h.jpg', 'bh.jpg')

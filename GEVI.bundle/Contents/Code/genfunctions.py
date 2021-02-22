@@ -136,9 +136,9 @@ def matchStudio(self, siteStudio, FILMDICT, useAgent=True):
 def matchReleaseDate(self, siteReleaseDate, FILMDICT):
     ''' match file year against website release date: return formatted site date if no error or default to formated file date '''
     fileReleaseDate = datetime.datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-    if len(siteReleaseDate) == 4:      # a year has being provided - default to 31st December of that year
-        siteReleaseDate = siteReleaseDate + '1231'
-    siteReleaseDate = datetime.datetime.strptime(siteReleaseDate, DATEFORMAT)
+    
+    # if a year has being provided - default to 31st December of that year
+    siteReleaseDate = datetime.datetime.strptime(siteReleaseDate + '1231', '%Y%m%d') if len(siteReleaseDate) == 4 else datetime.datetime.strptime(siteReleaseDate, DATEFORMAT)
 
     # there can not be a difference more than 366 days between FileName Date and siteReleaseDate
     dx = abs((fileReleaseDate - siteReleaseDate).days)
