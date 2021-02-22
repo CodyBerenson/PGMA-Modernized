@@ -5,6 +5,20 @@ for our new Installation and Usage Guide.
 # Announcements
 
 **02/21/2021**
+A little more on the enhancements making their way to all of the agents.  With the updates to the agents, Jason is introducing the following enhancements to functionality:
+
+1.  Directors: getting info from IAFD including photos. Fixing a long term error on GEVI, which stopped them being set.
+2.  Cast: Photo, AKA Names or Roles in films. Agents get this now by one operational request. If the film is found it gets all the actors and Roles will be indicated. If the Agent has extra Cast members who are not listed as part of the film by IAFD OR if the film is not found on IAFD then these cast members are searched for individually and marked with a red tick. This is influenced by whether a movie is a compilation or not.
+3.  Summary now has a legend at top indicating, the status of the cast and whether the film is on IAFD or not
+4.  Film naming structure: one can now add the IAFD studio to the filename if needed (Studio[;IAFD Studio]) - Title (Year).ext
+5.  Collections: The final installment is that all parts of the file name are added to a collection. This includes:
+a. Studio Name - Not IAFD Studio
+b. All Parts of the Title delimited by " - "  upto and including the final part if it ends with a series number.
+c. Cast Members
+d. Directors
+e. Country of Production
+
+**02/21/2021**
 Thanks to the keen eyes of @J-KTZ who Fagalicious has removed their interim search results listing which had broken our Agent. Jason made the necessary repairs, and Fagalicious is now back up and working as a Scenes matching tool in our arsenal.  Yay! 
 
 **02/18/2021**
