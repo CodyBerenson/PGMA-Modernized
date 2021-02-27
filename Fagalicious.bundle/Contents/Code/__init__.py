@@ -40,23 +40,20 @@ from googletrans import Translator
 # Version / Log Title
 VERSION_NO = '2020.01.18.18'
 PLUGIN_LOG_TITLE = 'Fagalicious'
-
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
 
-# PLEX API /CROP Script
-load_file = Core.storage.load
-CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/BestExclusivePorn.bundle/Contents/Code/ImageCropper.vbs" "{1}" "{2}" "{3}" "{4}"'
-
 # Preferences
-REGEX = Prefs['regex']                          # file matching pattern
-DELAY = int(Prefs['delay'])                     # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-DETECT = Prefs['detect']                        # detect the language the summary appears in on the web page
-THUMBOR = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}" # online image cropper
-
-# URLS
-BASE_URL = 'https://fagalicious.com'
-BASE_SEARCH_URL = BASE_URL + '/search/{0}'
+REGEX = Prefs['regex']                      # file matching pattern
+DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
+COLCLEAR = Prefs['clearcollections']        # clear previously set collections
+COLSTUDIO = Prefs['studiocollection']       # add studio name to collection
+COLTITLE = Prefs['titlecollection']         # add title [parts] to collection
+COLGENRE = Prefs['genrecollection']         # add genres to collection
+COLDIRECTOR = Prefs['directorcollection']   # add director to collection
+COLCAST = Prefs['castcollection']           # add cast to collection
+COLCOUNTRY = Prefs['countrycollection']     # add country to collection
 
 # IAFD Related variables
 IAFD_BASE = 'https://www.iafd.com'
@@ -67,6 +64,14 @@ IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
 IAFD_THUMBSUP = u'\U0001F44D'      # thumbs up unicode character
 IAFD_THUMBSDOWN = u'\U0001F44E'    # thumbs down unicode character
 IAFD_LEGEND = u'CAST LEGEND\u2003{0} Actor not on IAFD\u2003{1} Actor on IAFD\u2003:: {2} Film on IAFD ::\n'
+
+# PLEX API /CROP Script
+load_file = Core.storage.load
+CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/BestExclusivePorn.bundle/Contents/Code/ImageCropper.vbs" "{1}" "{2}" "{3}" "{4}"'
+
+# URLS
+BASE_URL = 'https://fagalicious.com'
+BASE_SEARCH_URL = BASE_URL + '/search/{0}'
 
 # dictionary holding film variables
 FILMDICT = {}   
@@ -114,8 +119,8 @@ class Fagalicious(Agent.Movies):
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
-        ''' Prepare Video title for search query '''
-        self.log('SELF:: Original Search Query [{0}]'.format(myString))
+        ''' Prepare Title for search query '''
+        self.log('AGNT  :: Original Search Query        : {0}'.format(myString))
 
         myString = myString.lower().strip()
 
@@ -171,7 +176,8 @@ class Fagalicious(Agent.Movies):
         # string can not be longer than 50 characters
         myString = myString[:50].strip()
         myString = myString if myString[-1] != '%' else myString[:49]
-        self.log('SELF:: Returned Search Query [{0}]'.format(myString))
+        self.log('AGNT  :: Returned Search Query        : {0}'.format(myString))
+        self.log(LOG_BIGLINE)
 
         return myString
 
@@ -234,16 +240,21 @@ class Fagalicious(Agent.Movies):
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
 
         self.log(LOG_BIGLINE)
-        self.log('SEARCH:: Version               : v.%s', VERSION_NO)
-        self.log('SEARCH:: Python                : %s', sys.version_info)
-        self.log('SEARCH:: Platform              : %s %s %s', platform.system(), platform.release(), platform.architecture())
-        self.log('SEARCH:: Prefs-> delay         : %s', DELAY)
-        self.log('SEARCH::      -> detect        : %s', DETECT)
-        self.log('SEARCH::      -> regex         : %s', REGEX)
-        self.log('SEARCH:: Library:Site Language : %s:%s', lang, SITE_LANGUAGE)
-        self.log('SEARCH:: Media Title           : %s', media.title)
-        self.log('SEARCH:: File Name             : %s', filename)
-        self.log('SEARCH:: File Folder           : %s', folder)
+        self.log('SEARCH:: Version                      : v.%s', VERSION_NO)
+        self.log('SEARCH:: Python                       : %s', sys.version_info)
+        self.log('SEARCH:: Platform                     : %s %s', platform.system(), platform.release())
+        self.log('SEARCH:: Prefs-> delay                : %s', DELAY)
+        self.log('SEARCH::      -> Collection Gathering')
+        self.log('SEARCH::         -> Studio            : %s', COLSTUDIO)
+        self.log('SEARCH::         -> Film Title        : %s', COLTITLE)
+        self.log('SEARCH::         -> Genres            : %s', COLGENRE)
+        self.log('SEARCH::         -> Director(s)       : %s', COLDIRECTOR)
+        self.log('SEARCH::         -> Film Cast         : %s', COLCAST)
+        self.log('SEARCH::      -> Language Detection   : %s', DETECT)
+        self.log('SEARCH:: Library:Site Language        : %s:%s', lang, SITE_LANGUAGE)
+        self.log('SEARCH:: Media Title                  : %s', media.title)
+        self.log('SEARCH:: File Name                    : %s', filename)
+        self.log('SEARCH:: File Folder                  : %s', folder)
         self.log(LOG_BIGLINE)
 
         # Check filename format
@@ -284,13 +295,14 @@ class Fagalicious(Agent.Movies):
             titleList = html.xpath('//header[@class="entry-header"]')
             self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
 
+            self.log(LOG_BIGLINE)
             for title in titleList:
                 # Site Entry : Composed of Studio, then Scene Title separated by a Colon
                 try:
                     siteEntry = title.xpath('./h2/a/text()')
                     siteEntry = ''.join(siteEntry)
                     self.log('SEARCH:: Site Entry: %s', siteEntry)
-                    siteStudio, siteTitle = siteEntry.split(":", 2)
+                    siteStudio, siteTitle = siteEntry.split(":", 1)
                     self.log(LOG_BIGLINE)
                 except Exception as e:
                     self.log('SEARCH:: Error getting Site Entry: %s', e)
@@ -373,11 +385,11 @@ class Fagalicious(Agent.Movies):
 
         # 1a.   Set Studio
         metadata.studio = FILMDICT['Studio']
-        self.log('UPDATE:: Studio: %s' % metadata.studio)
+        self.log('UPDATE:: Studio: %s' , metadata.studio)
 
         # 1b.   Set Title
-        metadata.title = " ".join(word.capitalize() for word in FILMDICT['Title'].split())
-        self.log('UPDATE:: Video Title: %s' % metadata.title)
+        metadata.title = FILMDICT['Title']
+        self.log('UPDATE:: Title: %s' , metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
@@ -392,7 +404,9 @@ class Fagalicious(Agent.Movies):
         self.log('UPDATE:: Content Rating - Content Rating Age: X - 18')
 
         # 1g. Collection
-        metadata.collections.clear()
+        if COLCLEAR:
+            metadata.collections.clear()
+
         collections = FILMDICT['Collection']
         for collection in collections:
             metadata.collections.add(collection)
@@ -427,7 +441,9 @@ class Fagalicious(Agent.Movies):
                     continue
 
                 # do not process studio names in tags
-                if 'Movie' in tag or 'Series' in tag or '.com' in tag or tag.lower().replace(' ', '') in testStudio:
+                if 'Movie' in tag or 'Series' in tag or '.com' in tag:
+                    continue
+                if tag.lower().replace(' ', '') in testStudio:
                     continue
 
                 # assume rest are cast
@@ -449,7 +465,8 @@ class Fagalicious(Agent.Movies):
                     newRole.photo = castdict[key]['Photo']
                     newRole.role = castdict[key]['Role']
                     # add cast name to collection
-                    metadata.collections.add(key)
+                    if COLCAST:
+                        metadata.collections.add(key)
                 else: 
                     genreList.append(key)
 
@@ -463,6 +480,9 @@ class Fagalicious(Agent.Movies):
         genreList.sort()
         for genre in genreList:
             metadata.genres.add(genre)
+            # add genres to collection
+            if COLGENRE:
+                metadata.collections.add(genre)
 
         # 2b.   Posters/Art - First Image set to Poster, next to Art
         self.log(LOG_BIGLINE)

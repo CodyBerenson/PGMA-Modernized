@@ -14,10 +14,52 @@
     },
     {
         "id": "detect",
-        "label": "Always check source language before attempting translate? Select yes if film summaries are presented in different languages",
+        "label": "Always check source language before attempting translate? Select yes if movie summaries are presented in different languages",
         "type": "bool",
         "default": "false"
-    },	
+    },
+    {
+        "id": "clearcollections",
+        "label": "Clear previously set Collections",
+        "type": "bool",
+        "default": "false"
+    },
+    {
+        "id": "studiocollection",
+        "label": "Create Collections from Studio Name",
+        "type": "bool",
+        "default": "false"
+    },
+    {
+        "id": "titlecollection",
+        "label": "Create Collections from Film Title",
+        "type": "bool",
+        "default": "false"
+    },
+    {
+        "id": "castcollection",
+        "label": "Create Collections from Film Actors",
+        "type": "bool",
+        "default": "false"
+    },
+    {
+        "id": "directorcollection",
+        "label": "Create Collections from Film Directors",
+        "type": "bool",
+        "default": "false"
+    },
+    {
+        "id": "genrecollection",
+        "label": "Create Collections from Film Genres",
+        "type": "bool",
+        "default": "false"
+    },
+    {
+        "id": "countrycollection",
+        "label": "Create Collections from Film Production Country",
+        "type": "bool",
+        "default": "false"
+    },
     {
         "id": "thumbor",
         "label": "Web Address of Thumbor: A smart imaging service. It enables on-demand onlines cropping, resizing and flipping of images",
