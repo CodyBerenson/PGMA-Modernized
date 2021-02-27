@@ -99,8 +99,7 @@ def FindIAFD_Film(self, FILMDICT):
 
             # Film URL
             try:
-                iafdfilmURL = film.xpath('./td[1]/a/@href')[0].replace('+/', '/').replace('-.', '.')
-                iafdfilmURL = '{0}{1}'.format(IAFD_BASE, iafdfilmURL) if iafdfilmURL[0] == '/' else '{0}/{1}'.format(IAFD_BASE, iafdfilmURL)
+                iafdfilmURL = IAFD_BASE + film.xpath('./td[1]/a/@href')[0].replace('+/', '/').replace('-.', '.')
                 self.log('IAFD  :: Site Title url                %s', iafdfilmURL)
                 html = self.getIAFD_URLElement(iafdfilmURL)
             except Exception as e:
@@ -178,7 +177,7 @@ def getIAFD_FilmCast(self, html, agntCastList, FILMDICT):
             actorName = actor.xpath('./a/text()[normalize-space()]')[0].strip()
             actorURL = IAFD_BASE + actor.xpath('./a/@href')[0].strip()
             actorPhoto = actor.xpath('./a/img/@src')[0].strip()
-            actorPhoto = '' if 'nophoto' in actorPhoto or 'th_iafd_ad' in actorPhoto else actorPhoto
+            actorPhoto = '' if 'nophoto' in actorPhoto else actorPhoto
             actorRole = actor.xpath('./text()[normalize-space()]')
             actorRole = ' '.join(actorRole).strip()
 
@@ -314,7 +313,7 @@ def getIAFD_Actor(self, agntCastList, originalCastList, FILMDICT):
                     # we have an actor who satisfies the conditions
                     actorURL = IAFD_BASE + actor.xpath('./td[2]/a/@href')[0]
                     actorPhoto = actor.xpath('./td[1]/a/img/@src')[0] # actor name on agent website - retrieve picture
-                    actorPhoto = '' if 'nophoto' in actorPhoto or 'th_iafd_ad' in actorPhoto else actorPhoto.replace('thumbs/th_', '')
+                    actorPhoto = '' if 'th_iafd_ad.gif' in actorPhoto else actorPhoto.replace('thumbs/th_', '')
                     actorRole = 'AKA: {0}'.format(actorAlias) if actorAlias else IAFD_FOUND
 
                     self.log('IAFD  :: Alias:                       \t%s', actorAlias)
@@ -326,7 +325,7 @@ def getIAFD_Actor(self, agntCastList, originalCastList, FILMDICT):
 
                     # if we get here we have found an actor match, remove actor from the agntCastList, full and partial matches
                     if actorAlias in originalCastList:     # Actor has already been processesed in Film Mode
-                        self.log('IAFD  :: Remove From unmatched list:  \tMatched in Film Mode')
+                        self.log('IAFD  :: Actor already processed in Film Mode')
                         agntCastList.remove(actorAlias)
                     else:
                         # Assign values to dictionary
@@ -335,24 +334,24 @@ def getIAFD_Actor(self, agntCastList, originalCastList, FILMDICT):
                         myDict['Role'] = actorRole
                         actorDict[actorName] = myDict
                         if actorName in agntCastList:
-                            self.log('IAFD  :: Remove From unmatched list:  \tFull Match - Actor Name: %s', actorName)
+                            self.log('IAFD  :: Remove From IAFD Cast List:  \tFull Match - Actor Name: %s', actorName)
                             agntCastList.remove(actorName)
                         elif actorAlias in agntCastList:
-                            self.log('IAFD  :: Remove From unmatched list:  \tFull Match - Actor Alias: %s', actorAlias)
+                            self.log('IAFD  :: Remove From IAFD Cast List:  \tFull Match - Actor Alias: %s', actorAlias)
                             agntCastList.remove(actorAlias)
                         else:
                             # partial matching
                              tempagntCastList = [x for x in agntCastList if x not in actorName and actorName not in x]
                              if len(tempagntCastList) < len(agntCastList):
-                                self.log('IAFD  :: Remove From unmatched list:  \tPartial Match - Actor Name: %s', actorName)
+                                self.log('IAFD  :: Remove From IAFD Cast List:  \tPartial Match - Actor Name: %s', actorName)
                              else:
                                 if actorAlias:
                                     tempagntCastList = [x for x in agntCastList if x not in actorAlias and actorAlias not in x]
                                     if len(tempagntCastList) < len(agntCastList):
-                                        self.log('IAFD  :: Remove From unmatched list:  \tPartial Match - Actor Alias: %s', actorAlias)
+                                        self.log('IAFD  :: Remove From IAFD Cast List:  \tPartial Match - Actor Alias: %s', actorAlias)
                              agntCastList = tempagntCastList
 
-                    self.log('IAFD  :: Actors left unmatched         \t%s', agntCastList)
+                    self.log('IAFD  :: Actors Left in List:         \t%s', agntCastList)
 
                     self.log(LOG_SUBLINE)
                     break   # break out to next actor in agent cast list (allCastList)
@@ -451,13 +450,13 @@ def getIAFD_Director(self, agntDirectorList, FILMDICT):
 
                     # if we get here we have found a director match, remove director from the directorList, full matches
                     if directorName in agntDirectorList:
-                        self.log('IAFD  :: Remove From unmatched list:  \tFull Match - Director Name: %s', directorName)
+                        self.log('IAFD  :: Remove From IAFD List:       \tFull Match - Director Name: %s', directorName)
                         agntDirectorList.remove(directorName)
                     elif directorAlias in directorList:
-                        self.log('IAFD  :: Remove From unmatched list:  \tFull Match - Director Alias: %s', directorAlias)
+                        self.log('IAFD  :: Remove From IAFD List:       \tFull Match - Director Alias: %s', directorAlias)
                         agntDirectorList.remove(directorAlias)
 
-                    self.log('IAFD  :: Directors left unmatched:    \t%s', agntDirectorList)
+                    self.log('IAFD  :: Directors left in List:   \t%s', agntDirectorList)
 
                     self.log(LOG_SUBLINE)
                     break   # break out to next director in agent director list (allDirectorList)

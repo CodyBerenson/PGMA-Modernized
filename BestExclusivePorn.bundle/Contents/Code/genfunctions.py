@@ -16,12 +16,7 @@ def matchFilename(self, filename):
 
     filmVars['Title'] =  groups['title']
     filmVars['ShortTitle'] = filmVars['Title']
-    filmVars['CompareTitle'] = [''.join(sorted(self.NormaliseComparisonString(filmVars['ShortTitle'])))]
-    # if film starts with a determinate, strip the detrminate and add the title to the comparison list
-    pattern = ur'^(The|An|A) '
-    matched = re.search(pattern, filmVars['ShortTitle'], re.IGNORECASE)  # match against whole string
-    if matched:
-        filmVars['CompareTitle'].append(''.join(sorted(self.NormaliseComparisonString(re.sub(pattern, '', filmVars['ShortTitle'], flags=re.IGNORECASE)))))
+    filmVars['CompareTitle'] = [''.join(sorted(self.NormaliseComparisonString(filmVars['Title'])))]
     filmVars['SearchTitle'] = filmVars['Title']
 
     filmVars['IAFDTitle'] =  filmVars['Title']
@@ -40,34 +35,32 @@ def matchFilename(self, filename):
     #         Series: [Pissing 1]
     #    Short Title: Piss Off
     collections = []
-    if COLSTUDIO:
-        collections.append(filmVars['Studio'])                # All films have their Studio Name as a collection
+    collections.append(filmVars['Studio'])       # All films have their Studio Name as a collection
     series = []
     splitFilmTitle = filmVars['Title'].split(' - ')
     splitFilmTitle = [x.strip() for x in splitFilmTitle]
     splitCount = len(splitFilmTitle) - 1
     for index, partTitle in enumerate(splitFilmTitle):
-        pattern = r'(?<![-.])\b[0-9]+\b(?!\.[0-9])$'           # series matching = whole separate number at end of string
+        pattern = r'(?<![-.])\b[0-9]+\b(?!\.[0-9])$'        # series matching = whole separate number at end of string
         matchedSeries = re.subn(pattern, '', partTitle)
         if matchedSeries[1]:
-            if COLTITLE:
-                collections.insert(0, matchedSeries[0].strip()) # e.g. Pissing
-            series.insert(0, partTitle)                         # e.g. Pissing 1
-            if index < splitCount:                              # only blank out series info in title if not last split
+            seriesFound = True
+            collections.insert(0, matchedSeries[0].strip()) # e.g. Pissing
+            series.insert(0, partTitle)                     # e.g. Pissing 1
+            if index < splitCount:                          # only blank out series info in title if not last split
                 splitFilmTitle[index] = ''
         else:
-            if index < splitCount:                              # only add to collection if not last part of title e.g. Hardcore Fetish Series
+            if index < splitCount:                          # only add to collection if not last part of title e.g. Hardcore Fetish Series
+                collections.insert(0, partTitle)
                 splitFilmTitle[index] = ''
-                if COLTITLE:
-                    collections.insert(0, partTitle)
 
     filmVars['Collection'] = collections
     filmVars['Series'] = series
-    filmVars['ShortTitle'] = re.sub(ur'\W+$', '', ' '.join(splitFilmTitle).strip()) # strip punctions at end of string
+    filmVars['ShortTitle'] = ' '.join(splitFilmTitle).strip()
     if filmVars['ShortTitle'] not in filmVars['CompareTitle']:
         filmVars['CompareTitle'].append(''.join(sorted(self.NormaliseComparisonString(filmVars['ShortTitle']))))
     filmVars['SearchTitle'] = filmVars['ShortTitle']
-    
+
     # prepare IAFD Title and Search String
     filmVars['IAFDTitle'] = unidecode(filmVars['ShortTitle']).replace(' - ', ': ')       # iafd needs colons in place to search correctly, removed all unicode
     filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace(' &', ' and')                  # iafd does not use &
@@ -85,9 +78,11 @@ def matchFilename(self, filename):
     filmVars['IAFDTitle'] = re.sub(pattern, '', filmVars['IAFDTitle'])
 
     # strip definite and indefinite english articles
-    pattern = ur'^(The|An|A) '
+    articles = ['the ', 'a ', 'an ']
+    pattern = ur'^({0})'.format('|'.join(articles))
     matched = re.search(pattern, filmVars['IAFDTitle'], re.IGNORECASE)  # match against whole string
     if matched:
+        self.log('GENF  :: test *******')
         filmVars['IAFDTitle'] = filmVars['IAFDTitle'][matched.end():]
         tempCompare = ''.join(sorted(self.NormaliseComparisonString(filmVars['IAFDTitle'])))
         if tempCompare not in filmVars['IAFDCompareTitle']:
@@ -101,7 +96,7 @@ def matchFilename(self, filename):
     # print out dictionary values / normalise unicode
     for key in sorted(filmVars.keys()):
         filmVars[key] = [self.NormaliseUnicode(x) for x in filmVars[key]] if type(filmVars[key]) is list else self.NormaliseUnicode(filmVars[key])
-        self.log('GENF  :: {0: <29}: {1}'.format(key, filmVars[key]))
+        self.log('GENF  :: {0: <22}: {1}'.format(key, filmVars[key]))
 
     return filmVars
 
@@ -109,9 +104,10 @@ def matchFilename(self, filename):
 def matchTitle(self, siteTitle, FILMDICT):
     ''' match file title against website/iafd title: Boolean Return '''
     compareSiteTitle = ''.join(sorted(self.NormaliseComparisonString(siteTitle)))
-    testSite = 'Passed' if compareSiteTitle in FILMDICT['CompareTitle'] else 'Passed (IAFD)' if compareSiteTitle in FILMDICT['IAFDCompareTitle'] else 'Failed'
 
-    self.log('GENF  :: Site Title                    %s', siteTitle)
+    testSite = 'Passed' if compareSiteTitle in FILMDICT['CompareTitle'] else 'Passed' if compareSiteTitle in FILMDICT['IAFDCompareTitle'] else 'Failed'
+
+    self.log('GENF  :: Site Title                    "%s"', siteTitle)
     self.log('GENF  :: Title Comparison              [%s]\tSite: "%s"\tFile: ["%s", "%s"]', testSite, siteTitle, FILMDICT['Title'], FILMDICT['ShortTitle'])
 
     if testSite == 'Failed':
@@ -128,7 +124,7 @@ def matchStudio(self, siteStudio, FILMDICT, useAgent=True):
 
     testStudio = 'Full Match' if compareSiteStudio == dtCompareStudio else 'Partial Match' if compareSiteStudio in dtCompareStudio or dtCompareStudio in compareSiteStudio else 'Failed Match'
 
-    self.log('GENF  :: Site Studio                   %s', siteStudio)
+    self.log('GENF  :: Site Studio                   "%s"', siteStudio)
     self.log('GENF  :: Studio Comparison             [%s]\tSite: "%s"\tFile: "%s"', testStudio, siteStudio, dtStudio)
 
     if testStudio == 'Failed Match':
@@ -147,7 +143,7 @@ def matchReleaseDate(self, siteReleaseDate, FILMDICT):
     # there can not be a difference more than 366 days between FileName Date and siteReleaseDate
     dx = abs((fileReleaseDate - siteReleaseDate).days)
 
-    self.log('GENF  :: Release Date                  %s', siteReleaseDate)
+    self.log('GENF  :: Release Date                  "%s"', siteReleaseDate)
     self.log('GENF  :: Release Date Comparison       [%s]\t %s days\tSite: "%s"\tFile: "%s"', 'Failed' if dx > 366 else 'Pass', dx, siteReleaseDate.strftime('%Y %m %d'), fileReleaseDate.strftime('%Y %m %d'))
 
     if dx > 366:
