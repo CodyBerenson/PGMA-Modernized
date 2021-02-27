@@ -39,13 +39,16 @@ LOG_BIGLINE = '-----------------------------------------------------------------
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
 
 # Preferences
-REGEX = Prefs['regex']          # file matching pattern
-DELAY = int(Prefs['delay'])     # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-DETECT = Prefs['detect']        # detect the language the summary appears in on the web page
-
-# URLS
-BASE_URL = 'https://gay.aebn.com'
-BASE_SEARCH_URL = [BASE_URL + '/gay/search/?sysQuery={0}', BASE_URL + '/gay/search/movies/page/1?sysQuery={0}&criteria=%7B%22sort%22%3A%22Relevance%22%7D']
+REGEX = Prefs['regex']                      # file matching pattern
+DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
+COLCLEAR = Prefs['clearcollections']        # clear previously set collections
+COLSTUDIO = Prefs['studiocollection']       # add studio name to collection
+COLTITLE = Prefs['titlecollection']         # add title [parts] to collection
+COLGENRE = Prefs['genrecollection']         # add genres to collection
+COLDIRECTOR = Prefs['directorcollection']   # add director to collection
+COLCAST = Prefs['castcollection']           # add cast to collection
+COLCOUNTRY = Prefs['countrycollection']     # add country to collection
 
 # IAFD Related variables
 IAFD_BASE = 'https://www.iafd.com'
@@ -56,6 +59,10 @@ IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
 IAFD_THUMBSUP = u'\U0001F44D'      # thumbs up unicode character
 IAFD_THUMBSDOWN = u'\U0001F44E'    # thumbs down unicode character
 IAFD_LEGEND = u'CAST LEGEND\u2003{0} Actor not on IAFD\u2003{1} Actor on IAFD\u2003:: {2} Film on IAFD ::\n'
+
+# URLS
+BASE_URL = 'https://gay.aebn.com'
+BASE_SEARCH_URL = [BASE_URL + '/gay/search/?sysQuery={0}', BASE_URL + '/gay/search/movies/page/1?sysQuery={0}&criteria=%7B%22sort%22%3A%22Relevance%22%7D']
 
 # dictionary holding film variables
 FILMDICT = {}
@@ -122,7 +129,7 @@ class AEBNiii(Agent.Movies):
                 siteURL = title.xpath('./section//h1/a/@href')[0] if ExactMatches else title.xpath('./a/@href')[0]
                 siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
                 FILMDICT['SiteURL'] = siteURL
-                self.log('AGNT  :: Site Title url: %s', siteURL)
+                self.log('AGNT  :: Site Title URL                %s', siteURL)
                 self.log(LOG_BIGLINE)
             except:
                 self.log('AGNT  :: Error getting Site Title Url')
@@ -145,7 +152,7 @@ class AEBNiii(Agent.Movies):
             foundStudio = False
             try:
                 htmlSiteStudio = title.xpath('./section//li[contains(@class,"item-studio")]/a/text()') if ExactMatches else html.xpath('//div[@class="dts-studio-name-wrapper"]/a/text()')
-                self.log('AGNT  :: %s Site URL Studios: %s', len(htmlSiteStudio), htmlSiteStudio)
+                self.log('AGNT  :: %s Site URL Studios            %s', len(htmlSiteStudio), htmlSiteStudio)
                 for siteStudio in htmlSiteStudio:
                     try:
                         self.matchStudio(siteStudio, FILMDICT)
@@ -173,7 +180,7 @@ class AEBNiii(Agent.Movies):
                 siteReleaseDate = title.xpath('./section//li[contains(@class,"item-release-date")]/text()')[0] if ExactMatches else html.xpath('//li[contains(@class,"item-release-date")]/text()')[0]
                 siteReleaseDate = siteReleaseDate.strip().lower()
                 siteReleaseDate = siteReleaseDate.replace('sept ', 'sep ').replace('july ', 'jul ')
-                self.log('AGNT  :: Site URL Release Date: %s', siteReleaseDate)
+                self.log('AGNT  :: Site URL Release Date         %s', siteReleaseDate)
                 try:
                     siteReleaseDate = self.matchReleaseDate(siteReleaseDate, FILMDICT)
                     self.log(LOG_BIGLINE)
@@ -189,8 +196,8 @@ class AEBNiii(Agent.Movies):
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
-        ''' Prepare Video title for search query '''
-        self.log('AGNT  :: Original Search Query [{0}]'.format(myString))
+        ''' Prepare Title for search query '''
+        self.log('AGNT  :: Original Search Query        : {0}'.format(myString))
 
         # convert to lower case and trim and strip diacritics, fullstops, enquote
         myString = myString.replace('.', '').replace('-', '')
@@ -201,7 +208,8 @@ class AEBNiii(Agent.Movies):
         myNormalString = String.URLEncode(myString).replace('%25', '%').replace('*', '')
         myQuotedString = String.URLEncode('"{0}"'.format(myString)).replace('%25', '%').replace('*', '')
         myString = [myQuotedString, myNormalString]
-        self.log('AGNT  :: Returned Search Query {0}'.format(myString))
+        self.log('AGNT  :: Returned Search Query        : {0}'.format(myString))
+        self.log(LOG_BIGLINE)
 
         return myString
 
@@ -213,16 +221,21 @@ class AEBNiii(Agent.Movies):
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
 
         self.log(LOG_BIGLINE)
-        self.log('SEARCH:: Version               : v.%s', VERSION_NO)
-        self.log('SEARCH:: Python                : %s', sys.version_info)
-        self.log('SEARCH:: Platform              : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs-> delay         : %s', DELAY)
-        self.log('SEARCH::      -> detect        : %s', DETECT)
-        self.log('SEARCH::      -> regex         : %s', REGEX)
-        self.log('SEARCH:: Library:Site Language : %s:%s', lang, SITE_LANGUAGE)
-        self.log('SEARCH:: Media Title           : %s', media.title)
-        self.log('SEARCH:: File Name             : %s', filename)
-        self.log('SEARCH:: File Folder           : %s', folder)
+        self.log('SEARCH:: Version                      : v.%s', VERSION_NO)
+        self.log('SEARCH:: Python                       : %s', sys.version_info)
+        self.log('SEARCH:: Platform                     : %s %s', platform.system(), platform.release())
+        self.log('SEARCH:: Prefs-> delay                : %s', DELAY)
+        self.log('SEARCH::      -> Collection Gathering')
+        self.log('SEARCH::         -> Studio            : %s', COLSTUDIO)
+        self.log('SEARCH::         -> Film Title        : %s', COLTITLE)
+        self.log('SEARCH::         -> Genres            : %s', COLGENRE)
+        self.log('SEARCH::         -> Director(s)       : %s', COLDIRECTOR)
+        self.log('SEARCH::         -> Film Cast         : %s', COLCAST)
+        self.log('SEARCH::      -> Language Detection   : %s', DETECT)
+        self.log('SEARCH:: Library:Site Language        : %s:%s', lang, SITE_LANGUAGE)
+        self.log('SEARCH:: Media Title                  : %s', media.title)
+        self.log('SEARCH:: File Name                    : %s', filename)
+        self.log('SEARCH:: File Folder                  : %s', folder)
         self.log(LOG_BIGLINE)
 
         # Check filename format
@@ -285,6 +298,7 @@ class AEBNiii(Agent.Movies):
                     morePages = False
 
                 self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
+                self.log(LOG_BIGLINE)
                 for title in titleList:
                     # get film variables in dictionary format: if dict is filled we have a match
                     matchedTitle = self.matchFilmTitle(False, title, FILMDICT)
@@ -321,11 +335,11 @@ class AEBNiii(Agent.Movies):
 
         # 1a.   Set Studio
         metadata.studio = FILMDICT['Studio']
-        self.log('UPDATE:: Studio: %s' % metadata.studio)
+        self.log('UPDATE:: Studio: %s' , metadata.studio)
 
         # 1b.   Set Title
         metadata.title = FILMDICT['Title']
-        self.log('UPDATE:: Video Title: %s' % metadata.title)
+        self.log('UPDATE:: Title: %s' , metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
@@ -340,10 +354,13 @@ class AEBNiii(Agent.Movies):
         self.log('UPDATE:: Content Rating - Content Rating Age: X - 18')
 
         # 1g. Collection
-        metadata.collections.clear()
-        for collection in FILMDICT['Collection']:
+        if COLCLEAR:
+            metadata.collections.clear()
+
+        collections = FILMDICT['Collection']
+        for collection in collections:
             metadata.collections.add(collection)
-        self.log('UPDATE:: Collection Set From filename: %s', FILMDICT['Collection'])
+        self.log('UPDATE:: Collection Set From filename: %s', collections)
 
         #    2.  Metadata retrieved from website
         #        a. Genres
@@ -373,6 +390,10 @@ class AEBNiii(Agent.Movies):
             metadata.genres.clear()
             for genre in genres:
                 metadata.genres.add(genre)
+                # add genres to collection
+                if COLGENRE:
+                    metadata.collections.add(genre)
+
 
         except Exception as e:
             self.log('UPDATE:: Error getting Genres: %s', e)
@@ -404,7 +425,8 @@ class AEBNiii(Agent.Movies):
                 newDirector.name = key
                 newDirector.photo = directorDict[key]
                 # add director to collection
-                metadata.collections.add(key)
+                if COLDIRECTOR:
+                    metadata.collections.add(key)
 
         except Exception as e:
             self.log('UPDATE:: Error getting Director(s): %s', e)
@@ -423,40 +445,33 @@ class AEBNiii(Agent.Movies):
                 newRole.photo = castdict[key]['Photo']
                 newRole.role = castdict[key]['Role']
                 # add cast name to collection
-                metadata.collections.add(key)
+                if COLCAST:
+                    metadata.collections.add(key)
 
         except Exception as e:
             self.log('UPDATE:: Error getting Cast: %s', e)
 
 
-        # 2e.   Posters/Background Art - Front Cover set to poster, Back Cover to background art
-        # In this list we are going to save the posters that we want to keep
+        # 2e.   Posters/Art - Front Cover set to poster, Back Cover to art
         self.log(LOG_BIGLINE)
         try:
             htmlimages = html.xpath('//*[contains(@class,"dts-movie-boxcover")]//img/@src')
-            self.log('UPDATE:: %s Poster/Background Art Found: %s', len(htmlimages), htmlimages)
-
-            validPosterList = []
             image = htmlimages[0].split('?')[0]
             image = ('http:' if 'http:' not in image else '') + image
-            self.log('UPDATE:: Movie Poster Found: %s', image)
-            validPosterList.append(image)
-            if image not in metadata.posters:
-                metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+            self.log('UPDATE:: Poster Image Found: %s', image)
             #  clean up and only keep the poster we have added
-            metadata.posters.validate_keys(validPosterList)
+            metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+            metadata.posters.validate_keys([image])
 
-            validArtList = []
+            self.log(LOG_SUBLINE)
             image = htmlimages[1].split('?')[0]
             image = ('http:' if 'http:' not in image else '') + image
-            self.log('UPDATE:: Movie Background Art Found: %s', image)
-            validArtList.append(image)
-            if image not in metadata.art:
-                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+            self.log('UPDATE:: Art Image Found: %s', image)
             #  clean up and only keep the Art we have added
-            metadata.art.validate_keys(validArtList)
+            metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+            metadata.art.validate_keys([image])
         except Exception as e:
-            self.log('UPDATE:: Error getting Poster/Background Art: %s', e)
+            self.log('UPDATE:: Error getting Poster/Art: %s', e)
 
         # 2f.   Summary = IAFD Legend + Synopsis + Scene Information
         # synopsis

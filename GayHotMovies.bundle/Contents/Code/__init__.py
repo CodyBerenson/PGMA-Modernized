@@ -44,13 +44,16 @@ LOG_BIGLINE = '-----------------------------------------------------------------
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
 
 # Preferences
-REGEX = Prefs['regex']          # file matching pattern
-DELAY = int(Prefs['delay'])     # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-DETECT = Prefs['detect']        # detect the language the summary appears in on the web page
-
-# URLS
-BASE_URL = 'https://www.gayhotmovies.com'
-BASE_SEARCH_URL = BASE_URL + '/search.php?num_per_page=48&&page_sort=relevance&search_string={0}&find_with=all&searchtype_value=video_title'
+REGEX = Prefs['regex']                      # file matching pattern
+DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
+COLCLEAR = Prefs['clearcollections']        # clear previously set collections
+COLSTUDIO = Prefs['studiocollection']       # add studio name to collection
+COLTITLE = Prefs['titlecollection']         # add title [parts] to collection
+COLGENRE = Prefs['genrecollection']         # add genres to collection
+COLDIRECTOR = Prefs['directorcollection']   # add director to collection
+COLCAST = Prefs['castcollection']           # add cast to collection
+COLCOUNTRY = Prefs['countrycollection']     # add country to collection
 
 # IAFD Related variables
 IAFD_BASE = 'https://www.iafd.com'
@@ -61,6 +64,10 @@ IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
 IAFD_THUMBSUP = u'\U0001F44D'      # thumbs up unicode character
 IAFD_THUMBSDOWN = u'\U0001F44E'    # thumbs down unicode character
 IAFD_LEGEND = u'CAST LEGEND\u2003{0} Actor not on IAFD\u2003{1} Actor on IAFD\u2003:: {2} Film on IAFD ::\n'
+
+# URLS
+BASE_URL = 'https://www.gayhotmovies.com'
+BASE_SEARCH_URL = BASE_URL + '/search.php?num_per_page=48&&page_sort=relevance&search_string={0}&find_with=all&searchtype_value=video_title'
 
 # dictionary holding film variables
 FILMDICT = {}
@@ -108,8 +115,8 @@ class GayHotMovies(Agent.Movies):
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
-        ''' Prepare Video title for search query '''
-        self.log('AGNT  :: Original Search Query [{0}]'.format(myString))
+        ''' Prepare Title for search query '''
+        self.log('AGNT  :: Original Search Query        : {0}'.format(myString))
 
         myString = myString.strip().lower()
         nullChars = ["'", ',' '&', '!', '.', '#'] # to be replaced with null
@@ -139,28 +146,35 @@ class GayHotMovies(Agent.Movies):
 
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string
         myString = myString.replace('%25', '%').replace('*', '')
-        self.log('AGNT  :: Returned Search Query [{0}]'.format(myString))
+        self.log('AGNT  :: Returned Search Query        : {0}'.format(myString))
+        self.log(LOG_BIGLINE)
 
         return myString
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
+        ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
             return
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
 
         self.log(LOG_BIGLINE)
-        self.log('SEARCH:: Version               : v.%s', VERSION_NO)
-        self.log('SEARCH:: Python                : %s', sys.version_info)
-        self.log('SEARCH:: Platform              : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs-> delay         : %s', DELAY)
-        self.log('SEARCH::      -> detect        : %s', DETECT)
-        self.log('SEARCH::      -> regex         : %s', REGEX)
-        self.log('SEARCH:: Library:Site Language : %s:%s', lang, SITE_LANGUAGE)
-        self.log('SEARCH:: Media Title           : %s', media.title)
-        self.log('SEARCH:: File Name             : %s', filename)
-        self.log('SEARCH:: File Folder           : %s', folder)
+        self.log('SEARCH:: Version                      : v.%s', VERSION_NO)
+        self.log('SEARCH:: Python                       : %s', sys.version_info)
+        self.log('SEARCH:: Platform                     : %s %s', platform.system(), platform.release())
+        self.log('SEARCH:: Prefs-> delay                : %s', DELAY)
+        self.log('SEARCH::      -> Collection Gathering')
+        self.log('SEARCH::         -> Studio            : %s', COLSTUDIO)
+        self.log('SEARCH::         -> Film Title        : %s', COLTITLE)
+        self.log('SEARCH::         -> Genres            : %s', COLGENRE)
+        self.log('SEARCH::         -> Director(s)       : %s', COLDIRECTOR)
+        self.log('SEARCH::         -> Film Cast         : %s', COLCAST)
+        self.log('SEARCH::      -> Language Detection   : %s', DETECT)
+        self.log('SEARCH:: Library:Site Language        : %s:%s', lang, SITE_LANGUAGE)
+        self.log('SEARCH:: Media Title                  : %s', media.title)
+        self.log('SEARCH:: File Name                    : %s', filename)
+        self.log('SEARCH:: File Folder                  : %s', folder)
         self.log(LOG_BIGLINE)
 
         # Check filename format
@@ -197,6 +211,7 @@ class GayHotMovies(Agent.Movies):
             titleList = html.xpath('//div[@class="cell movie_box"]')
             self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
 
+            self.log(LOG_BIGLINE)
             for title in titleList:
                 # Site Title
                 try:
@@ -234,13 +249,16 @@ class GayHotMovies(Agent.Movies):
                 try:
                     siteReleaseDate = title.xpath('./div/div/div/span[@class="release_year"]/a/text()')[0].strip()
                     siteReleaseDate = siteReleaseDate.replace('sept ', 'sep ').replace('july ', 'jul ')
-                    siteReleaseDate = self.matchReleaseDate(siteReleaseDate, FILMDICT)
-                    self.log(LOG_BIGLINE)
-                except Exception as e:
-                    self.log('SEARCH:: Error getting Site Release Date: Default to Filename Date [%s]', e)
-                    if e == 'Release Date Match Failure!':
+                    try:
+                        siteReleaseDate = self.matchReleaseDate(siteReleaseDate, FILMDICT)
+                        self.log(LOG_BIGLINE)
+                    except Exception as e:
+                        self.log('SEARCH:: Error getting Site URL Release Date: %s', e)
+                        self.log(LOG_SUBLINE)
                         continue
-                    self.log(LOG_SUBLINE)
+                except:
+                    self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
+                    self.log(LOG_BIGLINE)
 
                 # we should have a match on studio, title and year now
                 self.log('SEARCH:: Finished Search Routine')
@@ -274,11 +292,11 @@ class GayHotMovies(Agent.Movies):
 
         # 1a.   Set Studio
         metadata.studio = FILMDICT['Studio']
-        self.log('UPDATE:: Studio: %s' % metadata.studio)
+        self.log('UPDATE:: Studio: %s' , metadata.studio)
 
         # 1b.   Set Title
-        metadata.title = " ".join(word.capitalize() for word in FILMDICT['Title'].split())
-        self.log('UPDATE:: Video Title: %s' % metadata.title)
+        metadata.title = FILMDICT['Title']
+        self.log('UPDATE:: Title: %s' , metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
@@ -293,7 +311,9 @@ class GayHotMovies(Agent.Movies):
         self.log('UPDATE:: Content Rating - Content Rating Age: X - 18')
 
         # 1g. Collection
-        metadata.collections.clear()
+        if COLCLEAR:
+            metadata.collections.clear()
+
         collections = FILMDICT['Collection']
         for collection in collections:
             metadata.collections.add(collection)
@@ -338,6 +358,9 @@ class GayHotMovies(Agent.Movies):
             metadata.genres.clear()
             for genre in genres:
                 metadata.genres.add(genre)
+                # add genres to collection
+                if COLGENRE:
+                    metadata.collections.add(genre)
 
         except Exception as e:
             self.log('UPDATE:: Error getting Categories: Countries and Genres: %s', e)
@@ -383,7 +406,8 @@ class GayHotMovies(Agent.Movies):
                 newDirector.name = key
                 newDirector.photo = directorDict[key]
                 # add director to collection
-                metadata.collections.add(key)
+                if COLDIRECTOR:
+                    metadata.collections.add(key)
 
         except Exception as e:
             self.log('UPDATE:: Error getting Director(s): %s', e)
@@ -402,7 +426,8 @@ class GayHotMovies(Agent.Movies):
                 newRole.photo = castdict[key]['Photo']
                 newRole.role = castdict[key]['Role']
                 # add cast name to collection
-                metadata.collections.add(key)
+                if COLCAST:
+                    metadata.collections.add(key)
 
         except Exception as e:
             self.log('UPDATE:: Error getting Cast: %s', e)

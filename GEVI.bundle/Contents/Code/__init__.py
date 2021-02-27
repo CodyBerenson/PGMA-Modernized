@@ -40,13 +40,16 @@ LOG_BIGLINE = '-----------------------------------------------------------------
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
 
 # Preferences
-REGEX = Prefs['regex']          # file matching pattern
-DELAY = int(Prefs['delay'])     # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-DETECT = Prefs['detect']        # detect the language the summary appears in on the web page
-
-# URLS
-BASE_URL = 'https://www.gayeroticvideoindex.com'
-BASE_SEARCH_URL = BASE_URL + '/search.php?type=t&where=b&query={0}&Search=Search&page=1'
+REGEX = Prefs['regex']                      # file matching pattern
+DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
+COLCLEAR = Prefs['clearcollections']        # clear previously set collections
+COLSTUDIO = Prefs['studiocollection']       # add studio name to collection
+COLTITLE = Prefs['titlecollection']         # add title [parts] to collection
+COLGENRE = Prefs['genrecollection']         # add genres to collection
+COLDIRECTOR = Prefs['directorcollection']   # add director to collection
+COLCAST = Prefs['castcollection']           # add cast to collection
+COLCOUNTRY = Prefs['countrycollection']     # add country to collection
 
 # IAFD Related variables
 IAFD_BASE = 'https://www.iafd.com'
@@ -57,6 +60,10 @@ IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
 IAFD_THUMBSUP = u'\U0001F44D'      # thumbs up unicode character
 IAFD_THUMBSDOWN = u'\U0001F44E'    # thumbs down unicode character
 IAFD_LEGEND = u'CAST LEGEND\u2003{0} Actor not on IAFD\u2003{1} Actor on IAFD\u2003:: {2} Film on IAFD ::\n'
+
+# URLS
+BASE_URL = 'https://www.gayeroticvideoindex.com'
+BASE_SEARCH_URL = BASE_URL + '/search.php?type=t&where=b&query={0}&Search=Search&page=1'
 
 # dictionary holding film variables
 FILMDICT = {}
@@ -103,8 +110,8 @@ class GEVI(Agent.Movies):
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
-        ''' Prepare Video title for search query '''
-        self.log('AGNT  :: Original Search Query [{0}]'.format(myString))
+        ''' Prepare Title for search query '''
+        self.log('AGNT  :: Original Search Query        : {0}'.format(myString))
 
         # convert to lower case and trim
         myString = myString.lower().strip()
@@ -186,7 +193,7 @@ class GEVI(Agent.Movies):
         # GEVI uses a maximum of 24 characters when searching
         myString = myString[:24].strip()
         myString = myString if myString[-1] != '%' else myString[:23]
-        self.log('AGNT  :: Amended Search Query [{0}]'.format(myString))
+        self.log('AGNT  :: Returned Search Query        : {0}'.format(myString))
         self.log(LOG_BIGLINE)
 
         return myString
@@ -199,16 +206,21 @@ class GEVI(Agent.Movies):
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
 
         self.log(LOG_BIGLINE)
-        self.log('SEARCH:: Version               : v.%s', VERSION_NO)
-        self.log('SEARCH:: Python                : %s', sys.version_info)
-        self.log('SEARCH:: Platform              : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs-> delay         : %s', DELAY)
-        self.log('SEARCH::      -> detect        : %s', DETECT)
-        self.log('SEARCH::      -> regex         : %s', REGEX)
-        self.log('SEARCH:: Library:Site Language : %s:%s', lang, SITE_LANGUAGE)
-        self.log('SEARCH:: Media Title           : %s', media.title)
-        self.log('SEARCH:: File Name             : %s', filename)
-        self.log('SEARCH:: File Folder           : %s', folder)
+        self.log('SEARCH:: Version                      : v.%s', VERSION_NO)
+        self.log('SEARCH:: Python                       : %s', sys.version_info)
+        self.log('SEARCH:: Platform                     : %s %s', platform.system(), platform.release())
+        self.log('SEARCH:: Prefs-> delay                : %s', DELAY)
+        self.log('SEARCH::      -> Collection Gathering')
+        self.log('SEARCH::         -> Studio            : %s', COLSTUDIO)
+        self.log('SEARCH::         -> Film Title        : %s', COLTITLE)
+        self.log('SEARCH::         -> Genres            : %s', COLGENRE)
+        self.log('SEARCH::         -> Director(s)       : %s', COLDIRECTOR)
+        self.log('SEARCH::         -> Film Cast         : %s', COLCAST)
+        self.log('SEARCH::      -> Language Detection   : %s', DETECT)
+        self.log('SEARCH:: Library:Site Language        : %s:%s', lang, SITE_LANGUAGE)
+        self.log('SEARCH:: Media Title                  : %s', media.title)
+        self.log('SEARCH:: File Name                    : %s', filename)
+        self.log('SEARCH:: File Folder                  : %s', folder)
         self.log(LOG_BIGLINE)
 
         # Check filename format
@@ -387,11 +399,11 @@ class GEVI(Agent.Movies):
 
         # 1a.   Set Studio
         metadata.studio = FILMDICT['Studio']
-        self.log('UPDATE:: Studio: %s' % metadata.studio)
+        self.log('UPDATE:: Studio: %s' , metadata.studio)
 
         # 1b.   Set Title
         metadata.title = FILMDICT['Title']
-        self.log('UPDATE:: Video Title: %s' % metadata.title)
+        self.log('UPDATE:: Title: %s' , metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
@@ -406,10 +418,13 @@ class GEVI(Agent.Movies):
         self.log('UPDATE:: Content Rating - Content Rating Age: X - 18')
 
         # 1g. Collection
-        metadata.collections.clear()
-        for collection in FILMDICT['Collection']:
+        if COLCLEAR:
+            metadata.collections.clear()
+
+        collections = FILMDICT['Collection']
+        for collection in collections:
             metadata.collections.add(collection)
-        self.log('UPDATE:: Collection Set From filename: %s', FILMDICT['Collection'])
+        self.log('UPDATE:: Collection Set From filename: %s', collections)
 
         #    2.  Metadata retrieved from website
         #        a. Genre                : Alphabetic order
@@ -430,6 +445,9 @@ class GEVI(Agent.Movies):
             metadata.genres.clear()
             for genre in htmlgenres:
                 metadata.genres.add(genre)
+                # add genres to collection
+                if COLGENRE:
+                    metadata.collections.add(genre)
 
         except Exception as e:
             self.log('UPDATE:: Error getting Genres: %s', e)
@@ -445,7 +463,8 @@ class GEVI(Agent.Movies):
             for country in htmlcountries:
                 metadata.countries.add(country)
                 # add country to collection
-                metadata.collections.add(country)
+                if COLCOUNTRY:
+                    metadata.collections.add(country)
 
         except Exception as e:
             self.log('UPDATE:: Error getting Countries: %s', e)
@@ -475,7 +494,8 @@ class GEVI(Agent.Movies):
                 newDirector.name = key
                 newDirector.photo = directorDict[key]
                 # add director to collection
-                metadata.collections.add(key)
+                if COLDIRECTOR:
+                    metadata.collections.add(key)
 
         except Exception as e:
             self.log('UPDATE:: Error getting Director(s): %s', e)
@@ -494,7 +514,8 @@ class GEVI(Agent.Movies):
                 newRole.photo = castdict[key]['Photo']
                 newRole.role = castdict[key]['Role']
                 # add cast name to collection
-                metadata.collections.add(key)
+                if COLCAST:
+                    metadata.collections.add(key)
 
         except Exception as e:
             self.log('UPDATE:: Error getting Cast: %s', e)
