@@ -65,9 +65,10 @@ IAFD_THUMBSUP = u'\U0001F44D'      # thumbs up unicode character
 IAFD_THUMBSDOWN = u'\U0001F44E'    # thumbs down unicode character
 IAFD_LEGEND = u'CAST LEGEND\u2003{0} Actor not on IAFD\u2003{1} Actor on IAFD\u2003:: {2} Film on IAFD ::\n'
 
-# PLEX API /CROP Script
+# PLEX API /CROP Script/online image cropper
 load_file = Core.storage.load
 CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/BestExclusivePorn.bundle/Contents/Code/ImageCropper.vbs" "{1}" "{2}" "{3}" "{4}"'
+THUMBOR = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}"
 
 # URLS
 BASE_URL = 'https://fagalicious.com'
@@ -185,6 +186,7 @@ class Fagalicious(Agent.Movies):
     def getFilmImages(self, imageType, imageURL, whRatio):
         ''' get Film images - posters/background art and crop if necessary '''
         pic = imageURL
+        picContent = ''
         picInfo = Image.open(BytesIO(HTTP.Request(pic).content))
         width, height = picInfo.size
         dispWidth = '{:,d}'.format(width)       # thousands separator
@@ -214,7 +216,7 @@ class Fagalicious(Agent.Movies):
                 pic = THUMBOR.format(cropWidth, cropHeight, imageURL)
                 picContent = HTTP.Request(pic).content
             except Exception as e:
-                self.log('AGNT  :: Error Thumbor Failed to Crop Image to: {0} x {1}'.format(desiredWidth, desiredHeight))
+                self.log('AGNT  :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
                 try:
                     if os.name == 'nt':
                         self.log('AGNT  :: Using Script to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
@@ -488,14 +490,13 @@ class Fagalicious(Agent.Movies):
         self.log(LOG_BIGLINE)
         imageType = 'Poster & Art'
         try:
-            htmlimages = html.xpath('//div[@class="mypicsgallery"]/a//img/@srcset')
+            htmlimages = html.xpath('//div[@class="mypicsgallery"]/a//img/@src')
+            htmlimages = [x for x in htmlimages if 'data:image' not in x]
             for index, image in enumerate(htmlimages):
                 if index > 1:
                     break
                 whRatio = 1.5 if index == 0 else 0.5625
                 imageType = 'Poster' if index == 0 else 'Art'
-                imageString = '{0}'.format(htmlimages[index])
-                image = imageString.split()[0]
                 pic, picContent = self.getFilmImages(imageType, image, whRatio)    # height is 1.5 times the width for posters
                 if index == 0:      # processing posters
                     #  clean up and only keep the posters we have added
