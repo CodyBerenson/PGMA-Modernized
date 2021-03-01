@@ -3,7 +3,7 @@
         "id": "regex",
         "label": "Regular expression to match files by. Must contain named groups for Studio, Movie Title and Release Year.",
         "type": "text",
-        "default":  "^\\((?P<studio>.+)\\) - (?P<title>.+) \\((?P<year>\\d{4})\\)"
+        "default": "^\\((?P<studio>.+)\\) - (?P<title>.+) \\((?P<year>\\d{4})\\)"
     },
     {
         "id": "delay",
@@ -19,6 +19,12 @@
         "default": "false"
     },
     {
+        "id": "prefixlegend",
+        "label": "Place Cast Legend at Start of Summary?",
+        "type": "bool",
+        "default": "true"
+    },
+    {
         "id": "clearcollections",
         "label": "Clear previously set Collections",
         "type": "bool",
@@ -26,37 +32,37 @@
     },
     {
         "id": "studiocollection",
-        "label": "Create Collections from Studio Name",
+        "label": "Create Collections based on Studio Name",
         "type": "bool",
         "default": "false"
     },
     {
         "id": "titlecollection",
-        "label": "Create Collections from Film Title",
+        "label": "Create Collections based on Film Series",
         "type": "bool",
         "default": "false"
     },
     {
         "id": "castcollection",
-        "label": "Create Collections from Film Actors",
+        "label": "Create Collections based on Film Actors",
         "type": "bool",
         "default": "false"
     },
     {
         "id": "directorcollection",
-        "label": "Create Collections from Film Directors",
+        "label": "Create Collections based on Film Directors",
         "type": "bool",
         "default": "false"
     },
     {
         "id": "genrecollection",
-        "label": "Create Collections from Film Genres",
+        "label": "Create Collections based on Film Genres",
         "type": "bool",
         "default": "false"
     },
     {
         "id": "countrycollection",
-        "label": "Create Collections from Film Production Country",
+        "label": "Create Collections based on Film Production Country",
         "type": "bool",
         "default": "false"
     },

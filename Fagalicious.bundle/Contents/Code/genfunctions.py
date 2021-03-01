@@ -99,6 +99,7 @@ def matchFilename(self, filename):
     filmVars['IAFDSearchTitle'] = filmVars['IAFDSearchTitle'].replace('%25', '%').replace('*', '')
 
     # print out dictionary values / normalise unicode
+    self.log('GENF  :: Film Dictionary Variables:')
     for key in sorted(filmVars.keys()):
         filmVars[key] = [self.NormaliseUnicode(x) for x in filmVars[key]] if type(filmVars[key]) is list else self.NormaliseUnicode(filmVars[key])
         self.log('GENF  :: {0: <29}: {1}'.format(key, filmVars[key]))
@@ -198,7 +199,7 @@ def NormaliseComparisonString(self, myString):
     myString = myString.replace("`", "'")
 
     # strip domain suffixes, vol., volume from string, standalone "1's"
-    pattern = ur'[.](org|com|net|co[.][a-z]{2})|Vol[.]|\bPart\b|\bVolume\b|(?<!\d)1(?!\d)|[^A-Za-z0-9]+'
+    pattern = ur'[.]([a-z]{2,3}|co[.][a-z]{2})|Vol[.]|\bPart\b|\bVolume\b|(?<!\d)1(?!\d)|[^A-Za-z0-9]+'
     myString = re.sub(pattern, '', myString, flags=re.IGNORECASE)
 
     return myString
