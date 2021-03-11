@@ -291,13 +291,13 @@ def getIAFD_Actor(self, agntCastList, FILMDICT):
             for i in range(2):
                 if i == 0:
                     useFullCareer = True
-                    xPathMatchMain = '//table[@id="tblMal"]/tbody/tr[td[2]="{0}" and {1}>=td[4] and {1}<=td[5]]//ancestor::tr'.format(cast, FILMDICT['Year'])
-                    xPathMatchAlias = '//table[@id="tblMal"]/tbody/tr[contains(td[3], "{0}") and {1}>=td[4] and {1}<=td[5]]//ancestor::tr'.format(cast, FILMDICT['Year'])
+                    xPathMatchMain = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[td[2]="{0}" and {1}>=td[4] and {1}<=td[5]]//ancestor::tr'.format(cast, FILMDICT['Year'])
+                    xPathMatchAlias = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[contains(td[3], "{0}") and {1}>=td[4] and {1}<=td[5]]//ancestor::tr'.format(cast, FILMDICT['Year'])
                 else:   
                     # some agents mislabel compilations, thus actors won't be found by the Film Year, so only filter out actors whose careers started after the film year
                     useFullCareer = False
-                    xPathMatchMain = '//table[@id="tblMal"]/tbody/tr[td[2]="{0}" and td[5]<={1}]//ancestor::tr'.format(cast, FILMDICT['Year'])
-                    xPathMatchAlias = '//table[@id="tblMal"]/tbody/tr[contains(td[3], "{0}") and td[5]<={1}]//ancestor::tr'.format(cast, FILMDICT['Year'])
+                    xPathMatchMain = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[td[2]="{0}" and td[5]<={1}]//ancestor::tr'.format(cast, FILMDICT['Year'])
+                    xPathMatchAlias = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[contains(td[3], "{0}") and td[5]<={1}]//ancestor::tr'.format(cast, FILMDICT['Year'])
                 try:
                     mainList = html.xpath(xPathMatchMain)
                 except:
