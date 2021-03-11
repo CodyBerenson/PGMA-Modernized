@@ -5,7 +5,7 @@ def ProcessIAFD(self, agntCastList, FILMDICT):
 
     # clean up the Cast List 
     agntCastList = [x.split('(')[0].strip() if '(' in x else x.strip() for x in agntCastList]
-    agntCastList = [self.NormaliseUnicode(x).strip() for x in agntCastList if x]
+    agntCastList = [self.NormaliseUnicode(x).strip() for x in agntCastList if x.strip()]
     if not agntCastList:
         raise Exception('No Cast List!')
 
@@ -18,12 +18,13 @@ def ProcessIAFD(self, agntCastList, FILMDICT):
         self.log('IAFD  :: Process in Film Mode: {0} Actors: {1}'.format(len(agntCastList), agntCastList))
         unmatchedList, actorDict = self.getIAFD_FilmCast(html, agntCastList, FILMDICT)
         self.log(LOG_SUBLINE)
-        self.log('IAFD  :: Process Unmatched Actors in Cast Mode: {0} Actors: {1}'.format(len(unmatchedList), unmatchedList))
-        unmatchedList, actorDict2 = self.getIAFD_Actor(unmatchedList, originalCastList, FILMDICT)
-        actorDict.update(actorDict2)
+        if agntCastList:
+            self.log('IAFD  :: Process Unmatched Actors in Cast Mode: {0} Actors: {1}'.format(len(unmatchedList), unmatchedList))
+            unmatchedList, actorDict2 = self.getIAFD_Actor(unmatchedList, FILMDICT)
+            actorDict.update(actorDict2)
     else:
         self.log('IAFD  :: Process in Cast Mode: {0} Actors: {1}'.format(len(agntCastList), agntCastList))
-        unmatchedList, actorDict = self.getIAFD_Actor(agntCastList, originalCastList, FILMDICT)
+        unmatchedList, actorDict = self.getIAFD_Actor(agntCastList, FILMDICT)
 
     if not actorDict:
         raise Exception('Could not Process IAFD Film')
@@ -44,7 +45,7 @@ def ProcessIAFD(self, agntCastList, FILMDICT):
         self.log('IAFD  :: Normalised Actor List:       \t%s', compareActorList)
         for uIndex, compareUnmatched in enumerate(compareunmatchedList):
             # Lehvenstein Match Distance - one change per word in cast name
-            levDistance = len(unmatchedList[uIndex].split())
+            levDistance = len(unmatchedList[uIndex].split()) + 1
             for aIndex, compareActor in enumerate(compareActorList):
                 if not compareActor:
                     continue
@@ -83,18 +84,22 @@ def FindIAFD_Film(self, FILMDICT):
         FILMDICT['Year'] = int(FILMDICT['Year'])
         filmList = html.xpath('//table[@id="titleresult"]/tbody/tr/td[2][.>="{0}" and .<="{1}"]/ancestor::tr'.format(FILMDICT['Year'] - 1, FILMDICT['Year'] + 1))
         self.log('IAFD  :: [%s] IAFD Films in List', len(filmList))
+        self.log(LOG_BIGLINE)
 
         for film in filmList:
             # Site Title and AKA Title
             try:
                 iafdTitle = film.xpath('./td[1]/a/text()')[0].strip()
                 self.matchTitle(iafdTitle, FILMDICT)
+                self.log(LOG_BIGLINE)
             except Exception as e:
                 try:
                     akaTitle = film.xpath('./td[4]/text()')[0].strip()
                     self.matchTitle(akaTitle, FILMDICT)
+                    self.log(LOG_BIGLINE)
                 except Exception as e:
                     self.log('IAFD  :: Error getting Site Title: %s', e)
+                    self.log(LOG_SUBLINE)
                     continue
 
             # Film URL
@@ -103,8 +108,10 @@ def FindIAFD_Film(self, FILMDICT):
                 iafdfilmURL = '{0}{1}'.format(IAFD_BASE, iafdfilmURL) if iafdfilmURL[0] == '/' else '{0}/{1}'.format(IAFD_BASE, iafdfilmURL)
                 self.log('IAFD  :: Site Title url                %s', iafdfilmURL)
                 html = self.getIAFD_URLElement(iafdfilmURL)
+                self.log(LOG_BIGLINE)
             except Exception as e:
                 self.log('IAFD  :: Error: IAFD URL Studio: %s', e)
+                self.log(LOG_SUBLINE)
                 continue
 
             # Film Studio and Distributor
@@ -200,42 +207,77 @@ def getIAFD_FilmCast(self, html, agntCastList, FILMDICT):
             myDict = {}
             myDict['Photo'] = actorPhoto
             myDict['Role'] = actorRole
+            myDict['Alias'] = actorAlias
             actorDict[actorName] = myDict
-
-            # remove actor name from agntCastList
-            if actorName in agntCastList:
-                self.log('IAFD  :: Remove From IAFD List:       \tFull Match - Actor Name: %s', actorName)
-                agntCastList.remove(actorName)
-            elif actorAlias in agntCastList:
-                self.log('IAFD  :: Remove From IAFD List:       \tFull Match - Actor Alias: %s', actorAlias)
-                agntCastList.remove(actorAlias)
-            else:
-                # partial matching
-                tempagntCastList = [x for x in agntCastList if x not in actorName and actorName not in x]
-                if len(tempagntCastList) < len(agntCastList):
-                    self.log('IAFD  :: Remove From IAFD List:       \tPartial Match - Actor Name: %s', actorName)
-                else:
-                    if actorAlias:
-                        tempagntCastList = [x for x in agntCastList if x not in actorAlias and actorAlias not in x]
-                        if len(tempagntCastList) < len(agntCastList):
-                            self.log('IAFD  :: Remove From IAFD List:       \tPartial Match - Actor Alias: %s', actorAlias)
-                agntCastList = tempagntCastList
-
-            self.log('IAFD  :: Actors Left in List:         \t%s', agntCastList)
-
             self.log(LOG_SUBLINE)
 
     except Exception as e:
         self.log('IAFD  :: Error: Processing IAFD Film Cast: %s', e)
 
+    # match actors found on IAFD to the list sent by the agent website, and remove matched actors
+    compareAgntCastList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in agntCastList] # strip non alpha chars for comparison
+    self.log('IAFD  :: Actors: in Agent List:       \t%s', agntCastList)
+    for key in sorted(actorDict.keys()):
+        actorName = key
+        compareActorName = re.sub(r'[\W\d_]', '', actorName).strip().lower()
+        actorAlias = actorDict[key]['Alias']
+        compareActorAlias = re.sub(r'[\W\d_]', '', actorAlias).strip().lower()
+
+        # 1st full match against actor name
+        try:
+            nameIndex = compareAgntCastList.index(compareActorName)
+            del agntCastList[nameIndex]
+            del compareAgntCastList[nameIndex]
+            self.log('IAFD  :: Remove from Agent List:      \tFull Match - Actor Name: %s', actorName)
+            continue
+        except:
+            pass
+
+        # 2nd partial match against actor name
+        try:
+            nameIndex = [i for i, l in enumerate(compareAgntCastList) if compareActorName in l or l in compareActorName][0]
+            del agntCastList[nameIndex]
+            del compareAgntCastList[nameIndex]
+            self.log('IAFD  :: Remove from Agent List:      \tPartial Match - Actor Name: %s', actorName)
+            continue
+        except:
+            pass
+
+        if actorAlias:
+            # 3rd full match against actor alias
+            try:
+                nameIndex = compareAgntCastList.index(compareActorAlias)
+                del agntCastList[nameIndex]
+                del compareAgntCastList[nameIndex]
+                self.log('IAFD  :: Remove from Agent List:      \tFull Match - Actor Alias: %s', actorAlias)
+                continue
+            except:
+                pass
+
+            # 4th partial match against actor alias
+            try:
+                nameIndex = [i for i, l in enumerate(compareAgntCastList) if compareActorAlias in l or l in compareActorAlias][0]
+                del agntCastList[nameIndex]
+                del compareAgntCastList[nameIndex]
+                self.log('IAFD  :: Remove from Agent List:      \tPartial Match - Actor Name: %s', actorAlias)
+                continue
+            except:
+                pass
+
+        # reasons to fail match is if actor is on IAFD and not on Agent Website, or cannot find alias
+        self.log('IAFD  :: Actor may only be on IAFD:   \tActor Name: %s', actorName)
+
     return agntCastList, actorDict
 
 # -------------------------------------------------------------------------------------------------------------------------------
-def getIAFD_Actor(self, agntCastList, originalCastList, FILMDICT):
+def getIAFD_Actor(self, agntCastList, FILMDICT):
     ''' check IAFD web site for individual actors'''
+
+    allCastList = agntCastList[:]       # copy list
+    compareAgntCastList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in agntCastList]
+
     FILMDICT['Year'] = int(FILMDICT['Year'])
     actorDict = {}
-    allCastList = agntCastList[:]       # copy list
 
     for cast in allCastList:
         compareCast = re.sub(r'[\W\d_]', '', cast).strip().lower()
@@ -281,8 +323,9 @@ def getIAFD_Actor(self, agntCastList, originalCastList, FILMDICT):
                 try:
                     actorName = actor.xpath('./td[2]/a/text()[normalize-space()]')[0]          # get actor details and compare to Agent cast
                     compareActorName = re.sub(r'[\W\d_]', '', actorName).strip().lower()
-                    self.log('IAFD  :: Actor:                       \t%s', actorName)
+                    self.log('IAFD  :: Actor:                       \t%s / %s', actorName, compareActorName)
                     actorAlias = ''
+                    compareActorAlias = ''
                     if compareActorName != compareCast:
                         self.log('IAFD  :: Actor: Failed Name Match:    \tAgent [%s] - IAFD [%s]', cast, actorName)
                         try:
@@ -292,6 +335,7 @@ def getIAFD_Actor(self, agntCastList, originalCastList, FILMDICT):
                             compareActorAliasList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in actorAliasList]
                             matchedItem = [i for (i, x) in enumerate(compareActorAliasList) if x == compareCast]
                             actorAlias = actorAliasList[matchedItem[0]] if matchedItem else ''
+                            compareActorAlias = compareActorAliasList[matchedItem[0]] if matchedItem else ''
                             if not actorAlias:
                                 self.log('IAFD  :: Actor Name not in Aliases List')
                                 self.log(LOG_SUBLINE)
@@ -317,7 +361,7 @@ def getIAFD_Actor(self, agntCastList, originalCastList, FILMDICT):
                     actorPhoto = '' if 'nophoto' in actorPhoto or 'th_iafd_ad' in actorPhoto else actorPhoto.replace('thumbs/th_', '')
                     actorRole = 'AKA: {0}'.format(actorAlias) if actorAlias else IAFD_FOUND
 
-                    self.log('IAFD  :: Alias:                       \t%s', actorAlias)
+                    self.log('IAFD  :: Actor Alias:                 \t%s / %s', actorAlias, compareActorAlias if compareActorAlias != None else '')
                     self.log('IAFD  :: Start Career:                \t%s', startCareer)
                     self.log('IAFD  :: End Career:                  \t%s', endCareer)
                     self.log('IAFD  :: Actor URL:                   \t%s', actorURL)
@@ -325,34 +369,54 @@ def getIAFD_Actor(self, agntCastList, originalCastList, FILMDICT):
                     self.log('IAFD  :: Actor Role:                  \t%s', actorRole)
 
                     # if we get here we have found an actor match, remove actor from the agntCastList, full and partial matches
-                    if actorAlias in originalCastList:     # Actor has already been processesed in Film Mode
-                        self.log('IAFD  :: Remove From unmatched list:  \tMatched in Film Mode')
-                        agntCastList.remove(actorAlias)
-                    else:
-                        # Assign values to dictionary
-                        myDict = {}
-                        myDict['Photo'] = actorPhoto
-                        myDict['Role'] = actorRole
-                        actorDict[actorName] = myDict
-                        if actorName in agntCastList:
-                            self.log('IAFD  :: Remove From unmatched list:  \tFull Match - Actor Name: %s', actorName)
-                            agntCastList.remove(actorName)
-                        elif actorAlias in agntCastList:
-                            self.log('IAFD  :: Remove From unmatched list:  \tFull Match - Actor Alias: %s', actorAlias)
-                            agntCastList.remove(actorAlias)
-                        else:
-                            # partial matching
-                             tempagntCastList = [x for x in agntCastList if x not in actorName and actorName not in x]
-                             if len(tempagntCastList) < len(agntCastList):
-                                self.log('IAFD  :: Remove From unmatched list:  \tPartial Match - Actor Name: %s', actorName)
-                             else:
-                                if actorAlias:
-                                    tempagntCastList = [x for x in agntCastList if x not in actorAlias and actorAlias not in x]
-                                    if len(tempagntCastList) < len(agntCastList):
-                                        self.log('IAFD  :: Remove From unmatched list:  \tPartial Match - Actor Alias: %s', actorAlias)
-                             agntCastList = tempagntCastList
+                    # Assign values to dictionary
+                    myDict = {}
+                    myDict['Photo'] = actorPhoto
+                    myDict['Role'] = actorRole
+                    myDict['Alias'] = actorAlias
+                    actorDict[actorName] = myDict
 
-                    self.log('IAFD  :: Actors left unmatched         \t%s', agntCastList)
+                    self.log('IAFD  :: Actors: in Agent List:       \t%s', agntCastList)
+
+                    # 1st full match against actor name
+                    matchedName = False
+                    try:
+                        nameIndex = compareAgntCastList.index(compareActorName)
+                        del agntCastList[nameIndex]
+                        del compareAgntCastList[nameIndex]
+                        matchedName = True
+                        self.log('IAFD  :: Remove from Agent List:      \tFull Match - Actor Name: %s', actorName)
+                    except:
+                        # 2nd partial match against actor name
+                        try:
+                            nameIndex = [i for i, l in enumerate(compareAgntCastList) if compareActorName in l or l in compareActorName][0]
+                            del agntCastList[nameIndex]
+                            del compareAgntCastList[nameIndex]
+                            matchedName = True
+                            self.log('IAFD  :: Remove from Agent List:      \tPartial Match - Actor Name: %s', actorName)
+                        except:
+                            if actorAlias:
+                                # 3rd full match against actor alias
+                                try:
+                                    nameIndex = compareAgntCastList.index(compareActorAlias)
+                                    del agntCastList[nameIndex]
+                                    del compareAgntCastList[nameIndex]
+                                    matchedName = True
+                                    self.log('IAFD  :: Remove from Agent List:      \tFull Match - Actor Alias: %s', actorAlias)
+                                except:
+                                    # 4th partial match against actor alias
+                                    try:
+                                        nameIndex = [i for i, l in enumerate(compareAgntCastList) if compareActorAlias in l or l in compareActorAlias][0]
+                                        del agntCastList[nameIndex]
+                                        del compareAgntCastList[nameIndex]
+                                        matchedName = True
+                                        self.log('IAFD  :: Remove from Agent List:      \tPartial Match - Actor Name: %s', actorAlias)
+                                    except:
+                                        pass
+                    # reasons to fail match: 1. is if actor is on IAFD and not on Agent Website
+                    #                        2. actor on website but not on IAFD
+                    if not matchedName:
+                        self.log('IAFD  :: Failed to match Actor:       \tActor Name: %s', actorName)
 
                     self.log(LOG_SUBLINE)
                     break   # break out to next actor in agent cast list (allCastList)
@@ -372,12 +436,13 @@ def getIAFD_Actor(self, agntCastList, originalCastList, FILMDICT):
 # -------------------------------------------------------------------------------------------------------------------------------
 def getIAFD_Director(self, agntDirectorList, FILMDICT):
     ''' check IAFD web site for individual actors'''
-    agntDirectorList = [self.NormaliseUnicode(x).strip() for x in agntDirectorList if x]
+    agntDirectorList = [self.NormaliseUnicode(x).strip() for x in agntDirectorList if x.strip()]
     if not agntDirectorList:
         raise Exception('No Director List!')
 
     directorDict = {k: None for k in agntDirectorList}
     allDirectorList = agntDirectorList[:]       # copy list
+    compareAgntDirectorList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in agntDirectorList]
 
     for agntDirector in allDirectorList:
         compareDirector = re.sub(r'[\W\d_]', '', agntDirector).strip().lower()
@@ -411,10 +476,10 @@ def getIAFD_Director(self, agntDirectorList, FILMDICT):
             for director in directorList:
                 try:
                     directorName = director.xpath('./td[2]/a/text()[normalize-space()]')[0]          # get director details and compare to Agent director
-                    comparedirectorName = re.sub(r'[\W\d_]', '', directorName).strip().lower()
+                    compareDirectorName = re.sub(r'[\W\d_]', '', directorName).strip().lower()
                     self.log('IAFD  :: Director:                    \t%s', directorName)
                     directorAlias = ''
-                    if comparedirectorName != compareDirector:
+                    if compareDirectorName != compareDirector:
                         self.log('IAFD  :: Director: Failed Name Match: Agent [%s] - IAFD [%s]', director, directorName)
                         try:
                             directorAliasList = director.xpath('./td[3]/text()')[0].split(',')
@@ -423,6 +488,7 @@ def getIAFD_Director(self, agntDirectorList, FILMDICT):
                             comparedirectorAliasList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in directorAliasList]
                             matchedItem = [i for (i, x) in enumerate(comparedirectorAliasList) if x == compareDirector]
                             directorAlias = directorAliasList[matchedItem[0]] if matchedItem else ''
+                            compareDirectorAlias = re.sub(r'[\W\d_]', '', directorAlias).strip().lower() if matchedItem else ''
                             if not directorAlias:
                                 self.log('IAFD  :: Director Name not in Aliases List')
                                 self.log(LOG_SUBLINE)
@@ -449,14 +515,21 @@ def getIAFD_Director(self, agntDirectorList, FILMDICT):
                     # Assign values to dictionary
                     directorDict[directorName] = directorPhoto
 
-                    # if we get here we have found a director match, remove director from the directorList, full matches
-                    if directorName in agntDirectorList:
-                        self.log('IAFD  :: Remove From unmatched list:  \tFull Match - Director Name: %s', directorName)
-                        agntDirectorList.remove(directorName)
-                    elif directorAlias in directorList:
-                        self.log('IAFD  :: Remove From unmatched list:  \tFull Match - Director Alias: %s', directorAlias)
-                        agntDirectorList.remove(directorAlias)
-
+                    # full matching director name
+                    try:
+                        directorNameIndex = compareAgntDirectorList.index(compareDirectorName)
+                        del agntDirectorList[directorNameIndex]
+                        del compareAgntDirectorList[directorNameIndex]
+                        self.log('IAFD  :: Remove from unmatched list:  \tFull Match - Director Name: %s', directorName)
+                    except:
+                        # full matching actor alias
+                        try:
+                            directorAliasIndex = compareAgntDirectorList.index(compareDirectorAlias)
+                            del agntDirectorList[directorAliasIndex]
+                            del compareAgntDirectorList[directorAliasIndex]
+                            self.log('IAFD  :: Remove from unmatched list:  \tFull Match - Director Alias: %s', directorAlias)
+                        except:
+                            pass
                     self.log('IAFD  :: Directors left unmatched:    \t%s', agntDirectorList)
 
                     self.log(LOG_SUBLINE)

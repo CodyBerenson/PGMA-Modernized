@@ -33,6 +33,7 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 REGEX = Prefs['regex']                      # file matching pattern
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
+PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']        # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']       # add studio name to collection
 COLTITLE = Prefs['titlecollection']         # add title [parts] to collection
@@ -109,9 +110,7 @@ class GayFetishandBDSM(Agent.Movies):
         myString = String.StripDiacritics(myString)
 
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string 
-        myNormalString = String.URLEncode(myString).replace('%25', '%').replace('*', '')
-        myQuotedString = String.URLEncode('"{0}"'.format(myString)).replace('%25', '%').replace('*', '')
-        myString = [myNormalString, myQuotedString]
+        myString = String.URLEncode('"{0}"'.format(myString)).replace('%25', '%').replace('*', '')
         self.log('AGNT  :: Returned Search Query        : {0}'.format(myString))
         self.log(LOG_BIGLINE)
 
@@ -128,15 +127,17 @@ class GayFetishandBDSM(Agent.Movies):
         self.log('SEARCH:: Version                      : v.%s', VERSION_NO)
         self.log('SEARCH:: Python                       : %s', sys.version_info)
         self.log('SEARCH:: Platform                     : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs-> delay                : %s', DELAY)
-        self.log('SEARCH::      -> Collection Gathering')
-        self.log('SEARCH::         -> Studio            : %s', COLSTUDIO)
-        self.log('SEARCH::         -> Film Title        : %s', COLTITLE)
-        self.log('SEARCH::         -> Genres            : %s', COLGENRE)
-        self.log('SEARCH::         -> Director(s)       : %s', COLDIRECTOR)
-        self.log('SEARCH::         -> Film Cast         : %s', COLCAST)
-        self.log('SEARCH::      -> Language Detection   : %s', DETECT)
-        self.log('SEARCH:: Library:Site Language        : %s:%s', lang, SITE_LANGUAGE)
+        self.log('SEARCH:: Preferences:')
+        self.log('SEARCH::  > Cast Legend Before Summary: %s', PREFIXLEGEND)
+        self.log('SEARCH::  > Collection Gathering')
+        self.log('SEARCH::      > Cast                  : %s', COLCAST)
+        self.log('SEARCH::      > Director(s)           : %s', COLDIRECTOR)
+        self.log('SEARCH::      > Studio                : %s', COLSTUDIO)
+        self.log('SEARCH::      > Film Title            : %s', COLTITLE)
+        self.log('SEARCH::      > Genres                : %s', COLGENRE)
+        self.log('SEARCH::  > Delay                     : %s', DELAY)
+        self.log('SEARCH::  > Language Detection        : %s', DETECT)
+        self.log('SEARCH::  > Library:Site Language     : %s:%s', lang, SITE_LANGUAGE)
         self.log('SEARCH:: Media Title                  : %s', media.title)
         self.log('SEARCH:: File Name                    : %s', filename)
         self.log('SEARCH:: File Folder                  : %s', folder)
@@ -152,99 +153,101 @@ class GayFetishandBDSM(Agent.Movies):
 
         # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
-        searchTitleList = self.CleanSearchString(FILMDICT['SearchTitle'])
+        searchTitle = self.CleanSearchString(FILMDICT['SearchTitle'])
+        searchQuery = BASE_SEARCH_URL.format(searchTitle)
 
-        for count, searchTitle in enumerate(searchTitleList, start=1):
-            searchQuery = BASE_SEARCH_URL.format(searchTitle)
-            self.log('SEARCH:: %s. Search Query: %s', count, searchQuery)
+        morePages = True
+        while morePages:
+            self.log('SEARCH:: Search Query: %s', searchQuery)
+            try:
+                html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
+                # Finds the entire media enclosure
+                titleList = html.xpath('//div[@class="fusion-post-content-wrapper"]/div/h2')
+                if not titleList:
+                    break
+            except Exception as e:
+                self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+                return
 
-            morePages = True
-            while morePages:
-                self.log('SEARCH:: Search Query: %s', searchQuery)
+            try:
+                searchQuery = html.xpath('//a[@class="pagination-next"]/@href')[0]
+                self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
+                pageNumber = int(searchQuery.split('/')[-1].split('?')[0]) - 1
+                morePages = True if pageNumber <= 10 else False
+            except:
+                searchQuery = ''
+                self.log('SEARCH:: No More Pages Found')
+                pageNumber = 1
+                morePages = False
+
+            self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
+
+            for title in titleList:
+                # Site Title
                 try:
-                    html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
-                    # Finds the entire media enclosure
-                    titleList = html.xpath('//div[@class="fusion-post-content-wrapper"]/div/h2')
-                    if not titleList:
-                        break
-                except Exception as e:
-                    self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
-                    return
-
-                try:
-                    searchQuery = html.xpath('//a[@class="pagination-next"]/@href')[0]
-                    self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
-                    pageNumber = int(searchQuery.split('/')[-1].split('?')[0]) - 1
-                    morePages = True if pageNumber <= 10 else False
-                except:
-                    searchQuery = ''
-                    self.log('SEARCH:: No More Pages Found')
-                    pageNumber = 1
-                    morePages = False
-
-                self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
-
-                for title in titleList:
-                    # Site Title
-                    try:
-                        siteTitle = title.xpath('./a/text()')[0]
-                        self.matchTitle(siteTitle, FILMDICT)
-                        self.log(LOG_BIGLINE)
-                    except Exception as e:
-                        self.log('SEARCH:: Error getting Site Title: %s', e)
-                        self.log(LOG_SUBLINE)
-                        continue
-
-                    # Site Title URL
-                    try:
-                        siteURL = title.xpath('./a/@href')[0]
-                        siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
-                        FILMDICT['SiteURL'] = siteURL
-                        self.log('SEARCH:: Site Title url                %s', siteURL)
-                        self.log(LOG_BIGLINE)
-                    except Exception as e:
-                        self.log('SEARCH:: Error getting Site Title Url: %s', e)
-                        self.log(LOG_SUBLINE)
-                        continue
-
-                    # Access Site URL for Studio Note: this site has no Release Date information
-                    try:
-                        self.log('SEARCH:: Reading Site URL page         %s', siteURL)
-                        html = HTML.ElementFromURL(siteURL, sleep=DELAY)
-                        self.log(LOG_BIGLINE)
-                    except Exception as e:
-                        self.log('SEARCH:: Error reading Site URL page: %s', e)
-                        self.log(LOG_SUBLINE)
-                        continue
-
-                    # Studio Name
-                    try:
-                        siteStudio = html.xpath('//strong[contains(.,"Studio:")]/a/text()')[0].strip()
-                        self.matchStudio(siteStudio, FILMDICT)
-                        self.log(LOG_BIGLINE)
-                    except Exception as e:
-                        self.log('SEARCH:: Error getting Site Studio: %s', e)
-                        self.log(LOG_SUBLINE)
-                        continue
-
-                    # we should have a match on studio, title and year now
-                    self.log('SEARCH:: Finished Search Routine')
+                    siteTitle = title.xpath('./a/text()')[0]
+                    self.matchTitle(siteTitle, FILMDICT)
                     self.log(LOG_BIGLINE)
-                    results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
-                    return
+                except Exception as e:
+                    self.log('SEARCH:: Error getting Site Title: %s', e)
+                    self.log(LOG_SUBLINE)
+                    continue
+
+                # Site Title URL
+                try:
+                    siteURL = title.xpath('./a/@href')[0]
+                    siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
+                    FILMDICT['SiteURL'] = siteURL
+                    self.log('SEARCH:: Site Title url                %s', siteURL)
+                    self.log(LOG_BIGLINE)
+                except Exception as e:
+                    self.log('SEARCH:: Error getting Site Title Url: %s', e)
+                    self.log(LOG_SUBLINE)
+                    continue
+
+                # Access Site URL for Studio Note: this site has no Release Date information
+                try:
+                    self.log('SEARCH:: Reading Site URL page         %s', siteURL)
+                    html = HTML.ElementFromURL(siteURL, sleep=DELAY)
+                    self.log(LOG_BIGLINE)
+                except Exception as e:
+                    self.log('SEARCH:: Error reading Site URL page: %s', e)
+                    self.log(LOG_SUBLINE)
+                    continue
+
+                # Studio Name
+                try:
+                    siteStudio = html.xpath('//strong[contains(.,"Studio:")]/a/text()')[0].strip()
+                    self.matchStudio(siteStudio, FILMDICT)
+                    self.log(LOG_BIGLINE)
+                except Exception as e:
+                    self.log('SEARCH:: Error getting Site Studio: %s', e)
+                    self.log(LOG_SUBLINE)
+                    continue
+
+                # we should have a match on studio, title and year now
+                self.log('SEARCH:: Finished Search Routine')
+                self.log(LOG_BIGLINE)
+                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
+                return
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
         self.log(LOG_BIGLINE)
-        self.log('UPDATE:: Version    : v.%s', VERSION_NO)
-        self.log('UPDATE:: File Name  : %s', filename)
-        self.log('UPDATE:: File Folder: %s', folder)
+        self.log('UPDATE:: Version                      : v.%s', VERSION_NO)
+        self.log('UPDATE:: File Name                    : %s', filename)
+        self.log('UPDATE:: File Folder                  : %s', folder)
         self.log(LOG_BIGLINE)
 
         # Fetch HTML.
         FILMDICT = json.loads(metadata.id)
+        self.log('UPDATE:: Film Dictionary Variables:')
+        for key in sorted(FILMDICT.keys()):
+            self.log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
+        self.log(LOG_BIGLINE)
+
         html = HTML.ElementFromURL(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
@@ -295,7 +298,7 @@ class GayFetishandBDSM(Agent.Movies):
         # 2a.   Directors
         self.log(LOG_BIGLINE)
         try:
-            htmldirectors = html.xpath('//strong[contains(.,"Director")]//following::text()')[0].replace(': ', '').split(',')
+            htmldirectors = html.xpath('//strong[contains(.,"Director")]//following::text()[normalize-space()]')[0].replace(':', '').split(',')
             directorDict = self.getIAFD_Director(htmldirectors, FILMDICT)
             metadata.directors.clear()
             for key in sorted(directorDict):
@@ -312,7 +315,7 @@ class GayFetishandBDSM(Agent.Movies):
         # 2b.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
         self.log(LOG_BIGLINE)
         try:
-            htmlcast = html.xpath('//strong[contains(.,"Actors")]//following::text()')[0].replace(': ', '').split(',')
+            htmlcast = html.xpath('//strong[contains(.,"Actors")]//following::text()[normalize-space()]')[0].replace(':', '').split(',')
             castdict = self.ProcessIAFD(htmlcast, FILMDICT)
 
             # sort the dictionary and add key(Name)- value(Photo, Role) to metadata
@@ -329,11 +332,11 @@ class GayFetishandBDSM(Agent.Movies):
         except Exception as e:
             self.log('UPDATE:: Error getting Cast: %s', e)
 
-        # 2d.   Posters/Art - no Art pictures so use the poster as Art
+        # 2d.   Posters/Art
         try:
             htmlimages = html.xpath('//a[@class="fusion-lightbox"]/@href')
             image = htmlimages[0]
-            image = ('' if BASE_URL in htmlimages else BASE_URL) + htmlimages
+            image = ('' if BASE_URL in image else BASE_URL) + image
             self.log('UPDATE:: Poster Image Found: %s', image)
             #  set poster then only keep it
             metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
@@ -341,7 +344,7 @@ class GayFetishandBDSM(Agent.Movies):
 
             #  set Art then only keep it
             image = htmlimages[1]
-            image = ('' if BASE_URL in htmlimages else BASE_URL) + htmlimages
+            image = ('' if BASE_URL in image else BASE_URL) + image
             self.log('UPDATE:: Art Image Found: %s', image)
             metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.art.validate_keys([image])
@@ -358,11 +361,14 @@ class GayFetishandBDSM(Agent.Movies):
                 synopsis = '{0}\n{1}'.format(synopsis, item)
             self.log('UPDATE:: Synopsis Found: %s', synopsis)
         except Exception as e:
+            synopsis = ''
             self.log('UPDATE:: Error getting Synopsis: %s', e)
 
         # combine and update
         self.log(LOG_SUBLINE)
-        summary = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN) + synopsis
+        castLegend = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN)
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(castLegend, synopsis.strip())
+        summary = summary.replace('\n\n', '\n')
         metadata.summary = self.TranslateString(summary, lang)
 
         self.log(LOG_BIGLINE)

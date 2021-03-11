@@ -39,6 +39,7 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 REGEX = Prefs['regex']                      # file matching pattern
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
+PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']        # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']       # add studio name to collection
 COLTITLE = Prefs['titlecollection']         # add title [parts] to collection
@@ -135,15 +136,17 @@ class CDUniverse(Agent.Movies):
         self.log('SEARCH:: Version                      : v.%s', VERSION_NO)
         self.log('SEARCH:: Python                       : %s', sys.version_info)
         self.log('SEARCH:: Platform                     : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs-> delay                : %s', DELAY)
-        self.log('SEARCH::      -> Collection Gathering')
-        self.log('SEARCH::         -> Studio            : %s', COLSTUDIO)
-        self.log('SEARCH::         -> Film Title        : %s', COLTITLE)
-        self.log('SEARCH::         -> Genres            : %s', COLGENRE)
-        self.log('SEARCH::         -> Director(s)       : %s', COLDIRECTOR)
-        self.log('SEARCH::         -> Film Cast         : %s', COLCAST)
-        self.log('SEARCH::      -> Language Detection   : %s', DETECT)
-        self.log('SEARCH:: Library:Site Language        : %s:%s', lang, SITE_LANGUAGE)
+        self.log('SEARCH:: Preferences:')
+        self.log('SEARCH::  > Cast Legend Before Summary: %s', PREFIXLEGEND)
+        self.log('SEARCH::  > Collection Gathering')
+        self.log('SEARCH::      > Cast                  : %s', COLCAST)
+        self.log('SEARCH::      > Director(s)           : %s', COLDIRECTOR)
+        self.log('SEARCH::      > Studio                : %s', COLSTUDIO)
+        self.log('SEARCH::      > Film Title            : %s', COLTITLE)
+        self.log('SEARCH::      > Genres                : %s', COLGENRE)
+        self.log('SEARCH::  > Delay                     : %s', DELAY)
+        self.log('SEARCH::  > Language Detection        : %s', DETECT)
+        self.log('SEARCH::  > Library:Site Language     : %s:%s', lang, SITE_LANGUAGE)
         self.log('SEARCH:: Media Title                  : %s', media.title)
         self.log('SEARCH:: File Name                    : %s', filename)
         self.log('SEARCH:: File Folder                  : %s', folder)
@@ -241,13 +244,18 @@ class CDUniverse(Agent.Movies):
         ''' Update Media Entry '''
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
         self.log(LOG_BIGLINE)
-        self.log('UPDATE:: Version    : v.%s', VERSION_NO)
-        self.log('UPDATE:: File Name  : %s', filename)
-        self.log('UPDATE:: File Folder: %s', folder)
+        self.log('UPDATE:: Version                      : v.%s', VERSION_NO)
+        self.log('UPDATE:: File Name                    : %s', filename)
+        self.log('UPDATE:: File Folder                  : %s', folder)
         self.log(LOG_BIGLINE)
 
         # Fetch HTML.
         FILMDICT = json.loads(metadata.id)
+        self.log('UPDATE:: Film Dictionary Variables:')
+        for key in sorted(FILMDICT.keys()):
+            self.log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
+        self.log(LOG_BIGLINE)
+
         html = HTML.ElementFromURL(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
@@ -290,13 +298,27 @@ class CDUniverse(Agent.Movies):
         self.log('UPDATE:: Collection Set From filename: %s', collections)
 
         #    2.  Metadata retrieved from website
-        #        a. Genres               : List of Genres (alphabetic order)
-        #        b. Directors            : List of Directors (alphabetic order)
-        #        c. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
-        #        d. Posters/Art
-        #        e. Summary
+        #        a. Rating
+        #        b. Genres               : List of Genres (alphabetic order)
+        #        c. Directors            : List of Directors (alphabetic order)
+        #        d. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
+        #        e. Posters/Art
+        #        f. Reviews
+        #        g. Summary
 
-        # 2a.   Genres
+        # 2a.   Rating (out of 5 Stars) = Rating can be a maximum of 10 - float value
+        self.log(LOG_BIGLINE)
+        try:
+            rating = html.xpath('//a[contains(@title, "out of 5 stars")]/@title')[0]
+            rating = rating.split()[0]
+            rating = float(rating) * 2.0
+            self.log('UPDATE:: Rating %s', rating)
+            metadata.rating = rating
+        except Exception as e:
+            metadata.rating = 0.0
+            self.log('UPDATE:: Error getting Rating: %s', e)
+
+        # 2b.   Genres
         self.log(LOG_BIGLINE)
         try:
             genres = []
@@ -323,7 +345,7 @@ class CDUniverse(Agent.Movies):
         except Exception as e:
             self.log('UPDATE:: Error getting Genres: %s', e)
 
-        # 2b.   Directors
+        # 2c.   Directors
         self.log(LOG_BIGLINE)
         try:
             htmldirectors = html.xpath('//td[text()="Director"]/following-sibling::td/a/text()')
@@ -340,7 +362,7 @@ class CDUniverse(Agent.Movies):
         except Exception as e:
             self.log('UPDATE:: Error getting Director(s): %s', e)
 
-        # 2c.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
+        # 2d.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
         self.log(LOG_BIGLINE)
         try:
             htmlcast = html.xpath('//td[text()="Starring"]/following-sibling::td/a/text()')
@@ -360,16 +382,16 @@ class CDUniverse(Agent.Movies):
         except Exception as e:
             self.log('UPDATE:: Error getting Cast: %s', e)
 
-        # 2d.   Posters/Art - no Art pictures so use the poster as Art
+        # 2e.   Posters/Art
         self.log(LOG_BIGLINE)
         try:
             image = html.xpath('//img[@id="PIMainImg"]/@src')[0]
             self.log('UPDATE:: Poster Image Found: %s', image)
-            #  set poster then only keep it
+            #  set poster
             metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.posters.validate_keys([image])
 
-            #  set Art then only keep it
+            #  set Art
             image = html.xpath('//img[@id="0"]/@src')[0]
             self.log('UPDATE:: Art Image Found: %s', image)
             metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
@@ -378,7 +400,67 @@ class CDUniverse(Agent.Movies):
         except Exception as e:
             self.log('UPDATE:: Error getting Poster/Art: %s', e)
 
-        # 2e.   Summary = IAFD Legend + Synopsis
+        # 2f.   Reviews
+        self.log(LOG_BIGLINE)
+        reviewCount = 4
+        try:
+            htmlreviews = html.xpath('//table[@id="singlereview"]')
+            htmlreviews = htmlreviews[:reviewCount] if len(htmlreviews) >= reviewCount else htmlreviews
+            self.log('UPDATE:: Number of Reviews [%s]', len(htmlreviews))
+            metadata.reviews.clear()
+            for count, review in enumerate(htmlreviews, start=1):
+                self.log('UPDATE:: Review No %s', count)
+                try:
+                    try:
+                        title = review.xpath('.//span[contains(@style,"font-weight:bold")]/text()[normalize-space()]')
+                        title = ''.join(title).strip()
+                        self.log('UPDATE:: Review Title: %s', title)
+                    except:
+                        title = ''
+                    try:
+                        stars = review.xpath('.//img[contains(@alt,"star")]/@alt')[0]
+                        stars = re.sub('[^0-9]', '', stars)   # strip out non-numerics
+                        stars = [u'\U00002B50'] * int(stars)  # change type to list of size
+                        stars = ''.join(stars)                # convert back to str
+                        self.log('UPDATE:: Review Stars: %s', stars)
+                    except:
+                        stars = ''
+                    try:
+                        writer =  review.xpath('.//td[@rowspan="2"]//text()[normalize-space()]')
+                        writer = ''.join(writer).strip()
+                        writer = re.sub(ur'^.+By', '', writer).replace('By', '').strip()
+                        self.log('UPDATE:: Review Writer: %s', writer)
+                    except:
+                        writer = ''
+                    try:
+                        writing = review.xpath('.//span[@class="reviewtext"]/text()[normalize-space()]')
+                        writing = ''.join(writing)
+                        self.log('UPDATE:: Review Text: %s', writing)
+                    except:
+                        writing = ''
+
+                    newReview = metadata.reviews.new()
+                    newReview.author = '{0} {1}'.format(stars, writer)
+                    newReview.link  = FILMDICT['SiteURL']
+                    if len(title) > 40:
+                        for i in range(40, -1, -1):
+                            if title[i] == ' ':
+                                title = title[0:i]
+                                break
+                    newReview.source = (title if title else FILMDICT['Title']) + '...'
+                    if len(writing) > 275:
+                        for i in range(275, -1, -1):
+                            if writing[i] in ['.', '!', '?']:
+                                writing = writing[0:i + 1]
+                                break
+                    newReview.text = writing
+                    self.log(LOG_SUBLINE)
+                except Exception as e:
+                    self.log('UPDATE:: Error getting Review No. %s: %s', count, e)
+        except Exception as e:
+            self.log('UPDATE:: Error getting Reviews: %s', e)
+
+        # 2g.   Summary = IAFD Legend + Synopsis
         self.log(LOG_BIGLINE)
         # synopsis
         try:
@@ -390,7 +472,9 @@ class CDUniverse(Agent.Movies):
 
         # combine and update
         self.log(LOG_SUBLINE)
-        summary = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN) + synopsis
+        castLegend = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN)
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(castLegend, synopsis.strip())
+        summary = summary.replace('\n\n', '\n')
         metadata.summary = self.TranslateString(summary, lang)
 
         self.log(LOG_BIGLINE)

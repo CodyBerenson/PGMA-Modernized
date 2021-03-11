@@ -47,6 +47,7 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 REGEX = Prefs['regex']                      # file matching pattern
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
+PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']        # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']       # add studio name to collection
 COLTITLE = Prefs['titlecollection']         # add title [parts] to collection
@@ -163,15 +164,17 @@ class GayHotMovies(Agent.Movies):
         self.log('SEARCH:: Version                      : v.%s', VERSION_NO)
         self.log('SEARCH:: Python                       : %s', sys.version_info)
         self.log('SEARCH:: Platform                     : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs-> delay                : %s', DELAY)
-        self.log('SEARCH::      -> Collection Gathering')
-        self.log('SEARCH::         -> Studio            : %s', COLSTUDIO)
-        self.log('SEARCH::         -> Film Title        : %s', COLTITLE)
-        self.log('SEARCH::         -> Genres            : %s', COLGENRE)
-        self.log('SEARCH::         -> Director(s)       : %s', COLDIRECTOR)
-        self.log('SEARCH::         -> Film Cast         : %s', COLCAST)
-        self.log('SEARCH::      -> Language Detection   : %s', DETECT)
-        self.log('SEARCH:: Library:Site Language        : %s:%s', lang, SITE_LANGUAGE)
+        self.log('SEARCH:: Preferences:')
+        self.log('SEARCH::  > Cast Legend Before Summary: %s', PREFIXLEGEND)
+        self.log('SEARCH::  > Collection Gathering')
+        self.log('SEARCH::      > Cast                  : %s', COLCAST)
+        self.log('SEARCH::      > Director(s)           : %s', COLDIRECTOR)
+        self.log('SEARCH::      > Studio                : %s', COLSTUDIO)
+        self.log('SEARCH::      > Film Title            : %s', COLTITLE)
+        self.log('SEARCH::      > Genres                : %s', COLGENRE)
+        self.log('SEARCH::  > Delay                     : %s', DELAY)
+        self.log('SEARCH::  > Language Detection        : %s', DETECT)
+        self.log('SEARCH::  > Library:Site Language     : %s:%s', lang, SITE_LANGUAGE)
         self.log('SEARCH:: Media Title                  : %s', media.title)
         self.log('SEARCH:: File Name                    : %s', filename)
         self.log('SEARCH:: File Folder                  : %s', folder)
@@ -271,13 +274,18 @@ class GayHotMovies(Agent.Movies):
         ''' Update Media Entry '''
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
         self.log(LOG_BIGLINE)
-        self.log('UPDATE:: Version    : v.%s', VERSION_NO)
-        self.log('UPDATE:: File Name  : %s', filename)
-        self.log('UPDATE:: File Folder: %s', folder)
+        self.log('UPDATE:: Version                      : v.%s', VERSION_NO)
+        self.log('UPDATE:: File Name                    : %s', filename)
+        self.log('UPDATE:: File Folder                  : %s', folder)
         self.log(LOG_BIGLINE)
 
         # Fetch HTML.
         FILMDICT = json.loads(metadata.id)
+        self.log('UPDATE:: Film Dictionary Variables:')
+        for key in sorted(FILMDICT.keys()):
+            self.log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
+        self.log(LOG_BIGLINE)
+
         html = HTML.ElementFromURL(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
@@ -326,7 +334,8 @@ class GayHotMovies(Agent.Movies):
         #        d. Directors            : List of Directors (alphabetic order)
         #        e. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
         #        f. Posters/Art
-        #        g. Summary
+        #        g. Reviews
+        #        h. Summary
 
         # 2a.  Process Categories: Countries, Genres
         self.log(LOG_BIGLINE)
@@ -463,7 +472,46 @@ class GayHotMovies(Agent.Movies):
             except Exception as e:
                 self.log('UPDATE:: Error getting Old Style Poster/Art: %s', e)
 
-        # 2g.   Summary = IAFD Legend + Synopsis + Scene Breakdown
+        # 2g.   Reviews
+        self.log(LOG_BIGLINE)
+        reviewCount = 4
+        try:
+            htmlreviews = html.xpath('//div[@class="review"]')
+            htmlreviews = htmlreviews[:reviewCount] if len(htmlreviews) >= reviewCount else htmlreviews         # take one less user comment if editor comment is present
+            self.log('UPDATE:: Number of Reviews [%s]', len(htmlreviews))
+            metadata.reviews.clear()
+            for count, review in enumerate(htmlreviews, start=1):
+                self.log('UPDATE:: Review No %s', count)
+                try:
+                    try:
+                        writer =  review.xpath('./span[@class="handle_text"]/text()[normalize-space()]')[0]
+                        self.log('UPDATE:: Review Writer: %s', writer)
+                    except:
+                        writer = ''
+                    try:
+                        writing = review.xpath('./div[@class="review_content"]/span/text()[normalize-space()]')
+                        writing = ''.join(writing)
+                        self.log('UPDATE:: Review Text: %s', writing)
+                    except:
+                        writing = ''
+
+                    newReview = metadata.reviews.new()
+                    newReview.author = writer
+                    newReview.link  = FILMDICT['SiteURL']
+                    newReview.source = FILMDICT['Title'] + '...'
+                    if len(writing) > 275:
+                        for i in range(275, -1, -1):
+                            if writing[i] in ['.', '!', '?']:
+                                writing = writing[0:i + 1]
+                                break
+                    newReview.text = writing
+                    self.log(LOG_SUBLINE)
+                except Exception as e:
+                    self.log('UPDATE:: Error getting Review No. %s: %s', count, e)
+        except Exception as e:
+            self.log('UPDATE:: Error getting Reviews: %s', e)
+
+        # 2h.   Summary = IAFD Legend + Synopsis + Scene Breakdown
         self.log(LOG_BIGLINE)
         # synopsis
         try:
@@ -515,8 +563,9 @@ class GayHotMovies(Agent.Movies):
 
         # combine and update
         self.log(LOG_SUBLINE)
-        allscenes = '\nScene Breakdown:\n{0}'.format(allscenes) if allscenes else ''
-        summary = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN) + synopsis + allscenes
+        castLegend = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN)
+        summary = ('{0}\n{1}\n{2}' if PREFIXLEGEND else '{1}\n{2}\n{0}').format(castLegend, synopsis.strip(), allscenes.strip())
+        summary = summary.replace('\n\n', '\n')
         metadata.summary = self.TranslateString(summary, lang)
 
         self.log(LOG_BIGLINE)

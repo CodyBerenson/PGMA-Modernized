@@ -43,6 +43,7 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 REGEX = Prefs['regex']                      # file matching pattern
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
+PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']        # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']       # add studio name to collection
 COLTITLE = Prefs['titlecollection']         # add title [parts] to collection
@@ -209,15 +210,17 @@ class GEVI(Agent.Movies):
         self.log('SEARCH:: Version                      : v.%s', VERSION_NO)
         self.log('SEARCH:: Python                       : %s', sys.version_info)
         self.log('SEARCH:: Platform                     : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs-> delay                : %s', DELAY)
-        self.log('SEARCH::      -> Collection Gathering')
-        self.log('SEARCH::         -> Studio            : %s', COLSTUDIO)
-        self.log('SEARCH::         -> Film Title        : %s', COLTITLE)
-        self.log('SEARCH::         -> Genres            : %s', COLGENRE)
-        self.log('SEARCH::         -> Director(s)       : %s', COLDIRECTOR)
-        self.log('SEARCH::         -> Film Cast         : %s', COLCAST)
-        self.log('SEARCH::      -> Language Detection   : %s', DETECT)
-        self.log('SEARCH:: Library:Site Language        : %s:%s', lang, SITE_LANGUAGE)
+        self.log('SEARCH:: Preferences:')
+        self.log('SEARCH::  > Cast Legend Before Summary: %s', PREFIXLEGEND)
+        self.log('SEARCH::  > Collection Gathering')
+        self.log('SEARCH::      > Cast                  : %s', COLCAST)
+        self.log('SEARCH::      > Director(s)           : %s', COLDIRECTOR)
+        self.log('SEARCH::      > Studio                : %s', COLSTUDIO)
+        self.log('SEARCH::      > Film Title            : %s', COLTITLE)
+        self.log('SEARCH::      > Genres                : %s', COLGENRE)
+        self.log('SEARCH::  > Delay                     : %s', DELAY)
+        self.log('SEARCH::  > Language Detection        : %s', DETECT)
+        self.log('SEARCH::  > Library:Site Language     : %s:%s', lang, SITE_LANGUAGE)
         self.log('SEARCH:: Media Title                  : %s', media.title)
         self.log('SEARCH:: File Name                    : %s', filename)
         self.log('SEARCH:: File Folder                  : %s', folder)
@@ -378,13 +381,18 @@ class GEVI(Agent.Movies):
         ''' Update Media Entry '''
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
         self.log(LOG_BIGLINE)
-        self.log('UPDATE:: Version    : v.%s', VERSION_NO)
-        self.log('UPDATE:: File Name  : %s', filename)
-        self.log('UPDATE:: File Folder: %s', folder)
+        self.log('UPDATE:: Version                      : v.%s', VERSION_NO)
+        self.log('UPDATE:: File Name                    : %s', filename)
+        self.log('UPDATE:: File Folder                  : %s', folder)
         self.log(LOG_BIGLINE)
 
         # Fetch HTML.
         FILMDICT = json.loads(metadata.id)
+        self.log('UPDATE:: Film Dictionary Variables:')
+        for key in sorted(FILMDICT.keys()):
+            self.log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
+        self.log(LOG_BIGLINE)
+
         html = HTML.ElementFromURL(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
@@ -452,7 +460,19 @@ class GEVI(Agent.Movies):
         except Exception as e:
             self.log('UPDATE:: Error getting Genres: %s', e)
 
-        # 2b.   Countries
+        # 2b.   Rating (out of 4 Stars) = Rating can be a maximum of 10 - float value
+        self.log(LOG_BIGLINE)
+        try:
+            rating = html.xpath('//td[contains(text(),"rating out of 4")]//following-sibling::td[1]/text()')[0].strip()
+            rating = rating.count('*') * 2.5
+            self.log('UPDATE:: Film Rating %s', rating)
+            metadata.rating = rating
+
+        except Exception as e:
+            metadata.rating = 0.0
+            self.log('UPDATE:: Error getting Rating: %s', e)
+
+        # 2c.   Countries
         self.log(LOG_BIGLINE)
         try:
             htmlcountries = html.xpath('//td[contains(text(),"location")]//following-sibling::td[1]/text()')
@@ -468,18 +488,6 @@ class GEVI(Agent.Movies):
 
         except Exception as e:
             self.log('UPDATE:: Error getting Countries: %s', e)
-
-        # 2c.   Rating (out of 4 Stars) = Rating can be a maximum of 10 - float value
-        self.log(LOG_BIGLINE)
-        try:
-            rating = html.xpath('//td[contains(text(),"rating out of 4")]//following-sibling::td[1]/text()')[0].strip()
-            rating = rating.count('*') * 2.5
-            self.log('UPDATE:: Film Rating %s', rating)
-            metadata.rating = rating
-
-        except Exception as e:
-            metadata.rating = 0.0
-            self.log('UPDATE:: Error getting Rating: %s', e)
 
         # 2d.   Directors
         self.log(LOG_BIGLINE)
@@ -526,39 +534,22 @@ class GEVI(Agent.Movies):
         self.log(LOG_BIGLINE)
         try:
             htmlimages = html.xpath('//img/@src[contains(.,"Covers")]')
-            imagesFound = len(htmlimages)
-            self.log('UPDATE:: [%s] Images Found: %s', imagesFound, htmlimages)
             htmlimages = [(BASE_URL if BASE_URL not in image else '') + image.replace('/Icons/','/') for image in htmlimages] 
+            if len(htmlimages) == 1:    # if only one image duplicate it
+                htmlimages.append(htmlimages[0])
 
-            if imagesFound == 1:
-                image = htmlimages[0]
-                self.log('UPDATE:: Poster/Background Image Found: [1] - %s', image)
-                metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-                metadata.posters.validate_keys([image])
-                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-                metadata.art.validate_keys([image])
-            elif imagesFound == 2:
-                image = htmlimages[0]
-                self.log('UPDATE:: Poster Image Found: [1] - %s', image)
-                metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-                image = htmlimages[1]
-                self.log('UPDATE:: Background Image Found: [2] - %s', image)
-                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-                metadata.art.validate_keys([image])
+            image = htmlimages[0]
+            self.log('UPDATE:: Poster Image Found: [1] - %s', image)
+            metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+            metadata.posters.validate_keys([image])
 
-            else:
-                for index, image in enumerate(htmlimages, start=1):
-                    self.log('UPDATE:: Image Found: [%s] - %s', index, image)
-                    if index == 2: # second image is usually a background
-                        continue
-                    metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=index)
-                    if index == 1: # first picture is usually the poster
-                        continue
-                    metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order= index - 1)
-                    metadata.art.validate_keys([image])
+            image = htmlimages[1]
+            self.log('UPDATE:: Art Image Found: [2] - %s', image)
+            metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+            metadata.art.validate_keys([image])
 
         except Exception as e:
-            self.log('UPDATE:: Error getting Poster/Background Art: %s', e)
+            self.log('UPDATE:: Error getting Poster/Art: %s', e)
 
         # 2g.   Summary = IAFD Legend + Synopsis + Scene Information
         # synopsis
@@ -599,13 +590,18 @@ class GEVI(Agent.Movies):
             allscenes = ''
             self.log('UPDATE:: Error getting Scenes: %s', e)
 
-        # combine and update
         legend = legend if allscenes else ''
-        summary = "{0}\n{1}\n{2}".format(synopsis, legend, allscenes)
-        summary = self.NormaliseUnicode(summary)
+        synopsis = "{0}\n{1}\n{2}".format(synopsis, legend, allscenes)
+        synopsis = self.NormaliseUnicode(synopsis)
         regex = r'View this scene at.*|found in compilation.*|see also.*'
         pattern = re.compile(regex, re.IGNORECASE)
-        summary = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN) + re.sub(pattern, '', summary)
+        synopsis = re.sub(pattern, '', synopsis)
+        
+        # combine and update
+        self.log(LOG_SUBLINE)
+        castLegend = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN)
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(castLegend, synopsis.strip())
+        summary = summary.replace('\n\n', '\n')
         metadata.summary = self.TranslateString(summary, lang)
 
         self.log(LOG_BIGLINE)

@@ -33,6 +33,7 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 REGEX = Prefs['regex']                      # file matching pattern
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
+PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']        # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']       # add studio name to collection
 COLTITLE = Prefs['titlecollection']         # add title [parts] to collection
@@ -126,15 +127,17 @@ class WolffVideo(Agent.Movies):
         self.log('SEARCH:: Version                      : v.%s', VERSION_NO)
         self.log('SEARCH:: Python                       : %s', sys.version_info)
         self.log('SEARCH:: Platform                     : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Prefs-> delay                : %s', DELAY)
-        self.log('SEARCH::      -> Collection Gathering')
-        self.log('SEARCH::         -> Studio            : %s', COLSTUDIO)
-        self.log('SEARCH::         -> Film Title        : %s', COLTITLE)
-        self.log('SEARCH::         -> Genres            : %s', COLGENRE)
-        self.log('SEARCH::         -> Director(s)       : %s', COLDIRECTOR)
-        self.log('SEARCH::         -> Film Cast         : %s', COLCAST)
-        self.log('SEARCH::      -> Language Detection   : %s', DETECT)
-        self.log('SEARCH:: Library:Site Language        : %s:%s', lang, SITE_LANGUAGE)
+        self.log('SEARCH:: Preferences:')
+        self.log('SEARCH::  > Cast Legend Before Summary: %s', PREFIXLEGEND)
+        self.log('SEARCH::  > Collection Gathering')
+        self.log('SEARCH::      > Cast                  : %s', COLCAST)
+        self.log('SEARCH::      > Director(s)           : %s', COLDIRECTOR)
+        self.log('SEARCH::      > Studio                : %s', COLSTUDIO)
+        self.log('SEARCH::      > Film Title            : %s', COLTITLE)
+        self.log('SEARCH::      > Genres                : %s', COLGENRE)
+        self.log('SEARCH::  > Delay                     : %s', DELAY)
+        self.log('SEARCH::  > Language Detection        : %s', DETECT)
+        self.log('SEARCH::  > Library:Site Language     : %s:%s', lang, SITE_LANGUAGE)
         self.log('SEARCH:: Media Title                  : %s', media.title)
         self.log('SEARCH:: File Name                    : %s', filename)
         self.log('SEARCH:: File Folder                  : %s', folder)
@@ -247,13 +250,18 @@ class WolffVideo(Agent.Movies):
         ''' Update Media Entry '''
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
         self.log(LOG_BIGLINE)
-        self.log('UPDATE:: Version    : v.%s', VERSION_NO)
-        self.log('UPDATE:: File Name  : %s', filename)
-        self.log('UPDATE:: File Folder: %s', folder)
+        self.log('UPDATE:: Version                      : v.%s', VERSION_NO)
+        self.log('UPDATE:: File Name                    : %s', filename)
+        self.log('UPDATE:: File Folder                  : %s', folder)
         self.log(LOG_BIGLINE)
 
         # Fetch HTML.
         FILMDICT = json.loads(metadata.id)
+        self.log('UPDATE:: Film Dictionary Variables:')
+        for key in sorted(FILMDICT.keys()):
+            self.log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
+        self.log(LOG_BIGLINE)
+
         html = HTML.ElementFromURL(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
@@ -409,7 +417,9 @@ class WolffVideo(Agent.Movies):
 
         # combine and update
         self.log(LOG_SUBLINE)
-        summary = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN) + synopsis + scenes
+        castLegend = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN)
+        summary = ('{0}\n{1}\n{2}' if PREFIXLEGEND else '{1}\n{2}\n{0}').format(castLegend, synopsis.strip(), scenes.strip())
+        summary = summary.replace('\n\n', '\n')
         metadata.summary = self.TranslateString(summary, lang)
 
         self.log(LOG_BIGLINE)

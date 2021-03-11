@@ -14,9 +14,15 @@
     },
     {
         "id": "detect",
-        "label": "Check source language before translation? Select yes if film summaries are in a different language",
+        "label": "Always check source language before attempting translate? Select yes if movie summaries are presented in different languages",
         "type": "bool",
         "default": "false"
+    },
+    {
+        "id": "prefixlegend",
+        "label": "Place Cast Legend at Start of Summary?",
+        "type": "bool",
+        "default": "true"
     },
     {
         "id": "clearcollections",
@@ -26,37 +32,37 @@
     },
     {
         "id": "studiocollection",
-        "label": "Create Collections from Studio Name",
+        "label": "Create Collections based on Studio Name",
         "type": "bool",
         "default": "false"
     },
     {
         "id": "titlecollection",
-        "label": "Create Collections from Film Title",
+        "label": "Create Collections based on Film Series",
         "type": "bool",
         "default": "false"
     },
     {
         "id": "castcollection",
-        "label": "Create Collections from Film Actors",
+        "label": "Create Collections based on Film Actors",
         "type": "bool",
         "default": "false"
     },
     {
         "id": "directorcollection",
-        "label": "Create Collections from Film Directors",
+        "label": "Create Collections based on Film Directors",
         "type": "bool",
         "default": "false"
     },
     {
         "id": "genrecollection",
-        "label": "Create Collections from Film Genres",
+        "label": "Create Collections based on Film Genres",
         "type": "bool",
         "default": "false"
     },
     {
         "id": "countrycollection",
-        "label": "Create Collections from Film Production Country",
+        "label": "Create Collections based on Film Production Country",
         "type": "bool",
         "default": "false"
     }

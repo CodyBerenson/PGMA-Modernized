@@ -15,19 +15,24 @@
                 <font size="4" color="red"><a href="https://github.com/CodyBerenson/PGMA-Modernized">GAY ADULT FILMS:</a></font><br/><br/>
                 Plex metadata agent for fetching metadata from websites that sell gay adult films. 
                 The metadata that contributes to this agent comes from the following websites:<br/>
-                     1. Adult Entertainment Broadcast Network<br/>
-                     2. BestExclusivePorn<br/>
-                     3. CD Universe<br/>
-                     4. Gay DVD Empire<br/>
-                     5. Gay Entertainment Video Index<br/>
-                     6. Gay Hot Movies<br/>
-                     7. GayMovie<br/>
-                     8. GayRado<br/>
-                     9. GayWorld<br/>
-                    10. Homo Active<br/>
-                    11. Internet Adult Film Database</br>
-                    12. RadVideo<br/>
-            ]]>        
+                     1. Adult Film Database<br/>
+                     2. AEBN - Adult Entertainment Broadcast Network<br/>
+                     3. AVEntertainments<br/>
+                     4. BestExclusivePorn<br/>
+                     5. CD Universe<br/>
+                     6. Gay DVD Empire<br/>
+                     7. Gay Fetish and BDSM<br/>
+                     8. Gay Hot Movies<br/>
+                     9. GayMovie<br/>
+                    10. GayRado<br/>
+                    11. GayWorld<br/>
+                    12. GEVI - Gay Erotic Video Index<br/>
+                    13. Homo Active<br/>
+                    14. Internet Adult Film Database</br>
+                    15. nymMedia</br>
+                    16. RadVideo<br/>
+                    17. WolffVideo<br/>
+            ]]>
         </string>
         <key>CFBundleInfoDictionaryVersion</key>
         <string>6.0</string>

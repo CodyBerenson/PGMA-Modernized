@@ -99,8 +99,10 @@ def matchFilename(self, filename):
     filmVars['IAFDSearchTitle'] = filmVars['IAFDSearchTitle'].replace('%25', '%').replace('*', '')
 
     # print out dictionary values / normalise unicode
+    self.log('GENF  :: Film Dictionary Variables:')
     for key in sorted(filmVars.keys()):
         filmVars[key] = [self.NormaliseUnicode(x) for x in filmVars[key]] if type(filmVars[key]) is list else self.NormaliseUnicode(filmVars[key])
+        filmVars[key] = list(set(filmVars[key])) if type(filmVars[key]) is list else filmVars[key]
         self.log('GENF  :: {0: <29}: {1}'.format(key, filmVars[key]))
 
     return filmVars
@@ -112,7 +114,7 @@ def matchTitle(self, siteTitle, FILMDICT):
     testSite = 'Passed' if compareSiteTitle in FILMDICT['CompareTitle'] else 'Passed (IAFD)' if compareSiteTitle in FILMDICT['IAFDCompareTitle'] else 'Failed'
 
     self.log('GENF  :: Site Title                    %s', siteTitle)
-    self.log('GENF  :: Title Comparison              [%s]\tSite: "%s"\tFile: ["%s", "%s"]', testSite, siteTitle, FILMDICT['Title'], FILMDICT['ShortTitle'])
+    self.log('GENF  :: Title Comparison              [%s]\tSite: "%s"\tFile: Full/Short Title - "%s" / "%s"', testSite, siteTitle, FILMDICT['Title'], FILMDICT['ShortTitle'])
 
     if testSite == 'Failed':
         raise Exception('Title Match Failure!')
@@ -198,7 +200,7 @@ def NormaliseComparisonString(self, myString):
     myString = myString.replace("`", "'")
 
     # strip domain suffixes, vol., volume from string, standalone "1's"
-    pattern = ur'[.](org|com|net|co[.][a-z]{2})|Vol[.]|\bPart\b|\bVolume\b|(?<!\d)1(?!\d)|[^A-Za-z0-9]+'
+    pattern = ur'[.]([a-z]{2,3}|co[.][a-z]{2})|Vol[.]|\bPart\b|\bVolume\b|(?<!\d)1(?!\d)|[^A-Za-z0-9]+'
     myString = re.sub(pattern, '', myString, flags=re.IGNORECASE)
 
     return myString

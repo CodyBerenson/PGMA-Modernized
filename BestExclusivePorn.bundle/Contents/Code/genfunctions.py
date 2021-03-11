@@ -102,6 +102,7 @@ def matchFilename(self, filename):
     self.log('GENF  :: Film Dictionary Variables:')
     for key in sorted(filmVars.keys()):
         filmVars[key] = [self.NormaliseUnicode(x) for x in filmVars[key]] if type(filmVars[key]) is list else self.NormaliseUnicode(filmVars[key])
+        filmVars[key] = list(set(filmVars[key])) if type(filmVars[key]) is list else filmVars[key]
         self.log('GENF  :: {0: <29}: {1}'.format(key, filmVars[key]))
 
     return filmVars
@@ -113,7 +114,7 @@ def matchTitle(self, siteTitle, FILMDICT):
     testSite = 'Passed' if compareSiteTitle in FILMDICT['CompareTitle'] else 'Passed (IAFD)' if compareSiteTitle in FILMDICT['IAFDCompareTitle'] else 'Failed'
 
     self.log('GENF  :: Site Title                    %s', siteTitle)
-    self.log('GENF  :: Title Comparison              [%s]\tSite: "%s"\tFile: ["%s", "%s"]', testSite, siteTitle, FILMDICT['Title'], FILMDICT['ShortTitle'])
+    self.log('GENF  :: Title Comparison              [%s]\tSite: "%s"\tFile: Full/Short Title - "%s" / "%s"', testSite, siteTitle, FILMDICT['Title'], FILMDICT['ShortTitle'])
 
     if testSite == 'Failed':
         raise Exception('Title Match Failure!')
