@@ -4,7 +4,7 @@
 for our new Installation and Usage Guide.  
 # Announcements
 
-See all of our exciting announcements in the [Discussions tab](discussions).    
+See all of our exciting announcements in the [Discussions tab](../../discussions).    
 
 ## Disclaimer
 
