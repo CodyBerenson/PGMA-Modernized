@@ -29,6 +29,7 @@
                                    included studio on iafd processing of filename
                                    Added iafd legend to summary
                                    improved logging
+    11 Mar 2021   2019.08.12.13    Cast xpath was picking Bios and Interview along with cast name - corrected
 ---------------------------------------------------------------------------------------------------------------
 '''
 import datetime, platform, os, re, sys, json
@@ -36,7 +37,7 @@ from unidecode import unidecode
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.12'
+VERSION_NO = '2019.08.12.13'
 PLUGIN_LOG_TITLE = 'GayDVDEmpire'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
@@ -395,7 +396,7 @@ class GayDVDEmpire(Agent.Movies):
         # 2d.   Cast
         self.log(LOG_BIGLINE)
         try:
-            htmlcast = html.xpath('//a[contains(@class,"PerformerName")]/text()[normalize-space()]')
+            htmlcast = html.xpath('//a[@class="PerformerName" and @label="Performers - detail"]/text()')
             castdict = self.ProcessIAFD(htmlcast, FILMDICT)
 
             # sort the dictionary and add key(Name)- value(Photo, Role) to metadata
