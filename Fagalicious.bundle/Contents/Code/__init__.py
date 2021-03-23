@@ -23,6 +23,7 @@
     28 Feb 2021   2020.01.18.20    Moved IAFD and general functions to other py files
                                    Enhancements to IAFD search routine, including Levenshtein Matching on Cast names
                                    Added iafd legend to summary
+    23 Mar 2021   2020.01.18.21    Search string size reduced from 50 to 48
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import datetime, platform, os, re, sys, subprocess, json
@@ -32,7 +33,7 @@ from PIL import Image
 from io import BytesIO
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.20'
+VERSION_NO = '2020.01.18.21'
 PLUGIN_LOG_TITLE = 'Fagalicious'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
@@ -169,9 +170,9 @@ class Fagalicious(Agent.Movies):
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string
         myString = myString.replace('%25', '%').replace('*', '')
 
-        # string can not be longer than 50 characters
-        myString = myString[:50].strip()
-        myString = myString if myString[-1] != '%' else myString[:49]
+        # string can not be longer than 48 characters
+        myString = myString[:48].strip()
+        myString = myString if myString[-1] != '%' else myString[:47]
         self.log('AGNT  :: Returned Search Query        : {0}'.format(myString))
         self.log(LOG_BIGLINE)
 
