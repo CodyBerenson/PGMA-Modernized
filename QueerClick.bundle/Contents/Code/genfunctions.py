@@ -1,4 +1,10 @@
-# General Functions found in all agents
+'''
+General Functions found in all agents
+                                                  Version History
+                                                  ---------------
+    Date            Modification
+    27 Match 2021   Added curly single quotes to string normalisation in addition to `, all quotes single quotes are now replaced by straight quotes
+'''
 # -------------------------------------------------------------------------------------------------------------------------------
 def matchFilename(self, filename):
     ''' Check filename on disk corresponds to regex preference format '''
@@ -197,7 +203,9 @@ def NormaliseComparisonString(self, myString):
     myString = myString.replace('&', 'and')
 
     # standardise quotes replace "`" with straight quotes
-    myString = myString.replace("`", "'")
+    singleQuotes = ["`", "‘", "’"]
+    pattern = ur'[{0}]'.format(''.join(singleQuotes))
+    myString = re.sub(pattern, "'", myString)
 
     # strip domain suffixes, vol., volume from string, standalone "1's"
     pattern = ur'[.]([a-z]{2,3}|co[.][a-z]{2})|Vol[.]|\bPart\b|\bVolume\b|(?<!\d)1(?!\d)|[^A-Za-z0-9]+'

@@ -24,10 +24,12 @@
     28 Feb 2021   2019.08.12.25    Moved IAFD and general functions to other py files
                                    Enhancements to IAFD search routine, including Levenshtein Matching on Cast names
                                    Added iafd legend to summary
+    27 Mar 2021   2019.08.12.26    Site Title had spaces removed before normalisation - caused matching failure
+                                   Site Studio was been set to [-1] rather than the last element of the site entry split, so Studio always matched
 
 ---------------------------------------------------------------------------------------------------------------
 '''
-import datetime, platform, os, re, sys, unicodedata, subprocess, json
+import datetime, platform, os, re, sys, subprocess, json
 from unidecode import unidecode
 from googletrans import Translator
 from PIL import Image
@@ -312,7 +314,7 @@ class WayBig(Agent.Movies):
                     siteEntry = title.xpath('./a/h2[@class="entry-title"]/text()')[0].strip()
                     self.log('SEARCH:: Site Entry:                   %s', siteEntry)
                     # prepare the Site Entry
-                    singleQuotes = ["`", "’"]
+                    singleQuotes = ["`", "‘", "’"]
                     pattern = ur'[{0}]'.format(''.join(singleQuotes))
                     siteEntry = re.sub(pattern, "'", siteEntry)
 
@@ -322,8 +324,8 @@ class WayBig(Agent.Movies):
                     else: # on very old entries it was Title [at|on] Studio
                         siteEntry = siteEntry.split()
                         if siteEntry[-2].lower() == 'at' or siteEntry[-2].lower() == 'on':
-                            siteStudio = [-1]
-                            siteTitle = ''.join(siteEntry[0:-2])
+                            siteStudio = siteEntry[-1]
+                            siteTitle = ' '.join(siteEntry[0:-2])
                         else:
                             self.log('SEARCH:: Error determining Site Studio and Title from Site Entry')
                             self.log(LOG_SUBLINE)
@@ -525,6 +527,11 @@ class WayBig(Agent.Movies):
             self.log('UPDATE:: Synopsis Found: %s', synopsis)
         except:
             self.log('UPDATE:: Error getting Synopsis')
+
+        synopsis = self.NormaliseUnicode(synopsis)
+        regex = r'Watch.*at.*'
+        pattern = re.compile(regex, re.IGNORECASE)
+        synopsis = re.sub(pattern, '', synopsis)
 
         # combine and update
         self.log(LOG_SUBLINE)
