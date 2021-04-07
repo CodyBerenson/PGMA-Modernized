@@ -1,7 +1,17 @@
-# Functions used to process results from IAFD
-
+'''
+Functions used to process results from IAFD
+                                                  Version History
+                                                  ---------------
+    Date          Modification
+    06 Apr 2021   Return unprocessed cast and director lists if IAFD returns a 403 Error, rather than an exception which prevented 
+                  cast and director scrapping results been recorded.
+'''
 # -------------------------------------------------------------------------------------------------------------------------------
 def ProcessIAFD(self, agntCastList, FILMDICT):
+    ''' Process and match cast list against IAFD '''
+
+    # return variable
+    actorDict = {}
 
     # clean up the Cast List 
     agntCastList = [x.split('(')[0].strip() if '(' in x else x.strip() for x in agntCastList]
@@ -9,7 +19,7 @@ def ProcessIAFD(self, agntCastList, FILMDICT):
     if not agntCastList:
         raise Exception('No Cast List!')
 
-    FoundFilm, html = self.FindIAFD_Film(FILMDICT)
+    FoundFilm, html, NoIAFD = self.FindIAFD_Film(FILMDICT)
     self.log(LOG_SUBLINE)
 
     # get cast information
@@ -23,49 +33,53 @@ def ProcessIAFD(self, agntCastList, FILMDICT):
             unmatchedList, actorDict2 = self.getIAFD_Actor(unmatchedList, FILMDICT)
             actorDict.update(actorDict2)
     else:
-        self.log('IAFD  :: Process in Cast Mode: {0} Actors: {1}'.format(len(agntCastList), agntCastList))
-        unmatchedList, actorDict = self.getIAFD_Actor(agntCastList, FILMDICT)
+        if not NoIAFD:      # IAFD available - process in cast mode
+            self.log('IAFD  :: Process in Cast Mode: {0} Actors: {1}'.format(len(agntCastList), agntCastList))
+            unmatchedList, actorDict = self.getIAFD_Actor(agntCastList, FILMDICT)
 
-    if not actorDict:
-        raise Exception('Could not Process IAFD Film')
+    if actorDict:
+        # leave unmatched actors - normalise both agent cast list and match List
+        self.log('IAFD  :: Agent Cast List:             \t%s', originalCastList)
+        self.log('IAFD  :: Matched Actors List:         \t%s', sorted(actorDict.keys()))
+        self.log('IAFD  :: Unmatched Actors:            \t%s', unmatchedList)
+        if unmatchedList:
+            self.log(LOG_SUBLINE)
+            self.log('IAFD  :: Attempt Levenstein Matching, 1 distance per word')
 
-    # leave unmatched actors - normalise both agent cast list and match List
-    self.log('IAFD  :: Agent Cast List:             \t%s', originalCastList)
-    self.log('IAFD  :: Matched Actors List:         \t%s', sorted(actorDict.keys()))
-    self.log('IAFD  :: Unmatched Actors:            \t%s', unmatchedList)
-    if unmatchedList:
-        self.log(LOG_SUBLINE)
-        self.log('IAFD  :: Attempt Levenstein Matching, 1 distance per word')
+            actorList = actorDict.keys()
+            compareunmatchedList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in unmatchedList]
+            compareActorList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in actorList]
 
-        actorList = actorDict.keys()
-        compareunmatchedList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in unmatchedList]
-        compareActorList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in actorList]
+            self.log('IAFD  :: Normalised Unmatched Cast:   \t%s', compareunmatchedList)
+            self.log('IAFD  :: Normalised Actor List:       \t%s', compareActorList)
+            for uIndex, compareUnmatched in enumerate(compareunmatchedList):
+                # Lehvenstein Match Distance - one change per word in cast name
+                levDistance = len(unmatchedList[uIndex].split()) + 1
+                for aIndex, compareActor in enumerate(compareActorList):
+                    if not compareActor:
+                        continue
+                    levScore = String.LevenshteinDistance(compareUnmatched, compareActor)
+                    status = 'Passed' if levScore <= levDistance else 'Failed'
+                    self.log('IAFD  :: Actor: {0: <20}\t{1} Levenshtein Match - Distance:Score [{2}:{3}] against: {4}'.format(unmatchedList[uIndex], status, levDistance, levScore, actorList[aIndex]))
+                    if levScore <= levDistance:
+                        unmatchedList[uIndex] = ''
+                        compareunmatchedList[uIndex] = ''
+                        actorList[aIndex] = ''
+                        compareActorList[aIndex] = ''
+                        break   # stop processing rest of matched names and get next cast name
 
-        self.log('IAFD  :: Normalised Unmatched Cast:   \t%s', compareunmatchedList)
-        self.log('IAFD  :: Normalised Actor List:       \t%s', compareActorList)
-        for uIndex, compareUnmatched in enumerate(compareunmatchedList):
-            # Lehvenstein Match Distance - one change per word in cast name
-            levDistance = len(unmatchedList[uIndex].split()) + 1
-            for aIndex, compareActor in enumerate(compareActorList):
-                if not compareActor:
-                    continue
-                levScore = String.LevenshteinDistance(compareUnmatched, compareActor)
-                status = 'Passed' if levScore <= levDistance else 'Failed'
-                self.log('IAFD  :: Actor: {0: <20}\t{1} Levenshtein Match - Distance:Score [{2}:{3}] against: {4}'.format(unmatchedList[uIndex], status, levDistance, levScore, actorList[aIndex]))
-                if levScore <= levDistance:
-                    unmatchedList[uIndex] = ''
-                    compareunmatchedList[uIndex] = ''
-                    actorList[aIndex] = ''
-                    compareActorList[aIndex] = ''
-                    break   # stop processing rest of matched names and get next cast name
+            self.log(LOG_SUBLINE)
+            unmatchedList = [x for x in unmatchedList if x]
+            self.log('IAFD  :: IAFD Actors: Matched:        \t%s', actorDict.keys())
+            self.log('IAFD  ::              Unmatched:      \t%s', unmatchedList)
 
-        self.log(LOG_SUBLINE)
-        unmatchedList = [x for x in unmatchedList if x]
-        self.log('IAFD  :: IAFD Actors: Matched:        \t%s', actorDict.keys())
-        self.log('IAFD  ::              Unmatched:      \t%s', unmatchedList)
+            # Add unmatched actors to actor dictionary with an absent status
+            for cast in unmatchedList:
+                actorDict[cast] = {'Photo': '', 'Role': IAFD_ABSENT}
 
+    else:   # if there is a failure to read the website we would end up here
         # Add unmatched actors to actor dictionary with an absent status
-        for cast in unmatchedList:
+        for cast in agntCastList:
             actorDict[cast] = {'Photo': '', 'Role': IAFD_ABSENT}
 
     return actorDict
@@ -79,7 +93,10 @@ def FindIAFD_Film(self, FILMDICT):
 
     # search for Film Title on IAFD
     try:
-        html = self.getIAFD_URLElement(IAFD_SEARCH_URL.format(FILMDICT['IAFDSearchTitle']))
+        html, NoIAFD = self.getIAFD_URLElement(IAFD_SEARCH_URL.format(FILMDICT['IAFDSearchTitle']))
+        if NoIAFD:
+            raise Exception(NoIAFD)
+
         # get films listed within 1 year of what is on agent - as IAFD may have a different year recorded
         FILMDICT['Year'] = int(FILMDICT['Year'])
         filmList = html.xpath('//table[@id="titleresult"]/tbody/tr/td[2][.>="{0}" and .<="{1}"]/ancestor::tr'.format(FILMDICT['Year'] - 1, FILMDICT['Year'] + 1))
@@ -107,7 +124,10 @@ def FindIAFD_Film(self, FILMDICT):
                 iafdfilmURL = film.xpath('./td[1]/a/@href')[0].replace('+/', '/').replace('-.', '.')
                 iafdfilmURL = '{0}{1}'.format(IAFD_BASE, iafdfilmURL) if iafdfilmURL[0] == '/' else '{0}/{1}'.format(IAFD_BASE, iafdfilmURL)
                 self.log('IAFD  :: Site Title url                %s', iafdfilmURL)
-                html = self.getIAFD_URLElement(iafdfilmURL)
+                html, NoIAFD = self.getIAFD_URLElement(iafdfilmURL)
+                if NoIAFD:
+                    raise Exception(NoIAFD)
+
                 self.log(LOG_BIGLINE)
             except Exception as e:
                 self.log('IAFD  :: Error: IAFD URL Studio: %s', e)
@@ -139,7 +159,7 @@ def FindIAFD_Film(self, FILMDICT):
                     continue
 
             if not studioMatch:
-                self.log('SEARCH:: Error getting Site Studio')
+                self.log('IAFD  :: Error getting Site Studio')
                 continue
 
             # if we get here we have found a film match break out of loop
@@ -149,12 +169,15 @@ def FindIAFD_Film(self, FILMDICT):
     except Exception as e:
         self.log('IAFD  :: Error: IAFD Film Search Failure, %s', e)
 
-    return FoundFilm, html
+    return FoundFilm, html, NoIAFD
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def getIAFD_URLElement(self, myString):
     ''' check IAFD web site for better quality actor thumbnails irrespective of whether we have a thumbnail or not '''
-    myException = ''
+
+    # this variable will be set if IAFD fails to be read
+    NoIAFD = ''
+    html = ''
     for i in range(2):
         try:
             html = HTML.ElementFromURL(myString, timeout=20, sleep=DELAY)
@@ -162,22 +185,21 @@ def getIAFD_URLElement(self, myString):
                 searchQuery = html.xpath('//a[text()="See More Results..."]/@href')[0].strip()
                 if searchQuery:
                     searchQuery = IAFD_BASE + searchQuery if IAFD_BASE not in searchQuery else searchQuery
-                    self.log('SEARCH:: Loading Additional Search Results: %s', searchQuery)
+                    self.log('IAFD  :: Loading Additional Search Results: %s', searchQuery)
                     html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
             except:
                 self.log('IAFD  :: No Additional Search Results')
-            return html
+            break
         except Exception as e:
-            myException = e
+            NoIAFD = e
             continue
-    # failed to read page
-    raise Exception('Failed to read IAFD URL [%s]', myException)
+
+    self.log('IAFD  :: Error: Failed to read IAFD URL [{0}] - Processing Abandoned'.format(NoIAFD))
+    return html, NoIAFD
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def getIAFD_FilmCast(self, html, agntCastList, FILMDICT):
     ''' check IAFD web site for better quality actor thumbnails per movie'''
-    actorDict = {}
-
     try:
         actorList = html.xpath('//h3[.="Performers"]/ancestor::div[@class="panel panel-default"]//div[@class[contains(.,"castbox")]]/p')
         self.log('IAFD  :: %s Actors on IAFD', len(actorList))
@@ -277,12 +299,13 @@ def getIAFD_Actor(self, agntCastList, FILMDICT):
     compareAgntCastList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in agntCastList]
 
     FILMDICT['Year'] = int(FILMDICT['Year'])
-    actorDict = {}
 
     for cast in allCastList:
         compareCast = re.sub(r'[\W\d_]', '', cast).strip().lower()
         try:
-            html = self.getIAFD_URLElement(IAFD_SEARCH_URL.format(String.URLEncode(cast)))
+            html, NoIAFD = self.getIAFD_URLElement(IAFD_SEARCH_URL.format(String.URLEncode(cast)))
+            if NoIAFD:
+                break
 
             # IAFD presents actor searches in career start order, this needs to be changed as actors whose main name does not match the search name 
             # will appear first in the list because he has an alias that matches the search name. we need to reorder so that those whose main name matches
@@ -301,12 +324,12 @@ def getIAFD_Actor(self, agntCastList, FILMDICT):
                 try:
                     mainList = html.xpath(xPathMatchMain)
                 except:
-                    self.log('IAFD  :: Bad Main Name xPath')
+                    self.log('IAFD  :: Error: Bad Main Name xPath')
                     mainList = []
                 try:
                     aliasList = html.xpath(xPathMatchAlias)
                 except:
-                    self.log('IAFD  :: Bad Alias xPath')
+                    self.log('IAFD  :: Error: Bad Alias xPath')
                     aliasList = []
 
                 combinedList = mainList + aliasList
@@ -431,7 +454,7 @@ def getIAFD_Actor(self, agntCastList, FILMDICT):
             self.log(LOG_SUBLINE)
             continue    # next actor in agent cast list  (allCastList)
 
-    return agntCastList, actorDict
+    return agntCastList, actorDict, NoIAFD
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def getIAFD_Director(self, agntDirectorList, FILMDICT):
@@ -447,7 +470,9 @@ def getIAFD_Director(self, agntDirectorList, FILMDICT):
     for agntDirector in allDirectorList:
         compareDirector = re.sub(r'[\W\d_]', '', agntDirector).strip().lower()
         try:
-            html = self.getIAFD_URLElement(IAFD_SEARCH_URL.format(String.URLEncode(agntDirector)))
+            html, NoIAFD = self.getIAFD_URLElement(IAFD_SEARCH_URL.format(String.URLEncode(agntDirector)))
+            if NoIAFD:
+                break
 
             # IAFD presents director searches in career start order, this needs to be changed as directors whose main name does not match the search name 
             # will appear first in the list because he has an alias that matches the search name. we need to reorder so that those whose main name matches
@@ -458,12 +483,12 @@ def getIAFD_Director(self, agntDirectorList, FILMDICT):
             try:
                 mainList = html.xpath(xPathMatchMain)
             except:
-                self.log('IAFD  :: Bad Main Name xPath')
+                self.log('IAFD  :: Error: Bad Main Name xPath')
                 mainList = []
             try:
                 aliasList = html.xpath(xPathMatchAlias)
             except:
-                self.log('IAFD  :: Bad Alias xPath')
+                self.log('IAFD  :: Error: Bad Alias xPath')
                 aliasList = []
 
             combinedList = mainList + aliasList

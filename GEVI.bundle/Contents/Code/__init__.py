@@ -26,6 +26,7 @@
                                    included studio on iafd processing of filename
                                    Added iafd legend to summary
                                    improved logging
+    28 Mar 2021   2020.12.25.28    Added # to list of chars to be stripped from search string, removed indefinite article/numeric strip of first word in title
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -34,7 +35,7 @@ from unidecode import unidecode
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.27'
+VERSION_NO = '2019.12.25.28'
 PLUGIN_LOG_TITLE = 'GEVI'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
@@ -116,74 +117,79 @@ class GEVI(Agent.Movies):
 
         # convert to lower case and trim
         myString = myString.lower().strip()
-        myBackupString = myString
 
         # replace & with and
         if ' & ' in myString:
-            self.log('AGNT  :: Search Query:: Replacing characters in string. Found " & "')
             myString = myString.replace(' & ', ' and ')
-            self.log('AGNT  :: Amended Search Query [{0}]'.format(myString))
+            self.log('AGNT  :: Search Query:: [{0}] after replacing " & "'.format(myString))
         else:
-            self.log('AGNT  :: Search Query:: String has no " & "')
+            self.log('AGNT  :: Search Query:: [{0}] found no " & "'.format(myString))
 
         # replace following with null
-        nullChars = ["'", ',', '!', '.', '#'] # to be replaced with null
+        nullChars = ["'", ',', '!', '\.', '#'] # to be replaced with null
         pattern = u'[{0}]'.format(''.join(nullChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
-            self.log('AGNT  :: Search Query:: Replacing characters in string. Found one of these {0}'.format(pattern))
             myString = re.sub(pattern, '', myString)
-            self.log('AGNT  :: Amended Search Query [{0}]'.format(myString))
+            self.log('AGNT  :: Search Query:: [{0}] after removing any of these {1}'.format(myString, pattern))
         else:
-            self.log('AGNT  :: Search Query:: String has none of these {0}'.format(pattern))
+            self.log('AGNT  :: Search Query:: [{0}] found none of these {0}'.format(myString, pattern))
 
-        spaceChars = ['-', ur'\u2013', ur'\u2014', '(', ')']  # to be replaced with space
+        # replace following with space
+        spaceChars = ["@", '\-', ur'\u2013', ur'\u2014', '\(', '\)']  # to be replaced with space
         pattern = u'[{0}]'.format(''.join(spaceChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
-            self.log('AGNT  :: Search Query:: Replacing characters with Space. Found one of these {0}'.format(pattern))
             myString = re.sub(pattern, ' ', myString)
             myString = ' '.join(myString.split())   # remove continous white space
-            self.log('AGNT  :: Amended Search Query [{0}]'.format(myString))
+            self.log('AGNT  :: Search Query:: [{0}] after removing any of these {1}'.format(myString, pattern))
         else:
-            self.log('AGNT  :: Search Query:: String has none of these {0}'.format(pattern))
+            self.log('AGNT  :: Search Query:: [{0}] found none of these {0}'.format(myString, pattern))
 
         # examine first word
-        # remove if numerical or indefinite word in french, english, portuguese, spanish, german
-        numbers = ['[0-9]+']
+        # remove if indefinite word in french, english, portuguese, spanish, german
+        myWords = myString.split()
         eng = ['a', 'an', 'the']
         fre = ['un', 'une', 'des', 'le', 'la', 'les', "l'"]
         prt = ['um', 'uma', 'uns', 'umas', 'o', 'a', 'os', 'as']
         esp = ['un', 'una', 'unos', 'unas', 'el', 'la', 'los', 'las']
         ger = ['ein', 'eine', 'eines', 'einen', 'einem', 'einer', 'das', 'die', 'der', 'dem', 'den', 'des']
         oth = ['mr']
-        regexes = numbers + eng + fre + prt + esp + ger + oth
+        regexes = eng + fre + prt + esp + ger + oth
         pattern = r'|'.join(r'\b{0}\b'.format(regex) for regex in regexes)
-        while True:
-            myWords = myString.split()
-            matched = re.search(pattern, myWords[0].lower())  # match against first word
-            if matched:
-                self.log("AGNT  :: Search Query:: Dropping first word [{0}]".format(myWords[0]))
-                myWords.remove(myWords[0])
-                myString = ' '.join(myWords)
-                self.log('AGNT  :: Amended Search Query [{0}]'.format(myString))
-            else:
-                self.log("AGNT  :: Search Query:: Did not match against first word [{0}]".format(myWords[0]))
-                break
+        matched = re.search(pattern, myWords[0].lower())  # match against first word
+        if matched:
+            myWords.remove(myWords[0])
+            myString = ' '.join(myWords)
+            self.log("AGNT  :: Search Query:: [{0}] after dropping first word [{1}]".format(myString, myWords[0]))
+        else:
+            self.log('AGNT  :: Search Query:: [{0}] drop not attempted. First word was not an indefinite article'.format(myString))
 
-        # examine string for numbers and &
-        pattern = r'[0-9&]'
-        matched = re.search(pattern, myString)  # match against whole string
+        # examine first word in string for numbers
+        myWords = myString.split()
+        pattern = r'[0-9]'
+        matched = re.search(pattern, myWords[0])  # match against whole string
         if matched:
             numPos = matched.start()
-            self.log('AGNT  :: Search Query:: Splitting at position [{0}]. Found one of these {1}'.format(numPos, pattern))
-            myString = myString[:numPos]
-            self.log('AGNT  :: Amended Search Query [{0}]'.format(myString))
+            if numPos > 0:
+                myWords[0] = myWords[0][:numPos]
+                myString = ' '.join(myWords)
+                self.log('AGNT  :: Search Query:: [{0}] after splitting at position <{1}> first word had one of these {2}'.format(myString, numPos, pattern))
+            else:
+                self.log('AGNT  :: Search Query:: [{0}] split not attempted as first charater of word [{1}] is a number'.format(myString, myWords[0][0]))
         else:
-            self.log('AGNT  :: Search Query:: Split not attempted. String has none of these {0}'.format(pattern))
+            self.log('AGNT  :: Search Query:: [{0}] split not attempted. First word had none of these {1}'.format(myString, pattern))
 
-        # all preparation has resulted in an empty string e.g title like 35 & Up by Bacchus Releasing
-        myString = re.sub(r'[^A-Za-z]', ' ', myBackupString) if not myString else myString
+        # examine subsequent words in string for numbers and '&'
+        myWords = myString.split()
+        pattern = r'[0-9&]'
+        matched = re.search(pattern, ' '.join(myWords[1:]))  # match against whole string
+        if matched:
+            numPos = matched.start() + len(myWords[0])
+            myString = myString[:numPos]
+            self.log('AGNT  :: Search Query:: [{0}] after splitting at position <{1}> subsequent words have some of these {2}'.format(myString, numPos, pattern))
+        else:
+            self.log('AGNT  :: Search Query:: [{0}] split not attempted. Subsequent words have none of these {1}'.format(myString, pattern))
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())

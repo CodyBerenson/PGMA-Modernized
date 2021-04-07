@@ -26,6 +26,7 @@
     07 Mar 2021   2020.04.22.10    Moved IAFD and general functions to other py files
                                    Enhancements to IAFD search routine, including Levenshtein Matching on Cast names
                                    Added iafd legend to summary
+    28 Mar 2021   2020.04.22.11    Added code to create actor collections
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -34,7 +35,7 @@ from unidecode import unidecode
 from googletrans import Translator
 
 # Version / Log Title
-VERSION_NO = '2020.04.22.10'
+VERSION_NO = '2020.04.22.11'
 PLUGIN_LOG_TITLE = 'IAFD'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
@@ -135,7 +136,6 @@ class IAFD(Agent.Movies):
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
-        ''' Search For Media Entry '''
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
             return
@@ -366,13 +366,15 @@ class IAFD(Agent.Movies):
                         directorPhoto = '' if 'nophoto' in directorPhoto else directorPhoto
                     except Exception as e:
                         directorPhoto = ''
-                        self.log('UPDATE:: Error getting Director Photo: %s', e)
                 except Exception as e:
                     self.log('UPDATE:: Error getting Director Page: %s', e)
-                
+
+                self.log('UPDATE:: Director Name:               \t%s', directorName)
+                self.log('UPDATE:: Director URL:                \t%s', directorURL)
+                self.log('UPDATE:: Director Photo:              \t%s', directorPhoto)
+                self.log(LOG_SUBLINE)
+
                 directorDict[directorName] = directorPhoto
-            
-            self.log('UPDATE:: Director List %s', directorDict.keys())
 
             # sort the dictionary and add kv to metadata
             metadata.directors.clear()
@@ -394,18 +396,26 @@ class IAFD(Agent.Movies):
             htmlcast = html.xpath('//h3[.="Performers"]/ancestor::div[@class="panel panel-default"]//div[@class[contains(.,"castbox")]]/p')
             for cast in htmlcast:
                 actorName = cast.xpath('./a/text()')[0].strip()
+                actorURL = IAFD_BASE + cast.xpath('./a/@href')[0]
                 actorPhoto = cast.xpath('./a/img/@src')[0].strip()
                 actorPhoto = '' if 'nophoto' in actorPhoto else actorPhoto
                 actorRole = cast.xpath('./text()')
                 actorRole = ' '.join(actorRole).strip()
 
                 try:
-                    actorAKA = cast.xpath('./i/text()')[0].split(':')[1].replace(')', '').strip()
+                    actorAlias = cast.xpath('./i/text()')[0].split(':')[1].replace(')', '').strip()
                 except:
-                    actorAKA = ''
+                    actorAlias = ''
                     pass
 
-                actorRole = actorRole if actorRole else actorAKA if actorAKA else IAFD_NOROLE
+                actorRole = 'AKA: {0}'.format(actorAlias) if actorAlias else IAFD_FOUND
+
+                self.log('UPDATE:: Actor Name:                  \t%s', actorName)
+                self.log('UPDATE:: Actor Alias:                 \t%s', actorAlias)
+                self.log('UPDATE:: Actor URL:                   \t%s', actorURL)
+                self.log('UPDATE:: Actor Photo:                 \t%s', actorPhoto)
+                self.log('UPDATE:: Actor Role:                  \t%s', actorRole)
+                self.log(LOG_SUBLINE)
 
                 myDict = {}
                 myDict['Photo'] = actorPhoto
@@ -419,6 +429,10 @@ class IAFD(Agent.Movies):
                 cast.name = key
                 cast.photo = castdict[key]['Photo']
                 cast.role = castdict[key]['Role']
+                # add cast name to collection
+                if COLCAST:
+                    metadata.collections.add(key)
+
         except Exception as e:
             self.log('UPDATE:: Error getting Cast: %s', e)
 
