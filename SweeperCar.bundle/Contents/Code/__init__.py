@@ -3,35 +3,18 @@
 # pylint: disable=W0702, W0703, C0103, C0410
 # encoding=utf8
 '''
-# IAFD - (IAFD)
+# SweeperCar
                                                   Version History
                                                   ---------------
     Date            Version                         Modification
-    22 Apr 2020   2020.04.22.01    Creation
-    15 May 2020   2020.04.22.02    Corrected search string to account for titles that have a Colon in them
-                                   added/merge matching string routines - filename, studio, release date
-                                   included cast with non-sexual roles
-    19 May 2020   2020.04.22.03    Corrected search to look past the results page and get the movie title page to find
-                                   studio/release date as the results page only listed the distributor/production year
-                                   updated date match function
-    01 Jun 2020   2020.04.22.04    Implemented translation of summary
-                                   put back scrape from local media assets
-    27 Jun 2020   2020.04.22.05    Improvement to Summary Translation: Translate into Plex Library Language
-                                   stripping of intenet domain suffixes from studio names when matching
-                                   handling of unicode characters in film titles and comparision string normalisation
-    12 Sep 2020   2020.04.22.06    Titles with hyphens failing as these were converted to ":"
-                                   corrected by splitting and using string upto that position as search...
-    20 Sep 2020   2020.04.22.07    Titles with '[', '(' were corrected by splitting and using string upto that position as search...
-    07 Oct 2020   2020.04.22.08    IAFD - change to https
-    11 Nov 2020   2019.12.25.22    Year in filename is now optional (can be forced in agent parameters)
-                                   Fix an issue comparing years in IAFD function
+    12 Apr 2021   2021.04.21.01                 Creation
 
 ---------------------------------------------------------------------------------------------------------------
 '''
 import datetime, linecache, platform, os, re, string, subprocess, sys, unicodedata
 
 # Version / Log Title
-VERSION_NO = '2020.04.22.08'
+VERSION_NO = '2021.04.21.01'
 PLUGIN_LOG_TITLE = 'Sweeper Car'
 
 REGEX = Prefs['regex']
