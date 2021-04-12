@@ -31,6 +31,7 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 
 # Preferences
 REGEX = Prefs['regex']                      # file matching pattern
+YEAR = Prefs['year']                        # is year mandatory in the filename?
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
 PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end

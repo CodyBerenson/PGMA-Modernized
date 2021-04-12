@@ -41,6 +41,7 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 
 # Preferences
 REGEX = Prefs['regex']                      # file matching pattern
+YEAR = Prefs['year']                        # is year mandatory in the filename?
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
 PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
@@ -51,6 +52,7 @@ COLGENRE = Prefs['genrecollection']         # add genres to collection
 COLDIRECTOR = Prefs['directorcollection']   # add director to collection
 COLCAST = Prefs['castcollection']           # add cast to collection
 COLCOUNTRY = Prefs['countrycollection']     # add country to collection
+BACKGROUND = Prefs['background']            # background
 
 # IAFD Related variables
 IAFD_BASE = 'https://www.iafd.com'
@@ -490,7 +492,7 @@ class QueerClick(Agent.Movies):
                     metadata.posters[pic] = Proxy.Media(picContent, sort_order=1)
                     metadata.posters.validate_keys([pic])
                     self.log(LOG_SUBLINE)
-                else:               # processing art
+                elif BACKGROUND:               # processing art
                     metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
                     metadata.art.validate_keys([pic])
 

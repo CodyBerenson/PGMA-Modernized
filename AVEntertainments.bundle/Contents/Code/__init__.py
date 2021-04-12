@@ -33,6 +33,7 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 
 # Preferences
 REGEX = Prefs['regex']                      # file matching pattern
+YEAR = Prefs['year']                        # is year mandatory in filename
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
 PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
@@ -43,6 +44,7 @@ COLGENRE = Prefs['genrecollection']         # add genres to collection
 COLDIRECTOR = Prefs['directorcollection']   # add director to collection
 COLCAST = Prefs['castcollection']           # add cast to collection
 COLCOUNTRY = Prefs['countrycollection']     # add country to collection
+BACKGROUND = Prefs['background']            # background image
 
 # IAFD Related variables
 IAFD_BASE = 'https://www.iafd.com'
@@ -409,11 +411,12 @@ class AVEntertainments(Agent.Movies):
             metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.posters.validate_keys([image])
 
-            image = htmlimage.replace('bigcover', 'screen_shot') # replace text of dvd cover url to get background
-            self.log('UPDATE:: Art Image Found: %s', image)
-            #  set Art then only keep it
-            metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-            metadata.art.validate_keys([image])
+            if BACKGROUND:
+                image = htmlimage.replace('bigcover', 'screen_shot') # replace text of dvd cover url to get background
+                self.log('UPDATE:: Art Image Found: %s', image)
+                #  set Art then only keep it
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+                metadata.art.validate_keys([image])
 
         except Exception as e:
             self.log('UPDATE:: Error getting Poster/Art: %s', e)

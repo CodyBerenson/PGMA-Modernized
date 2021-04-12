@@ -40,6 +40,7 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 
 # Preferences
 REGEX = Prefs['regex']                      # file matching pattern
+YEAR = Prefs['year']                        # is year mandatory in the filename?
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
 PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
@@ -50,6 +51,8 @@ COLGENRE = Prefs['genrecollection']         # add genres to collection
 COLDIRECTOR = Prefs['directorcollection']   # add director to collection
 COLCAST = Prefs['castcollection']           # add cast to collection
 COLCOUNTRY = Prefs['countrycollection']     # add country to collection
+BACKGROUND = Prefs['background']            # download art
+ACT_AS_GENRE = Prefs['acts']                # using sex acts as categories
 
 # IAFD Related variables
 IAFD_BASE = 'https://www.iafd.com'
@@ -471,13 +474,14 @@ class AEBNiii(Agent.Movies):
             metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.posters.validate_keys([image])
 
-            self.log(LOG_SUBLINE)
-            image = htmlimages[1].split('?')[0]
-            image = ('http:' if 'http:' not in image else '') + image
-            self.log('UPDATE:: Art Image Found: %s', image)
-            #  clean up and only keep the Art we have added
-            metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-            metadata.art.validate_keys([image])
+            if BACKGROUND:
+                self.log(LOG_SUBLINE)
+                image = htmlimages[1].split('?')[0]
+                image = ('http:' if 'http:' not in image else '') + image
+                self.log('UPDATE:: Art Image Found: %s', image)
+                #  clean up and only keep the Art we have added
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+                metadata.art.validate_keys([image])
         except Exception as e:
             self.log('UPDATE:: Error getting Poster/Art: %s', e)
 
@@ -493,6 +497,7 @@ class AEBNiii(Agent.Movies):
         # scene information
         self.log(LOG_SUBLINE)
         allscenes = ''
+        allacts = []
         try:
             htmlheadings = html.xpath('//header[@class="dts-panel-header"]/div/h1[contains(text(),"Scene")]/text()')
             htmlscenes = html.xpath('//div[@class="dts-scene-info dts-list-attributes"]')
@@ -514,6 +519,11 @@ class AEBNiii(Agent.Movies):
 
                 actsList = htmlscene.xpath('./ul/li[descendant::span[text()="Sex acts:"]]/a/text()')
                 if actsList:
+                    if ACT_AS_GENRE:
+                        for act in actsList:
+                            if act not in allacts:
+                                allacts.append(act)
+                                metadata.genres.add(act)
                     self.log('UPDATE:: %s Sex Acts Found: %s', len(actsList), actsList)
                     acts = ', '.join(actsList)
                     scene += '\nSex Acts: {0}'.format(acts)
