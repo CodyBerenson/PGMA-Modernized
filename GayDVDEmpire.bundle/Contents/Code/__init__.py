@@ -374,7 +374,7 @@ class GayDVDEmpire(Agent.Movies):
                 if collection.lower() in map(str.lower, FILMDICT['Collection']):  # if set by filename its already in the list - FILMDICT['Collection'] contains a list
                     continue
                 metadata.collections.add(collection)
-                self.log('UPDATE:: %s Collection Added: %s', collection)
+                self.log('UPDATE:: Collection Added: %s', collection)
 
         except Exception as e:
             self.log('UPDATE:: Error getting Collections: %s', e)

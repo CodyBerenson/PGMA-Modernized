@@ -7,6 +7,9 @@ Functions used to process results from IAFD
                   cast and director scrapping results been recorded.
 '''
 # -------------------------------------------------------------------------------------------------------------------------------
+
+import utils
+
 def ProcessIAFD(self, agntCastList, FILMDICT):
     ''' Process and match cast list against IAFD '''
 
@@ -26,7 +29,7 @@ def ProcessIAFD(self, agntCastList, FILMDICT):
     originalCastList = agntCastList[:]       # copy list
     if FoundFilm:
         self.log('IAFD  :: Process in Film Mode: {0} Actors: {1}'.format(len(agntCastList), agntCastList))
-        unmatchedList, actorDict = self.getIAFD_FilmCast(html, agntCastList, FILMDICT)
+        unmatchedList, actorDict = self.getIAFD_FilmCast(html, agntCastList, actorDict, FILMDICT)
         self.log(LOG_SUBLINE)
         if agntCastList:
             self.log('IAFD  :: Process Unmatched Actors in Cast Mode: {0} Actors: {1}'.format(len(unmatchedList), unmatchedList))
@@ -35,7 +38,7 @@ def ProcessIAFD(self, agntCastList, FILMDICT):
     else:
         if not NoIAFD:      # IAFD available - process in cast mode
             self.log('IAFD  :: Process in Cast Mode: {0} Actors: {1}'.format(len(agntCastList), agntCastList))
-            unmatchedList, actorDict = self.getIAFD_Actor(agntCastList, FILMDICT)
+            unmatchedList, actorDict = self.getIAFD_Actor(agntCastList, actorDict, FILMDICT)
 
     if actorDict:
         # leave unmatched actors - normalise both agent cast list and match List
@@ -75,12 +78,12 @@ def ProcessIAFD(self, agntCastList, FILMDICT):
 
             # Add unmatched actors to actor dictionary with an absent status
             for cast in unmatchedList:
-                actorDict[cast] = {'Photo': '', 'Role': IAFD_ABSENT}
+                actorDict[cast] = {'Photo': '', 'Role': IAFD_ABSENT, 'Alias': ''}
 
     else:   # if there is a failure to read the website we would end up here
         # Add unmatched actors to actor dictionary with an absent status
         for cast in agntCastList:
-            actorDict[cast] = {'Photo': '', 'Role': IAFD_ABSENT}
+            actorDict[cast] = {'Photo': '', 'Role': IAFD_ABSENT, 'Alias': ''}
 
     return actorDict
 
@@ -180,25 +183,27 @@ def getIAFD_URLElement(self, myString):
     html = ''
     for i in range(2):
         try:
-            html = HTML.ElementFromURL(myString, timeout=20, sleep=DELAY)
+            req = utils.HTTPRequest(myString, timeout=20, sleep=DELAY)
+            html = HTML.ElementFromString(req.text)
             try:
                 searchQuery = html.xpath('//a[text()="See More Results..."]/@href')[0].strip()
                 if searchQuery:
                     searchQuery = IAFD_BASE + searchQuery if IAFD_BASE not in searchQuery else searchQuery
                     self.log('IAFD  :: Loading Additional Search Results: %s', searchQuery)
-                    html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
+                    req = utils.HTTPRequest(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
+                    html = HTML.ElementFromString(req.text)
             except:
                 self.log('IAFD  :: No Additional Search Results')
             break
         except Exception as e:
             NoIAFD = e
+            self.log('IAFD  :: Error: Failed to read IAFD URL [{0}] - Processing Abandoned'.format(NoIAFD))
             continue
-
-    self.log('IAFD  :: Error: Failed to read IAFD URL [{0}] - Processing Abandoned'.format(NoIAFD))
+        
     return html, NoIAFD
 
 # -------------------------------------------------------------------------------------------------------------------------------
-def getIAFD_FilmCast(self, html, agntCastList, FILMDICT):
+def getIAFD_FilmCast(self, html, agntCastList, actorDict, FILMDICT):
     ''' check IAFD web site for better quality actor thumbnails per movie'''
     try:
         actorList = html.xpath('//h3[.="Performers"]/ancestor::div[@class="panel panel-default"]//div[@class[contains(.,"castbox")]]/p')
@@ -292,7 +297,7 @@ def getIAFD_FilmCast(self, html, agntCastList, FILMDICT):
     return agntCastList, actorDict
 
 # -------------------------------------------------------------------------------------------------------------------------------
-def getIAFD_Actor(self, agntCastList, FILMDICT):
+def getIAFD_Actor(self, agntCastList, actorDict, FILMDICT):
     ''' check IAFD web site for individual actors'''
 
     allCastList = agntCastList[:]       # copy list
@@ -454,7 +459,7 @@ def getIAFD_Actor(self, agntCastList, FILMDICT):
             self.log(LOG_SUBLINE)
             continue    # next actor in agent cast list  (allCastList)
 
-    return agntCastList, actorDict, NoIAFD
+    return agntCastList, actorDict
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def getIAFD_Director(self, agntDirectorList, FILMDICT):

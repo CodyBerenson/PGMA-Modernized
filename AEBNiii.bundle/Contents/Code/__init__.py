@@ -420,7 +420,7 @@ class AEBNiii(Agent.Movies):
                 if collection.lower() in map(str.lower, FILMDICT['Collection']):  # if set by filename its already in the list - FILMDICT['Collection'] contains a list
                     continue
                 metadata.collections.add(collection)
-                self.log('UPDATE:: %s Collection Added: %s', collection)
+                self.log('UPDATE:: Collection Added: %s', collection)
         except Exception as e:
             self.log('UPDATE:: Error getting Collections: %s', e)
 
@@ -452,6 +452,7 @@ class AEBNiii(Agent.Movies):
             # sort the dictionary and add key(Name)- value(Photo, Role) to metadata
             metadata.roles.clear()
             for key in sorted(castdict):
+                self.log('UPDATE:: adding: %s \t Role: %s \t Photo: %s', key, castdict[key]['Photo'], castdict[key]['Role'])
                 newRole = metadata.roles.new()
                 newRole.name = key
                 newRole.photo = castdict[key]['Photo']
