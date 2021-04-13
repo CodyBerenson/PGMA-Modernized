@@ -33,7 +33,7 @@ def ProcessIAFD(self, agntCastList, FILMDICT):
         self.log(LOG_SUBLINE)
         if agntCastList:
             self.log('IAFD  :: Process Unmatched Actors in Cast Mode: {0} Actors: {1}'.format(len(unmatchedList), unmatchedList))
-            unmatchedList, actorDict2 = self.getIAFD_Actor(unmatchedList, FILMDICT)
+            unmatchedList, actorDict2 = self.getIAFD_Actor(unmatchedList, actorDict, FILMDICT)
             actorDict.update(actorDict2)
     else:
         if not NoIAFD:      # IAFD available - process in cast mode
