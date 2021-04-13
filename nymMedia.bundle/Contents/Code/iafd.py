@@ -101,8 +101,11 @@ def FindIAFD_Film(self, FILMDICT):
             raise Exception(NoIAFD)
 
         # get films listed within 1 year of what is on agent - as IAFD may have a different year recorded
-        FILMDICT['Year'] = int(FILMDICT['Year'])
-        filmList = html.xpath('//table[@id="titleresult"]/tbody/tr/td[2][.>="{0}" and .<="{1}"]/ancestor::tr'.format(FILMDICT['Year'] - 1, FILMDICT['Year'] + 1))
+        if YEAR or 'Year' in FILMDICT:
+            FILMDICT['Year'] = int(FILMDICT['Year'])
+            filmList = html.xpath('//table[@id="titleresult"]/tbody/tr/td[2][.>="{0}" and .<="{1}"]/ancestor::tr'.format(FILMDICT['Year'] - 1, FILMDICT['Year'] + 1))
+        else:
+            filmList = html.xpath('//table[@id="titleresult"]/tbody/tr')
         self.log('IAFD  :: [%s] IAFD Films in List', len(filmList))
         self.log(LOG_BIGLINE)
 
@@ -303,7 +306,8 @@ def getIAFD_Actor(self, agntCastList, actorDict, FILMDICT):
     allCastList = agntCastList[:]       # copy list
     compareAgntCastList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in agntCastList]
 
-    FILMDICT['Year'] = int(FILMDICT['Year'])
+    if YEAR or 'Year' in FILMDICT:
+        FILMDICT['Year'] = int(FILMDICT['Year'])
 
     for cast in allCastList:
         compareCast = re.sub(r'[\W\d_]', '', cast).strip().lower()
@@ -316,36 +320,63 @@ def getIAFD_Actor(self, agntCastList, actorDict, FILMDICT):
             # will appear first in the list because he has an alias that matches the search name. we need to reorder so that those whose main name matches
             # the search name are listed first
             # xpath to get matching Actor Main Name and Alias
-            for i in range(2):
-                if i == 0:
-                    useFullCareer = True
-                    xPathMatchMain = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[td[2]="{0}" and {1}>=td[4] and {1}<=td[5]]//ancestor::tr'.format(cast, FILMDICT['Year'])
-                    xPathMatchAlias = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[contains(td[3], "{0}") and {1}>=td[4] and {1}<=td[5]]//ancestor::tr'.format(cast, FILMDICT['Year'])
-                else:   
-                    # some agents mislabel compilations, thus actors won't be found by the Film Year, so only filter out actors whose careers started after the film year
-                    useFullCareer = False
-                    xPathMatchMain = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[td[2]="{0}" and td[5]<={1}]//ancestor::tr'.format(cast, FILMDICT['Year'])
-                    xPathMatchAlias = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[contains(td[3], "{0}") and td[5]<={1}]//ancestor::tr'.format(cast, FILMDICT['Year'])
-                try:
-                    mainList = html.xpath(xPathMatchMain)
-                except:
-                    self.log('IAFD  :: Error: Bad Main Name xPath')
-                    mainList = []
-                try:
-                    aliasList = html.xpath(xPathMatchAlias)
-                except:
-                    self.log('IAFD  :: Error: Bad Alias xPath')
-                    aliasList = []
+            if YEAR and 'Year' in FILMDICT:
+                for i in range(2):
+                    if i == 0:
+                        useFullCareer = True
+                        xPathMatchMain = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[td[2]="{0}" and {1}>=td[4] and {1}<=td[5]]//ancestor::tr'.format(cast, FILMDICT['Year'])
+                        xPathMatchAlias = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[contains(td[3], "{0}") and {1}>=td[4] and {1}<=td[5]]//ancestor::tr'.format(cast, FILMDICT['Year'])
+                    else:   
+                        # some agents mislabel compilations, thus actors won't be found by the Film Year, so only filter out actors whose careers started after the film year
+                        useFullCareer = False
+                        xPathMatchMain = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[td[2]="{0}" and td[5]<={1}]//ancestor::tr'.format(cast, FILMDICT['Year'])
+                        xPathMatchAlias = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[contains(td[3], "{0}") and td[5]<={1}]//ancestor::tr'.format(cast, FILMDICT['Year'])
+                    try:
+                        mainList = html.xpath(xPathMatchMain)
+                    except:
+                        self.log('IAFD  :: Error: Bad Main Name xPath')
+                        mainList = []
+                    try:
+                        aliasList = html.xpath(xPathMatchAlias)
+                    except:
+                        self.log('IAFD  :: Error: Bad Alias xPath')
+                        aliasList = []
 
-                combinedList = mainList + aliasList
-                actorList = [j for x, j in enumerate(combinedList) if j not in combinedList[:x]]
-                actorsFound = len(actorList)
-                self.log('IAFD  :: %s Filter: %s\t[%s] Actors Found named %s on Agent Website %s', '1st' if useFullCareer else '2nd', 'Career Match     ' if useFullCareer else 'Upto Career End  ', actorsFound, cast, '[Skipping: too many found]' if actorsFound > 13 else '')
-                if (i == 0 and actorsFound > 0) or actorsFound > 13:
-                    break
+                    combinedList = mainList + aliasList
+                    actorList = [j for x, j in enumerate(combinedList) if j not in combinedList[:x]]
+                    actorsFound = len(actorList)
+                    self.log('IAFD  :: %s Filter: %s\t[%s] Actors Found named %s on Agent Website %s', '1st' if useFullCareer else '2nd', 'Career Match     ' if useFullCareer else 'Upto Career End  ', actorsFound, cast, '[Skipping: too many found]' if actorsFound > 13 else '')
+                    if (i == 0 and actorsFound > 0) or actorsFound > 13:
+                        break
+            
+            else:
+                for i in range(2):
+                    if i == 0:
+                        useFullCareer = False
+                        xPathMatchMain = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[td[2]="{0}"]//ancestor::tr'.format(cast)
+                        xPathMatchAlias = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[contains(td[3], "{0}")]//ancestor::tr'.format(cast)
+                    else:   
+                        # some agents mislabel compilations, thus actors won't be found by the Film Year, so only filter out actors whose careers started after the film year
+                        useFullCareer = False
+                        xPathMatchMain = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[td[2]="{0}"]//ancestor::tr'.format(cast)
+                        xPathMatchAlias = '//table[@id="tblMal" or @id="tblFem"]/tbody/tr[contains(td[3], "{0}")]//ancestor::tr'.format(cast)
+                    try:
+                        mainList = html.xpath(xPathMatchMain)
+                    except:
+                        self.log('IAFD  :: Error: Bad Main Name xPath')
+                        mainList = []
+                    try:
+                        aliasList = html.xpath(xPathMatchAlias)
+                    except:
+                        self.log('IAFD  :: Error: Bad Alias xPath')
+                        aliasList = []
 
-            if actorsFound > 13:    #skip actor
-                continue
+                    combinedList = mainList + aliasList
+                    actorList = [j for x, j in enumerate(combinedList) if j not in combinedList[:x]]
+                    actorsFound = len(actorList)
+                    self.log('IAFD  :: %s Filter: %s\t[%s] Actors Found named %s on Agent Website %s', '1st' if useFullCareer else '2nd', 'Career Match     ' if useFullCareer else 'Upto Career End  ', actorsFound, cast, '[Skipping: too many found]' if actorsFound > 13 else '')
+                    if (i != 1 and actorsFound != 1):
+                        break
 
             for actor in actorList:
                 try:

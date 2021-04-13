@@ -33,6 +33,7 @@
 import datetime, platform, os, re, sys, json
 from unidecode import unidecode
 from googletrans import Translator
+import utils
 
 # Version / Log Title
 VERSION_NO = '2020.04.22.11'
@@ -105,7 +106,6 @@ class IAFD(Agent.Movies):
 
     # import General Functions
     from genfunctions import *
-    from utils import *
 
     #-------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
@@ -180,7 +180,7 @@ class IAFD(Agent.Movies):
         # iafd displays the first 50 results, clicking on "See More Results"  appends the rest
         try:
             req = utils.HTTPRequest(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
-            HTML.ElementFromString(req.text)
+            html = HTML.ElementFromString(req.text)
         except Exception as e:
             self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
             return
@@ -190,8 +190,8 @@ class IAFD(Agent.Movies):
             if IAFD_BASE not in searchQuery:
                 searchQuery = IAFD_BASE + '/' + searchQuery
             self.log('SEARCH:: Loading Additional Search Results: %s', searchQuery)
-            req = utils.HTTPRequest(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
-            HTML.ElementFromString(req.text)
+            req = HTTPRequest(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
+            html = HTML.ElementFromString(req.text)
         except:
             self.log('SEARCH:: No Additional Search Results')
 
@@ -248,7 +248,7 @@ class IAFD(Agent.Movies):
             try:
                 self.log('SEARCH:: Reading Site URL page         %s', siteURL)
                 req = utils.HTTPRequest(siteURL, sleep=DELAY)
-                HTML.ElementFromString(req.text)
+                html = HTML.ElementFromString(req.text)
                 self.log(LOG_BIGLINE)
             except Exception as e:
                 self.log('SEARCH:: Error reading Site URL page: %s', e)
@@ -311,7 +311,7 @@ class IAFD(Agent.Movies):
         self.log(LOG_BIGLINE)
 
         req = utils.HTTPRequest(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
-        HTML.ElementFromString(req.text)
+        html = HTML.ElementFromString(req.text)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
         #    1.  Metadata that is set by Agent as default
