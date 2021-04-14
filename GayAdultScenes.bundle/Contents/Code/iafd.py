@@ -30,12 +30,12 @@ def ProcessIAFD(self, agntCastList, FILMDICT):
         self.log(LOG_SUBLINE)
         if agntCastList:
             self.log('IAFD  :: Process Unmatched Actors in Cast Mode: {0} Actors: {1}'.format(len(unmatchedList), unmatchedList))
-            unmatchedList, actorDict2 = self.getIAFD_Actor(unmatchedList, FILMDICT)
+            unmatchedList, actorDict2 = self.getIAFD_Actor(unmatchedList, actorDict, FILMDICT)
             actorDict.update(actorDict2)
     else:
         if not NoIAFD:      # IAFD available - process in cast mode
             self.log('IAFD  :: Process in Cast Mode: {0} Actors: {1}'.format(len(agntCastList), agntCastList))
-            unmatchedList, actorDict = self.getIAFD_Actor(agntCastList, FILMDICT)
+            unmatchedList, actorDict = self.getIAFD_Actor(agntCastList, actorDict, FILMDICT)
 
     if actorDict:
         # leave unmatched actors - normalise both agent cast list and match List
@@ -292,7 +292,7 @@ def getIAFD_FilmCast(self, html, agntCastList, FILMDICT):
     return agntCastList, actorDict
 
 # -------------------------------------------------------------------------------------------------------------------------------
-def getIAFD_Actor(self, agntCastList, FILMDICT):
+def getIAFD_Actor(self, agntCastList, actorDict, FILMDICT):
     ''' check IAFD web site for individual actors'''
 
     allCastList = agntCastList[:]       # copy list
