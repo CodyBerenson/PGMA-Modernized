@@ -36,6 +36,8 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 REGEX = Prefs['regex']                      # file matching pattern
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
+YEAR = Prefs['year']                        # is year mandatory in filename?
+BACKGROUND = Prefs['background']            # use background
 PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']        # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']       # add studio name to collection
@@ -294,8 +296,9 @@ class AdultFilmDatabase(Agent.Movies):
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
-        metadata.originally_available_at = datetime.datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-        metadata.year = metadata.originally_available_at.year
+        if 'CompareDate' in FILMDICT:
+            metadata.originally_available_at = datetime.datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+            metadata.year = metadata.originally_available_at.year
         self.log('UPDATE:: Tagline: %s', metadata.tagline)
         self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
@@ -395,12 +398,13 @@ class AdultFilmDatabase(Agent.Movies):
             metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.posters.validate_keys([image])
 
-            image = htmlimages[1]
-            image = ('' if BASE_URL in image else BASE_URL) + image
-            self.log('UPDATE:: Art Image Found: %s', image)
-            #  set art then only keep it
-            metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-            metadata.art.validate_keys([image])
+            if BACKGROUND:
+                image = htmlimages[1]
+                image = ('' if BASE_URL in image else BASE_URL) + image
+                self.log('UPDATE:: Art Image Found: %s', image)
+                #  set art then only keep it
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+                metadata.art.validate_keys([image])
 
         except Exception as e:
             self.log('UPDATE:: Error getting Poster/Art: %s', e)

@@ -3,7 +3,13 @@
         "id": "regex",
         "label": "Regular expression to match files by. Must contain named groups for Studio, Movie Title and Release Year.",
         "type": "text",
-        "default": "^\\((?P<studio>.+)\\) - (?P<title>.+) \\((?P<year>\\d{4})\\)"
+        "default": "^\\((?P<studio>.+?)\\) - (?P<title>.+?)(?:\\s\\((?P<year>\\d{4})\\))?(\\s?-\\s?(?P<part>(cd|disc|disk|dvd|part|pt).+))?$"
+    },
+    {
+        "id": "year",
+        "label": "Is year mandatory is the filename ?",
+        "type": "bool",
+        "default": "false"
     },
     {
         "id": "delay",
@@ -63,6 +69,12 @@
     {
         "id": "countrycollection",
         "label": "Create Collections based on Film Production Country",
+        "type": "bool",
+        "default": "false"
+    },
+    {
+        "id": "background",
+        "label": "Download image to be used as background (not recommended) or use the default thumbnail background?",
         "type": "bool",
         "default": "false"
     }

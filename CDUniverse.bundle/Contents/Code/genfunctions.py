@@ -5,6 +5,10 @@ General Functions found in all agents
     Date            Modification
     27 Match 2021   Added curly single quotes to string normalisation in addition to `, all quotes single quotes are now replaced by straight quotes
 '''
+
+# The F Words
+FWORDS = ['fucks', 'fuck', 'barebacks', 'pounds', 'and', '&', 'bareback', 'raw']
+
 # -------------------------------------------------------------------------------------------------------------------------------
 def matchFilename(self, filename):
     ''' Check filename on disk corresponds to regex preference format '''
@@ -35,8 +39,11 @@ def matchFilename(self, filename):
     filmVars['IAFDCompareTitle'] = filmVars['CompareTitle']
     filmVars['IAFDSearchTitle'] = filmVars['IAFDTitle']
 
-    filmVars['Year'] = groups['year']
-    filmVars['CompareDate'] = datetime.datetime(int(filmVars['Year']), 12, 31).strftime(DATEFORMAT) # default to 31 Dec of Filename year
+    if YEAR and groups['year'] is None:
+        raise Exception("File Name [{0}] does not have a year but year is mandatory".format(filename))
+    elif groups['year'] is not None:
+        filmVars['Year'] = groups['year']
+        filmVars['CompareDate'] = datetime.datetime(int(filmVars['Year']), 12, 31).strftime(DATEFORMAT) # default to 31 Dec of Filename year
 
     filmVars['Compilation'] = "No"
     filmVars['FoundOnIAFD'] = "No"
@@ -147,10 +154,15 @@ def matchStudio(self, siteStudio, FILMDICT, useAgent=True):
 # -------------------------------------------------------------------------------------------------------------------------------
 def matchReleaseDate(self, siteReleaseDate, FILMDICT):
     ''' match file year against website release date: return formatted site date if no error or default to formated file date '''
-    fileReleaseDate = datetime.datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-    
     # if a year has being provided - default to 31st December of that year
     siteReleaseDate = datetime.datetime.strptime(siteReleaseDate + '1231', '%Y%m%d') if len(siteReleaseDate) == 4 else datetime.datetime.strptime(siteReleaseDate, DATEFORMAT)
+
+    if not YEAR and 'CompareDate' not in FILMDICT:
+        FILMDICT['CompareDate'] = siteReleaseDate.strftime(DATEFORMAT)
+        FILMDICT['Year'] = siteReleaseDate.strftime('%Y')
+        return siteReleaseDate
+
+    fileReleaseDate = datetime.datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
 
     # there can not be a difference more than 366 days between FileName Date and siteReleaseDate
     dx = abs((fileReleaseDate - siteReleaseDate).days)
@@ -164,6 +176,18 @@ def matchReleaseDate(self, siteReleaseDate, FILMDICT):
     # reset comparison date to above scrapping result
     FILMDICT['CompareDate'] = siteReleaseDate.strftime(DATEFORMAT)
     return siteReleaseDate
+
+# -------------------------------------------------------------------------------------------------------------------------------
+def FWordsRemover(self, myString):
+    ''' Remove words like fucks or barebacks so we can focus on actors and other words '''
+    querywords = myString.split()
+
+    resultwords  = [word for word in querywords if word.lower() not in FWORDS]
+    result = ' '.join(resultwords)
+
+    self.log('SELF:: Removing the F Words from %s --> %s', myString, result)
+
+    return result
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def NormaliseUnicode(self, myString):
@@ -212,6 +236,8 @@ def NormaliseComparisonString(self, myString):
     myString = re.sub(pattern, '', myString, flags=re.IGNORECASE)
 
     return myString
+
+
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def TranslateString(self, myString, language):

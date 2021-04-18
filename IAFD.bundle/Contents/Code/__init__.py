@@ -33,6 +33,7 @@
 import datetime, platform, os, re, sys, json
 from unidecode import unidecode
 from googletrans import Translator
+import utils
 
 # Version / Log Title
 VERSION_NO = '2020.04.22.11'
@@ -42,6 +43,7 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 
 # Preferences
 REGEX = Prefs['regex']                      # file matching pattern
+YEAR = Prefs['year']                        # is year mandatory in the filename?
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
 PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
@@ -177,7 +179,8 @@ class IAFD(Agent.Movies):
 
         # iafd displays the first 50 results, clicking on "See More Results"  appends the rest
         try:
-            html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
+            req = utils.HTTPRequest(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
+            html = HTML.ElementFromString(req.text)
         except Exception as e:
             self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
             return
@@ -187,7 +190,8 @@ class IAFD(Agent.Movies):
             if IAFD_BASE not in searchQuery:
                 searchQuery = IAFD_BASE + '/' + searchQuery
             self.log('SEARCH:: Loading Additional Search Results: %s', searchQuery)
-            html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
+            req = HTTPRequest(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
+            html = HTML.ElementFromString(req.text)
         except:
             self.log('SEARCH:: No Additional Search Results')
 
@@ -243,7 +247,8 @@ class IAFD(Agent.Movies):
             # Access Site URL for Studio Name information and release date
             try:
                 self.log('SEARCH:: Reading Site URL page         %s', siteURL)
-                html = HTML.ElementFromURL(siteURL, sleep=DELAY)
+                req = utils.HTTPRequest(siteURL, sleep=DELAY)
+                html = HTML.ElementFromString(req.text)
                 self.log(LOG_BIGLINE)
             except Exception as e:
                 self.log('SEARCH:: Error reading Site URL page: %s', e)
@@ -305,7 +310,8 @@ class IAFD(Agent.Movies):
             self.log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
         self.log(LOG_BIGLINE)
 
-        html = HTML.ElementFromURL(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
+        req = utils.HTTPRequest(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
+        html = HTML.ElementFromString(req.text)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
         #    1.  Metadata that is set by Agent as default
@@ -327,8 +333,9 @@ class IAFD(Agent.Movies):
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
-        metadata.originally_available_at = datetime.datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-        metadata.year = metadata.originally_available_at.year
+        if 'CompareDate' in FILMDICT:
+            metadata.originally_available_at = datetime.datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+            metadata.year = metadata.originally_available_at.year
         self.log('UPDATE:: Tagline: %s', metadata.tagline)
         self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
@@ -360,7 +367,8 @@ class IAFD(Agent.Movies):
                 directorName = director.xpath('./a/text()')[0]
                 directorURL = director.xpath('./a/@href')[0]
                 try:
-                    dhtml = HTML.ElementFromURL(directorURL, sleep=DELAY)
+                    req = utils.HTTPRequest(directorURL, sleep=DELAY)
+                    dhtml = HTML.ElementFromString(req.text)
                     try:
                         directorPhoto = dhtml.xpath('//div[@class="headshot"]/img/@src')[0]
                         directorPhoto = '' if 'nophoto' in directorPhoto else directorPhoto
