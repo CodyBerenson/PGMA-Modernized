@@ -24,6 +24,7 @@
                                    Enhancements to IAFD search routine, including Levenshtein Matching on Cast names
                                    Added iafd legend to summary
     23 Mar 2021   2020.01.18.21    Search string size reduced from 50 to 48
+    21 Apr 2021   2020.01.18.22    Search string size reduced from 48 to 21
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import datetime, platform, os, re, sys, subprocess, json
@@ -40,7 +41,6 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 
 # Preferences
 REGEX = Prefs['regex']                      # file matching pattern
-YEAR = Prefs['year']                        # is year mandatory in filename
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
 PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
@@ -51,7 +51,6 @@ COLGENRE = Prefs['genrecollection']         # add genres to collection
 COLDIRECTOR = Prefs['directorcollection']   # add director to collection
 COLCAST = Prefs['castcollection']           # add cast to collection
 COLCOUNTRY = Prefs['countrycollection']     # add country to collection
-BACKGROUND = Prefs['background']            # background
 
 # IAFD Related variables
 IAFD_BASE = 'https://www.iafd.com'
@@ -166,15 +165,16 @@ class Fagalicious(Agent.Movies):
         else:
             self.log('AGNT  :: Search Query:: Split not attempted. String has none of these {0}'.format(pattern))
 
+        # string can not be longer than 48 characters
+        lastSpace = myString[:21].rfind(' ')
+        myString = myString[:lastSpace]
+
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())
 
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string
         myString = myString.replace('%25', '%').replace('*', '')
 
-        # string can not be longer than 48 characters
-        myString = myString[:48].strip()
-        myString = myString if myString[-1] != '%' else myString[:47]
         self.log('AGNT  :: Returned Search Query        : {0}'.format(myString))
         self.log(LOG_BIGLINE)
 
@@ -398,9 +398,8 @@ class Fagalicious(Agent.Movies):
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
-        if 'CompareDate' in FILMDICT:
-            metadata.originally_available_at = datetime.datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-            metadata.year = metadata.originally_available_at.year
+        metadata.originally_available_at = datetime.datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+        metadata.year = metadata.originally_available_at.year
         self.log('UPDATE:: Tagline: %s', metadata.tagline)
         self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
@@ -508,7 +507,7 @@ class Fagalicious(Agent.Movies):
                     metadata.posters[pic] = Proxy.Media(picContent, sort_order=1)
                     metadata.posters.validate_keys([pic])
                     self.log(LOG_SUBLINE)
-                elif BACKGROUND:               # processing art
+                else:               # processing art
                     metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
                     metadata.art.validate_keys([pic])
 
