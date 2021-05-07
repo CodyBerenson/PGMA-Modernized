@@ -27,22 +27,27 @@
                                    Added iafd legend to summary
                                    improved logging
     28 Mar 2021   2020.12.25.28    Added # to list of chars to be stripped from search string, removed indefinite article/numeric strip of first word in title
+    18 Apr 2021   2020.12.25.29    Implemented code from CodeAnator to bypass CloudFlare protection on iafd website
+                                   Made year optional.....
+    03 May 2021   2020.12.25.30    removed googlesearch routine as was calling unlisted routines and was not being used in utils.py
+                                   Issue #96 - changed title sort so that 'title 21' sorts differently to 'title 12'
+                                   duration matching with iafd entries as iafd has scene titles that match with film titles
+                                   use of ast module to avoid unicode issues in some libraries
+                                   Removal of REGEX preference
+                                   code reorganisation like moving logging fuction out of class so it can be used by all imports
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
-import datetime, platform, os, re, sys, json
-from unidecode import unidecode
-from googletrans import Translator
+import platform, os, re, sys, json, ast
+from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.28'
+VERSION_NO = '2019.12.25.30'
 PLUGIN_LOG_TITLE = 'GEVI'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
 
 # Preferences
-REGEX = Prefs['regex']                      # file matching pattern
-YEAR = Prefs['year']                        # is year mandatory in the filename?
 DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
 PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
@@ -53,12 +58,8 @@ COLGENRE = Prefs['genrecollection']         # add genres to collection
 COLDIRECTOR = Prefs['directorcollection']   # add director to collection
 COLCAST = Prefs['castcollection']           # add cast to collection
 COLCOUNTRY = Prefs['countrycollection']     # add country to collection
-BACKGROUND = Prefs['background']            # download art
 
 # IAFD Related variables
-IAFD_BASE = 'https://www.iafd.com'
-IAFD_SEARCH_URL = IAFD_BASE + '/results.asp?searchtype=comprehensive&searchstring={0}'
-
 IAFD_ABSENT = u'\U0000274C'        # red cross mark - not on IAFD
 IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
 IAFD_THUMBSUP = u'\U0001F44D'      # thumbs up unicode character
@@ -98,6 +99,19 @@ def anyOf(iterable):
     return None
 
 # ----------------------------------------------------------------------------------------------------------------------------------
+def log(message, *args):
+    ''' log messages '''
+    if re.search('ERROR', message, re.IGNORECASE):
+        Log.Error(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+    else:
+        Log.Info(PLUGIN_LOG_TITLE + '  - ' + message, *args)
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# imports placed here to use previously declared variables
+import iafd
+import genfunctions
+
+# ----------------------------------------------------------------------------------------------------------------------------------
 class GEVI(Agent.Movies):
     ''' define Agent class '''
     name = 'GEVI (IAFD)'
@@ -106,16 +120,10 @@ class GEVI(Agent.Movies):
     media_types = ['Movie']
     contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultFilms']
 
-    # import IAFD Functions
-    from iafd import *
-
-    # import General Functions
-    from genfunctions import *
-
     # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
         ''' Prepare Title for search query '''
-        self.log('AGNT  :: Original Search Query        : {0}'.format(myString))
+        log('AGNT  :: Original Search Query        : {0}'.format(myString))
 
         # convert to lower case and trim
         myString = myString.lower().strip()
@@ -123,9 +131,9 @@ class GEVI(Agent.Movies):
         # replace & with and
         if ' & ' in myString:
             myString = myString.replace(' & ', ' and ')
-            self.log('AGNT  :: Search Query:: [{0}] after replacing " & "'.format(myString))
+            log('AGNT  :: Search Query:: [{0}] after replacing " & "'.format(myString))
         else:
-            self.log('AGNT  :: Search Query:: [{0}] found no " & "'.format(myString))
+            log('AGNT  :: Search Query:: [{0}] found no " & "'.format(myString))
 
         # replace following with null
         nullChars = ["'", ',', '!', '\.', '#'] # to be replaced with null
@@ -133,9 +141,9 @@ class GEVI(Agent.Movies):
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             myString = re.sub(pattern, '', myString)
-            self.log('AGNT  :: Search Query:: [{0}] after removing any of these {1}'.format(myString, pattern))
+            log('AGNT  :: Search Query:: [{0}] after removing any of these {1}'.format(myString, pattern))
         else:
-            self.log('AGNT  :: Search Query:: [{0}] found none of these {0}'.format(myString, pattern))
+            log('AGNT  :: Search Query:: [{0}] found none of these {0}'.format(myString, pattern))
 
         # replace following with space
         spaceChars = ["@", '\-', ur'\u2013', ur'\u2014', '\(', '\)']  # to be replaced with space
@@ -144,9 +152,9 @@ class GEVI(Agent.Movies):
         if matched:
             myString = re.sub(pattern, ' ', myString)
             myString = ' '.join(myString.split())   # remove continous white space
-            self.log('AGNT  :: Search Query:: [{0}] after removing any of these {1}'.format(myString, pattern))
+            log('AGNT  :: Search Query:: [{0}] after removing any of these {1}'.format(myString, pattern))
         else:
-            self.log('AGNT  :: Search Query:: [{0}] found none of these {0}'.format(myString, pattern))
+            log('AGNT  :: Search Query:: [{0}] found none of these {0}'.format(myString, pattern))
 
         # examine first word
         # remove if indefinite word in french, english, portuguese, spanish, german
@@ -163,9 +171,9 @@ class GEVI(Agent.Movies):
         if matched:
             myWords.remove(myWords[0])
             myString = ' '.join(myWords)
-            self.log("AGNT  :: Search Query:: [{0}] after dropping first word [{1}]".format(myString, myWords[0]))
+            log("AGNT  :: Search Query:: [{0}] after dropping first word [{1}]".format(myString, myWords[0]))
         else:
-            self.log('AGNT  :: Search Query:: [{0}] drop not attempted. First word was not an indefinite article'.format(myString))
+            log('AGNT  :: Search Query:: [{0}] drop not attempted. First word was not an indefinite article'.format(myString))
 
         # examine first word in string for numbers
         myWords = myString.split()
@@ -176,11 +184,11 @@ class GEVI(Agent.Movies):
             if numPos > 0:
                 myWords[0] = myWords[0][:numPos]
                 myString = ' '.join(myWords)
-                self.log('AGNT  :: Search Query:: [{0}] after splitting at position <{1}> first word had one of these {2}'.format(myString, numPos, pattern))
+                log('AGNT  :: Search Query:: [{0}] after splitting at position <{1}> first word had one of these {2}'.format(myString, numPos, pattern))
             else:
-                self.log('AGNT  :: Search Query:: [{0}] split not attempted as first charater of word [{1}] is a number'.format(myString, myWords[0][0]))
+                log('AGNT  :: Search Query:: [{0}] split not attempted as first charater of word [{1}] is a number'.format(myString, myWords[0][0]))
         else:
-            self.log('AGNT  :: Search Query:: [{0}] split not attempted. First word had none of these {1}'.format(myString, pattern))
+            log('AGNT  :: Search Query:: [{0}] split not attempted. First word had none of these {1}'.format(myString, pattern))
 
         # examine subsequent words in string for numbers and '&'
         myWords = myString.split()
@@ -189,9 +197,9 @@ class GEVI(Agent.Movies):
         if matched:
             numPos = matched.start() + len(myWords[0])
             myString = myString[:numPos]
-            self.log('AGNT  :: Search Query:: [{0}] after splitting at position <{1}> subsequent words have some of these {2}'.format(myString, numPos, pattern))
+            log('AGNT  :: Search Query:: [{0}] after splitting at position <{1}> subsequent words have some of these {2}'.format(myString, numPos, pattern))
         else:
-            self.log('AGNT  :: Search Query:: [{0}] split not attempted. Subsequent words have none of these {1}'.format(myString, pattern))
+            log('AGNT  :: Search Query:: [{0}] split not attempted. Subsequent words have none of these {1}'.format(myString, pattern))
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())
@@ -202,8 +210,8 @@ class GEVI(Agent.Movies):
         # GEVI uses a maximum of 24 characters when searching
         myString = myString[:24].strip()
         myString = myString if myString[-1] != '%' else myString[:23]
-        self.log('AGNT  :: Returned Search Query        : {0}'.format(myString))
-        self.log(LOG_BIGLINE)
+        log('AGNT  :: Returned Search Query        : {0}'.format(myString))
+        log(LOG_BIGLINE)
 
         return myString
 
@@ -212,35 +220,34 @@ class GEVI(Agent.Movies):
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
             return
-        folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
 
-        self.log(LOG_BIGLINE)
-        self.log('SEARCH:: Version                      : v.%s', VERSION_NO)
-        self.log('SEARCH:: Python                       : %s', sys.version_info)
-        self.log('SEARCH:: Platform                     : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Preferences:')
-        self.log('SEARCH::  > Cast Legend Before Summary: %s', PREFIXLEGEND)
-        self.log('SEARCH::  > Collection Gathering')
-        self.log('SEARCH::      > Cast                  : %s', COLCAST)
-        self.log('SEARCH::      > Director(s)           : %s', COLDIRECTOR)
-        self.log('SEARCH::      > Studio                : %s', COLSTUDIO)
-        self.log('SEARCH::      > Film Title            : %s', COLTITLE)
-        self.log('SEARCH::      > Genres                : %s', COLGENRE)
-        self.log('SEARCH::  > Delay                     : %s', DELAY)
-        self.log('SEARCH::  > Language Detection        : %s', DETECT)
-        self.log('SEARCH::  > Library:Site Language     : %s:%s', lang, SITE_LANGUAGE)
-        self.log('SEARCH:: Media Title                  : %s', media.title)
-        self.log('SEARCH:: File Name                    : %s', filename)
-        self.log('SEARCH:: File Folder                  : %s', folder)
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
+        log('SEARCH:: Version                      : v.%s', VERSION_NO)
+        log('SEARCH:: Python                       : %s', sys.version_info)
+        log('SEARCH:: Platform                     : %s %s', platform.system(), platform.release())
+        log('SEARCH:: Preferences:')
+        log('SEARCH::  > Cast Legend Before Summary: %s', PREFIXLEGEND)
+        log('SEARCH::  > Collection Gathering')
+        log('SEARCH::      > Cast                  : %s', COLCAST)
+        log('SEARCH::      > Director(s)           : %s', COLDIRECTOR)
+        log('SEARCH::      > Studio                : %s', COLSTUDIO)
+        log('SEARCH::      > Film Title            : %s', COLTITLE)
+        log('SEARCH::      > Genres                : %s', COLGENRE)
+        log('SEARCH::  > Delay                     : %s', DELAY)
+        log('SEARCH::  > Language Detection        : %s', DETECT)
+        log('SEARCH::  > Library:Site Language     : %s:%s', lang, SITE_LANGUAGE)
+        log('SEARCH:: Media Title                  : %s', media.title)
+        log('SEARCH:: File Path                    : %s', media.items[0].parts[0].file)
+        log(LOG_BIGLINE)
 
         # Check filename format
         try:
-            FILMDICT = self.matchFilename(filename)
+            FILMDICT = genfunctions.matchFilename(media.items[0].parts[0].file)
         except Exception as e:
-            self.log('SEARCH:: Error: %s', e)
+            log('SEARCH:: Error: %s', e)
             return
-        self.log(LOG_BIGLINE)
+
+        log(LOG_BIGLINE)
 
         # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
@@ -250,37 +257,37 @@ class GEVI(Agent.Movies):
         # Finds the entire media enclosure <Table> element then steps through the rows
         morePages = True
         while morePages:
-            self.log('SEARCH:: Search Query: %s', searchQuery)
+            log('SEARCH:: Search Query: %s', searchQuery)
             try:
                 html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
             except Exception as e:
-                self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+                log('SEARCH:: Error: Search Query did not pull any results: %s', e)
                 return
 
             try:
                 searchQuery = html.xpath('//a[text()="Next"]/@href')[0]
                 searchQuery = "{0}/{1}".format(BASE_URL, searchQuery)   # href does not have base_url in it
-                self.log('SEARCH:: Next Page Search Query: %s', searchQuery)
+                log('SEARCH:: Next Page Search Query: %s', searchQuery)
                 pageNumber = int(searchQuery.split('&where')[0].split('page=')[1]) - 1
                 morePages = True
             except:
                 searchQuery = ''
-                self.log('SEARCH:: No More Pages Found')
+                log('SEARCH:: No More Pages Found')
                 pageNumber = 1
                 morePages = False
 
             titleList = html.xpath('//table[contains(@class,"d")]/tr/td[@class="cd"]/parent::tr')
-            self.log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
-            self.log(LOG_BIGLINE)
+            log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
+            log(LOG_BIGLINE)
             for title in titleList:
                 # Site Title
                 try:
                     siteTitle = title[0].text_content().strip()
-                    self.matchTitle(siteTitle, FILMDICT)
-                    self.log(LOG_BIGLINE)
+                    genfunctions.matchTitle(siteTitle, FILMDICT)
+                    log(LOG_BIGLINE)
                 except Exception as e:
-                    self.log('SEARCH:: Error getting Site Title: %s', e)
-                    self.log(LOG_SUBLINE)
+                    log('SEARCH:: Error getting Site Title: %s', e)
+                    log(LOG_SUBLINE)
                     continue
 
                 # Site Title URL
@@ -288,31 +295,31 @@ class GEVI(Agent.Movies):
                     siteURL = title.xpath('.//a/@href')[0]
                     siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
                     FILMDICT['SiteURL'] = siteURL
-                    self.log('SEARCH:: Site Title url                %s', siteURL)
-                    self.log(LOG_BIGLINE)
+                    log('SEARCH:: Site Title url                %s', siteURL)
+                    log(LOG_BIGLINE)
                 except Exception as e:
-                    self.log('SEARCH:: Error getting Site Title Url: %s', e)
-                    self.log(LOG_SUBLINE)
+                    log('SEARCH:: Error getting Site Title Url: %s', e)
+                    log(LOG_SUBLINE)
                     continue
 
                 # Site Title Type (Compilation)
                 try:
                     siteType = title[4].text_content().strip()
                     FILMDICT['Compilation'] = "Yes" if siteType.lower() == 'compilation' else "No"
-                    self.log('SEARCH:: Compilation?                  %s', FILMDICT['Compilation'])
-                    self.log(LOG_BIGLINE)
+                    log('SEARCH:: Compilation?                  %s', FILMDICT['Compilation'])
+                    log(LOG_BIGLINE)
                 except:
-                    self.log('SEARCH:: Error getting Site Type (Compilation)')
+                    log('SEARCH:: Error getting Site Type (Compilation)')
                     continue
 
                 # Access Site URL for Studio and Release Date information
                 try:
-                    self.log('SEARCH:: Reading Site URL page         %s', siteURL)
+                    log('SEARCH:: Reading Site URL page         %s', siteURL)
                     html = HTML.ElementFromURL(siteURL, sleep=DELAY)
-                    self.log(LOG_BIGLINE)
+                    log(LOG_BIGLINE)
                 except Exception as e:
-                    self.log('SEARCH:: Error reading Site URL page: %s', e)
-                    self.log(LOG_SUBLINE)
+                    log('SEARCH:: Error reading Site URL page: %s', e)
+                    log(LOG_SUBLINE)
                     continue
 
                 # Site Studio/Distributor
@@ -321,27 +328,27 @@ class GEVI(Agent.Movies):
                     htmlSiteStudio = html.xpath('//a[contains(@href, "/C/")]/parent::td//text()[normalize-space()]')
                     htmlSiteStudio = [x.strip() for x in htmlSiteStudio if x.strip()]
                     htmlSiteStudio = list(set(htmlSiteStudio))
-                    self.log('SEARCH:: Site URL Distributor/Studio   %s', htmlSiteStudio)
+                    log('SEARCH:: Site URL Distributor/Studio   %s', htmlSiteStudio)
                     for siteStudio in htmlSiteStudio:
                         try:
-                            self.matchStudio(siteStudio, FILMDICT)
+                            genfunctions.matchStudio(siteStudio, FILMDICT)
                             foundStudio = True
                         except Exception as e:
-                            self.log('SEARCH:: Error: %s', e)
-                            self.log(LOG_SUBLINE)
+                            log('SEARCH:: Error: %s', e)
+                            log(LOG_SUBLINE)
                             continue
                         if foundStudio:
                             break
 
                     if not foundStudio:
-                        self.log('SEARCH:: Error No Matching Site Studio')
-                        self.log(LOG_SUBLINE)
+                        log('SEARCH:: Error No Matching Site Studio')
+                        log(LOG_SUBLINE)
                         continue
 
-                    self.log(LOG_BIGLINE)
+                    log(LOG_BIGLINE)
                 except Exception as e:
-                    self.log('SEARCH:: Error getting Site Studio %s', e)
-                    self.log(LOG_SUBLINE)
+                    log('SEARCH:: Error getting Site Studio %s', e)
+                    log(LOG_SUBLINE)
                     continue
 
                 # Release Date
@@ -352,54 +359,55 @@ class GEVI(Agent.Movies):
                     htmlReleaseDate = [x if unicode(x, 'utf-8').isnumeric() else x.split('-')[0] if '-' in x else x.split(',')[0] if ',' in x else x[1:] if x[0] == 'c' else '' for x in htmlReleaseDate]
                     htmlReleaseDate = [x.strip() for x in htmlReleaseDate if x]
                     htmlReleaseDate = list(set(htmlReleaseDate))
-                    self.log('SEARCH:: Site URL Release Dates        %s', htmlReleaseDate)
+                    log('SEARCH:: Site URL Release Dates        %s', htmlReleaseDate)
                     for ReleaseDate in htmlReleaseDate:
                         try:
-                            ReleaseDate = self.matchReleaseDate(ReleaseDate, FILMDICT)
+                            ReleaseDate = genfunctions.matchReleaseDate(ReleaseDate, FILMDICT)
                             siteReleaseDate = ReleaseDate
                             break
                         except Exception as e:
-                            self.log('SEARCH:: Error: %s', e)
+                            log('SEARCH:: Error: %s', e)
                             releaseDateMatchFail = True
                             continue
-                    if not siteReleaseDate:
+                    if FILMDICT['Year'] and not siteReleaseDate:
                         raise Exception('No Release Dates Found')
 
-                    self.log(LOG_BIGLINE)
+                    log(LOG_BIGLINE)
 
                 except Exception as e:
-                    self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date [%s]', e)
-                    self.log(LOG_SUBLINE)
-                    if releaseDateMatchFail:
-                        continue
+                    if FILMDICT['Year']:
+                        log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date [%s]', e)
+                        log(LOG_SUBLINE)
+                        if releaseDateMatchFail:
+                            continue
 
                 # we should have a match on studio, title and year now
-                self.log(LOG_BIGLINE)
-                self.log('SEARCH:: Finished Search Routine')
-                self.log(LOG_BIGLINE)
+                log(LOG_BIGLINE)
+                log('SEARCH:: Finished Search Routine')
+                log(LOG_BIGLINE)
                 results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
                 return
 
-        self.log(LOG_BIGLINE)
-        self.log('SEARCH:: Finished Search Routine')
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
+        log('SEARCH:: Finished Search Routine')
+        log(LOG_BIGLINE)
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
         folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
-        self.log(LOG_BIGLINE)
-        self.log('UPDATE:: Version                      : v.%s', VERSION_NO)
-        self.log('UPDATE:: File Name                    : %s', filename)
-        self.log('UPDATE:: File Folder                  : %s', folder)
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
+        log('UPDATE:: Version                      : v.%s', VERSION_NO)
+        log('UPDATE:: File Name                    : %s', filename)
+        log('UPDATE:: File Folder                  : %s', folder)
+        log(LOG_BIGLINE)
 
         # Fetch HTML.
-        FILMDICT = json.loads(metadata.id)
-        self.log('UPDATE:: Film Dictionary Variables:')
+        FILMDICT = ast.literal_eval(metadata.id)    # use ast.literal_eval does not convert string to unicode
+        log('UPDATE:: Film Dictionary Variables:')
         for key in sorted(FILMDICT.keys()):
-            self.log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
-        self.log(LOG_BIGLINE)
+            log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
+        log(LOG_BIGLINE)
 
         html = HTML.ElementFromURL(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
 
@@ -414,25 +422,25 @@ class GEVI(Agent.Movies):
         #        g. Collection Info      : From title group of filename 
 
         # 1a.   Set Studio
-        metadata.studio = FILMDICT['Studio']
-        self.log('UPDATE:: Studio: %s' , metadata.studio)
+        metadata.studio = FILMDICT['Studio'].decode('unicode-escape')
+        log('UPDATE:: Studio: %s' , metadata.studio)
 
         # 1b.   Set Title
-        metadata.title = FILMDICT['Title']
-        self.log('UPDATE:: Title: %s' , metadata.title)
+        metadata.title = FILMDICT['Title'].decode('unicode-escape')
+        log('UPDATE:: Title: %s' , metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
-        if 'CompareDate' in FILMDICT:
-            metadata.originally_available_at = datetime.datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+        log('UPDATE:: Tagline: %s', metadata.tagline)
+        if FILMDICT['Year']:
+            metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
             metadata.year = metadata.originally_available_at.year
-        self.log('UPDATE:: Tagline: %s', metadata.tagline)
-        self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
+            log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
         # 1e/f. Set Content Rating to Adult/18 years
         metadata.content_rating = 'X'
         metadata.content_rating_age = 18
-        self.log('UPDATE:: Content Rating - Content Rating Age: X - 18')
+        log('UPDATE:: Content Rating - Content Rating Age: X - 18')
 
         # 1g. Collection
         if COLCLEAR:
@@ -441,7 +449,7 @@ class GEVI(Agent.Movies):
         collections = FILMDICT['Collection']
         for collection in collections:
             metadata.collections.add(collection)
-        self.log('UPDATE:: Collection Set From filename: %s', collections)
+        log('UPDATE:: Collection Set From filename: %s', collections)
 
         #    2.  Metadata retrieved from website
         #        a. Genre                : Alphabetic order
@@ -453,12 +461,12 @@ class GEVI(Agent.Movies):
         #        g. Summary
 
         # 2a.   Genre
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
         try:
             htmlgenres = html.xpath('//td[contains(text(),"category")]//following-sibling::td[1]/text()')
             htmlgenres = [x.strip() for x in htmlgenres if x.strip()]
             htmlgenres.sort()
-            self.log('UPDATE:: %s Genres Found: %s', len(htmlgenres), htmlgenres)
+            log('UPDATE:: %s Genres Found: %s', len(htmlgenres), htmlgenres)
             metadata.genres.clear()
             for genre in htmlgenres:
                 metadata.genres.add(genre)
@@ -467,27 +475,27 @@ class GEVI(Agent.Movies):
                     metadata.collections.add(genre)
 
         except Exception as e:
-            self.log('UPDATE:: Error getting Genres: %s', e)
+            log('UPDATE:: Error getting Genres: %s', e)
 
         # 2b.   Rating (out of 4 Stars) = Rating can be a maximum of 10 - float value
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
         try:
             rating = html.xpath('//td[contains(text(),"rating out of 4")]//following-sibling::td[1]/text()')[0].strip()
             rating = rating.count('*') * 2.5
-            self.log('UPDATE:: Film Rating %s', rating)
+            log('UPDATE:: Film Rating %s', rating)
             metadata.rating = rating
 
         except Exception as e:
             metadata.rating = 0.0
-            self.log('UPDATE:: Error getting Rating: %s', e)
+            log('UPDATE:: Error getting Rating: %s', e)
 
         # 2c.   Countries
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
         try:
             htmlcountries = html.xpath('//td[contains(text(),"location")]//following-sibling::td[1]/text()')
             htmlcountries = [x.strip() for x in htmlcountries if x.strip()]
             htmlcountries.sort()
-            self.log('UPDATE:: Countries List %s', htmlcountries)
+            log('UPDATE:: Countries List %s', htmlcountries)
             metadata.countries.clear()
             for country in htmlcountries:
                 metadata.countries.add(country)
@@ -496,15 +504,15 @@ class GEVI(Agent.Movies):
                     metadata.collections.add(country)
 
         except Exception as e:
-            self.log('UPDATE:: Error getting Countries: %s', e)
+            log('UPDATE:: Error getting Countries: %s', e)
 
         # 2d.   Directors
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
         try:
             htmldirectors = html.xpath('//td[contains(text(),"director")]//following-sibling::td[1]/a/text()')
             htmldirectors = ['{0}'.format(x.strip()) for x in htmldirectors if x.strip()]
-            self.log('UPDATE:: Director List %s', htmldirectors)
-            directorDict = self.getIAFD_Director(htmldirectors, FILMDICT)
+            log('UPDATE:: Director List %s', htmldirectors)
+            directorDict = iafd.getIAFD_Director(htmldirectors, FILMDICT)
             metadata.directors.clear()
             for key in sorted(directorDict):
                 newDirector = metadata.directors.new()
@@ -515,13 +523,13 @@ class GEVI(Agent.Movies):
                     metadata.collections.add(key)
 
         except Exception as e:
-            self.log('UPDATE:: Error getting Director(s): %s', e)
+            log('UPDATE:: Error getting Director(s): %s', e)
 
         # 2e.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
         try:
             htmlcast = html.xpath('//td[@class="pd"]/a/text()')
-            castdict = self.ProcessIAFD(htmlcast, FILMDICT)
+            castdict = iafd.ProcessIAFD(htmlcast, FILMDICT)
 
             # sort the dictionary and add key(Name)- value(Photo, Role) to metadata
             metadata.roles.clear()
@@ -535,12 +543,12 @@ class GEVI(Agent.Movies):
                     metadata.collections.add(key)
 
         except Exception as e:
-            self.log('UPDATE:: Error getting Cast: %s', e)
+            log('UPDATE:: Error getting Cast: %s', e)
 
         # 2f.   Posters/Background Art
         #       GEVI does not distinguish between poster and back ground images - we assume first image is poster and second is background
         #           if there is only 1 image - apply it to both
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
         try:
             htmlimages = html.xpath('//img/@src[contains(.,"Covers")]')
             htmlimages = [(BASE_URL if BASE_URL not in image else '') + image.replace('/Icons/','/') for image in htmlimages] 
@@ -548,72 +556,71 @@ class GEVI(Agent.Movies):
                 htmlimages.append(htmlimages[0])
 
             image = htmlimages[0]
-            self.log('UPDATE:: Poster Image Found: [1] - %s', image)
+            log('UPDATE:: Poster Image Found: [1] - %s', image)
             metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.posters.validate_keys([image])
 
-            if BACKGROUND:
-                image = htmlimages[1]
-                self.log('UPDATE:: Art Image Found: [2] - %s', image)
-                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-                metadata.art.validate_keys([image])
+            image = htmlimages[1]
+            log('UPDATE:: Art Image Found: [2] - %s', image)
+            metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+            metadata.art.validate_keys([image])
 
         except Exception as e:
-            self.log('UPDATE:: Error getting Poster/Art: %s', e)
+            log('UPDATE:: Error getting Poster/Art: %s', e)
 
         # 2g.   Summary = IAFD Legend + Synopsis + Scene Information
         # synopsis
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
         try:
             synopsis = ''
             htmlpromo = html.xpath('//td[contains(text(),"promo/")]//following-sibling::td//span[@style]/text()[following::br]')
             for item in htmlpromo:
                 synopsis = '{0}\n{1}'.format(synopsis, item)
-            self.log('UPDATE:: Promo Found: %s', synopsis)
+            log('UPDATE:: Promo Found: %s', synopsis)
             synopsis = synopsis.replace('\n', ' ')
         except Exception as e:
             synopsis = ''
-            self.log('UPDATE:: Error getting Promo: %s', e)
+            log('UPDATE:: Error getting Promo: %s', e)
 
         # Legend
-        self.log(LOG_SUBLINE)
+        log(LOG_SUBLINE)
         try:
             htmllegend = html.xpath('//td[@class="sfn"]//text()')
             legend = ''.join(htmllegend).replace('\n', '')
-            self.log('UPDATE:: Legend: %s', legend)
+            log('UPDATE:: Legend: %s', legend)
         except Exception as e:
             legend = ''
-            self.log('UPDATE:: Error getting Legend: %s', e)
+            log('UPDATE:: Error getting Legend: %s', e)
         finally:
             legend = 'Legend: {0}'.format(legend.strip()) if legend else ''
 
         # scenes
-        self.log(LOG_SUBLINE)
+        log(LOG_SUBLINE)
         try:
             htmlscenes = html.xpath('//td[@class="scene"]')
             allscenes = ''
             for item in htmlscenes:
                 allscenes = '{0}\n{1}'.format(allscenes, ''.join(item.itertext()).strip())
             allscenes = allscenes.strip()
-            self.log('UPDATE:: Scenes Found: %s', allscenes)
+            log('UPDATE:: Scenes Found: %s', allscenes)
         except Exception as e:
             allscenes = ''
-            self.log('UPDATE:: Error getting Scenes: %s', e)
+            log('UPDATE:: Error getting Scenes: %s', e)
 
         legend = legend if allscenes else ''
         synopsis = "{0}\n{1}\n{2}".format(synopsis, legend, allscenes)
-        synopsis = self.NormaliseUnicode(synopsis)
+        synopsis = genfunctions.NormaliseUnicode(synopsis)
         regex = r'View this scene at.*|found in compilation.*|see also.*'
         pattern = re.compile(regex, re.IGNORECASE)
         synopsis = re.sub(pattern, '', synopsis)
         
         # combine and update
-        self.log(LOG_SUBLINE)
+        log(LOG_SUBLINE)
         castLegend = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN)
         summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(castLegend, synopsis.strip())
         summary = summary.replace('\n\n', '\n')
-        metadata.summary = self.TranslateString(summary, lang)
+        metadata.summary = genfunctions.TranslateString(summary, lang)
 
-        self.log(LOG_BIGLINE)
-        self.log('UPDATE:: Finished Update Routine')
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
+        log('UPDATE:: Finished Update Routine')
+        log(LOG_BIGLINE)
