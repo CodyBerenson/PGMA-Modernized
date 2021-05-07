@@ -1,0 +1,5 @@
+[console_scripts]
+AST = AST.AST:main
+
+[distutils.commands]
+bdist_AST = AST.bdist_AST:bdist_AST

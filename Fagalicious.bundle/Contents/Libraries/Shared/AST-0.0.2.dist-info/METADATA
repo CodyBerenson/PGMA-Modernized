@@ -1,0 +1,39 @@
+Metadata-Version: 2.0
+Name: AST
+Version: 0.0.2
+Summary: Conversion between protobuf3 and srcML.
+Home-page: https://github.com/yijunyu/needle/
+Author: Yijun Yu
+Author-email: y.yu@open.ac.uk
+License: MIT
+Keywords: AST,packaging
+Platform: UNKNOWN
+Classifier: Development Status :: 1 - Planning
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.2
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Requires-Dist: argparse; python_version=="2.6"
+Provides-Extra: faster-signatures
+Requires-Dist: ed25519ll; extra == 'faster-signatures'
+Provides-Extra: signatures
+Requires-Dist: keyring; extra == 'signatures'
+Requires-Dist: keyrings.alt; extra == 'signatures'
+Provides-Extra: signatures
+Requires-Dist: importlib; python_version=="2.6" and extra == 'signatures'
+Provides-Extra: signatures
+Requires-Dist: pyxdg; sys_platform!="win32" and extra == 'signatures'
+Provides-Extra: tool
+
+# needle
+NeeDLe
+
+
+0.0.1 -- initial version
+
+
