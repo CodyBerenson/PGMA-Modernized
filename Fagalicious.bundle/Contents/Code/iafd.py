@@ -8,9 +8,10 @@ Functions used to process results from IAFD
     16 Apr 2021  Codeanator   Use of utils.py to bypass cloudflare restrictions on iafd
     04 May 2021  JPH71        enhanced xpath cast matching as actors with wrong case names were not been matched e.g Scott DeMarco is listed as Scott Demarco
                               introduced duration matching
+    08 May 2021  JPH71        remove unicode in actors names so as to use in xpath matching
 '''
 # -------------------------------------------------------------------------------------------------------------------------------
-import genfunctions
+from unidecode import unidecode
 import utils
 
 # IAFD Related variables
@@ -25,7 +26,7 @@ def ProcessIAFD(agntCastList, FILMDICT):
 
     # clean up the Cast List 
     agntCastList = [x.split('(')[0].strip() if '(' in x else x.strip() for x in agntCastList]
-    agntCastList = [genfunctions.NormaliseUnicode(x).strip() for x in agntCastList if x.strip()]
+    agntCastList = [utils.makeASCII(x) for x in agntCastList if x.strip()]
     if not agntCastList:
         raise Exception('<No Cast List!>')
 
@@ -121,12 +122,12 @@ def FindIAFD_Film(FILMDICT):
             # Site Title and Site AKA
             try:
                 iafdTitle = film.xpath('./td[1]/a/text()')[0].strip()
-                genfunctions.matchTitle(iafdTitle, FILMDICT)
+                utils.matchTitle(iafdTitle, FILMDICT)
                 log(LOG_BIGLINE)
             except Exception as e:
                 try:
                     iafdAKA = film.xpath('./td[4]/text()')[0].strip()
-                    genfunctions.matchTitle(iafdAKA, FILMDICT)
+                    utils.matchTitle(iafdAKA, FILMDICT)
                     log(LOG_BIGLINE)
                 except Exception as e:
                     log('IAFD  :: Error getting Site Title: %s', e)
@@ -148,16 +149,15 @@ def FindIAFD_Film(FILMDICT):
                 log(LOG_SUBLINE)
                 continue
 
-            # Film Duration - only check this if value returned as it depend on ffmpeg being installed
-            if FILMDICT['DurationLimits']:
-                try:
-                    iafdDuration = html.xpath('//p[@class="bioheading" and text()="Minutes"]//following-sibling::p[1]/text()')[0].strip()
-                    genfunctions.matchDuration(iafdDuration, FILMDICT)
-                    log(LOG_BIGLINE)
-                except Exception as e:
-                    log('IAFD  :: Error: IAFD Duration: %s', e)
-                    log(LOG_SUBLINE)
-                    continue
+            # Film Duration
+            try:
+                iafdDuration = html.xpath('//p[@class="bioheading" and text()="Minutes"]//following-sibling::p[1]/text()')[0].strip()
+                utils.matchDuration(iafdDuration, FILMDICT)
+                log(LOG_BIGLINE)
+            except Exception as e:
+                log('IAFD  :: Error: IAFD Duration: %s', e)
+                log(LOG_SUBLINE)
+                continue
 
             # Film Studio and Distributor
             studioList = []
@@ -177,7 +177,7 @@ def FindIAFD_Film(FILMDICT):
             studioMatch = False
             for studio in studioList:
                 try:
-                    genfunctions.matchStudio(studio, FILMDICT, False if FILMDICT['IAFDStudio'] else True) # if an IAFD Studio was recorded on the filename - set last param to false
+                    utils.matchStudio(studio, FILMDICT, False if FILMDICT['IAFDStudio'] else True) # if an IAFD Studio was recorded on the filename - set last param to false
                     studioMatch = True
                     break           # break out of loop if it matches
                 except Exception as e:
@@ -205,16 +205,16 @@ def getIAFD_URLElement(myString, UseAdditionalResults):
     html = ''
     for i in range(2):
         try:
-            req = utils.HTTPRequest(myString, timeout=20)
-            html = HTML.ElementFromString(req.text)
+            HTTPRequest = utils.getHTTPRequest(myString, timeout=20)
+            html = HTML.ElementFromString(HTTPRequest.text)
             if UseAdditionalResults:
                 try:
                     searchQuery = html.xpath('//a[text()="See More Results..."]/@href')[0].strip().replace(' ', '+')
                     if searchQuery:
                         searchQuery = IAFD_BASE + searchQuery if IAFD_BASE not in searchQuery else searchQuery
                         log('IAFD  :: Loading Additional Search Results: %s', searchQuery)
-                        req = utils.HTTPRequest(searchQuery, timeout=20)
-                        html = HTML.ElementFromString(req.text)
+                        HTTPRequest = utils.getHTTPRequest(searchQuery, timeout=20)
+                        html = HTML.ElementFromString(HTTPRequest.text)
                 except:
                     log('IAFD  :: No Additional Search Results')
             break
@@ -332,6 +332,8 @@ def getIAFD_Actor(agntCastList, actorDict, FILMDICT):
     useFullCareer = True if FILMDICT['Year'] else False  
 
     for cast in allCastList:
+        cast = unidecode(cast)
+        log('Decoded Cast Name %s', cast)
         compareCast = re.sub(r'[\W\d_]', '', cast).strip().lower()
         castLower = cast.lower()
         try:
@@ -497,7 +499,7 @@ def getIAFD_Actor(agntCastList, actorDict, FILMDICT):
 # -------------------------------------------------------------------------------------------------------------------------------
 def getIAFD_Director(agntDirectorList, FILMDICT):
     ''' check IAFD web site for individual actors'''
-    agntDirectorList = [genfunctions.NormaliseUnicode(x).strip() for x in agntDirectorList if x.strip()]
+    agntDirectorList = [utils.makeASCII(x).strip() for x in agntDirectorList if x.strip()]
     if not agntDirectorList:
         raise Exception('<No Director List!>')
 
