@@ -77,6 +77,6 @@
         "id": "thumbor",
         "label": "Web Address of Thumbor: A smart imaging service. It enables on-demand onlines cropping, resizing and flipping of images",
         "type": "text",
-        "default": "http://34.68.158.72:8888/unsafe"
+        "default": "http://34.86.184.21:8888/unsafe"
     }
 ]
