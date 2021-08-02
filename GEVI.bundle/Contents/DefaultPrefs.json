@@ -7,8 +7,21 @@
         "default": "3"
     },
     {
+        "id": "matchsiteduration",
+        "label": "Match against Site's recorded film/scene length, Note: IAFDs entry is always matched",
+        "type": "bool",
+        "default": "false"
+    },
+    {
+        "id": "durationdx",
+        "label": "Acceptable difference between actual duration of video file name and that on agent website",
+        "type": "enum",
+        "values": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+        "default": "0"
+    },
+    {
         "id": "detect",
-        "label": "Always check source language before attempting translate? Select yes if movie summaries are presented in different languages",
+        "label": "Determine source language before attempting translation? TICK if film summaries are in different languages",
         "type": "bool",
         "default": "false"
     },

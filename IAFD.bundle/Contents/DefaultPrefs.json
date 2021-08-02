@@ -1,26 +1,27 @@
 [
     {
-        "id": "regex",
-        "label": "Regular expression to match files by. Must contain named groups for Studio, Movie Title and Release Year.",
-        "type": "text",
-        "default": "^\\((?P<studio>.+?)\\) - (?P<title>.+?)(?:\\s\\((?P<year>\\d{4})\\))?(\\s?-\\s?(?P<part>(cd|disc|disk|dvd|part|pt).+))?$"
+        "id": "delay",
+        "label": "Seconds to pause after a network request was made, ensuring undue burden is not placed on the web server",
+        "type": "enum",
+        "values": ["3", "6", "12", "24", "48"],
+        "default": "3"
     },
     {
-        "id": "year",
-        "label": "Is year mandatory is the filename ?",
+        "id": "matchsiteduration",
+        "label": "Match against Site's recorded film/scene length, Note: IAFDs entry is always matched",
         "type": "bool",
         "default": "false"
     },
     {
-        "id": "delay",
-        "label": "Seconds to pause after a network request was made, ensuring undue burden is not placed on the web server.",
+        "id": "durationdx",
+        "label": "Acceptable difference between actual duration of video file name and that on agent website",
         "type": "enum",
-        "values": ["0", "10", "20", "30", "40", "50", "60"],
+        "values": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
         "default": "0"
     },
     {
         "id": "detect",
-        "label": "Always check source language before attempting translate? Select yes if movie summaries are presented in different languages",
+        "label": "Determine source language before attempting translation? TICK if film summaries are in different languages",
         "type": "bool",
         "default": "false"
     },

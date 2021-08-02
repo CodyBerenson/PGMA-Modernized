@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-# pylint: disable=line-too-long
-# pylint: disable=W0702, W0703, C0103, C0410
 # encoding=utf8
 '''
 # Fagalicious - (IAFD)
@@ -33,12 +31,12 @@
                                    code reorganisation like moving logging fuction out of class so it can be used by all imports
     15 May 2021   2020.01.18.24    Further code reorganisation
                                    Issue #100
+    30 Jul 2021   2020.01.18.25    Further code reorganisation
+                                   Issue #107 - change in xpath for site entry
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
-import ast, json, re
+import json, re
 from datetime import datetime
-from PIL import Image
-from io import BytesIO
 
 # Version / Log Title
 VERSION_NO = '2020.01.18.24'
@@ -60,16 +58,9 @@ COLDIRECTOR = Prefs['directorcollection']           # add director to collection
 COLCAST = Prefs['castcollection']                   # add cast to collection
 COLCOUNTRY = Prefs['countrycollection']             # add country to collection
 
-# IAFD Related variables
-IAFD_ABSENT = u'\U0000274C'        # red cross mark - not on IAFD
-IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
-IAFD_THUMBSUP = u'\U0001F44D'      # thumbs up unicode character
-IAFD_THUMBSDOWN = u'\U0001F44E'    # thumbs down unicode character
-IAFD_LEGEND = u'CAST LEGEND\u2003{0} Actor not on IAFD\u2003{1} Actor on IAFD\u2003:: {2} Film on IAFD ::'
-
 # PLEX API /CROP Script/online image cropper
 load_file = Core.storage.load
-CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/BestExclusivePorn.bundle/Contents/Code/ImageCropper.vbs" "{1}" "{2}" "{3}" "{4}"'
+CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/Fagalicious.bundle/Contents/Code/ImageCropper.vbs" "{1}" "{2}" "{3}" "{4}"'
 THUMBOR = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}"
 
 # URLS
@@ -114,7 +105,6 @@ def log(message, *args):
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # imports placed here to use previously declared variables
-import iafd
 import utils
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -134,13 +124,13 @@ class Fagalicious(Agent.Movies):
 
         myString = myString.lower().strip()
 
-        # replace curly apostrophes with straight as strip diacritics will remove these
-        quoteChars = [ur'\u2018', ur'\u2019']
-        pattern = u'({0})'.format('|'.join(quoteChars))
-        matched = re.search(pattern, myString)  # match against whole string
-        if matched:
-            log('AGNT  :: Search Query:: Replacing characters in string. Found one of these {0}'.format(pattern))
-            myString = re.sub(pattern, "'", myString)
+        # replace curly single apostrophes and ampersand with nothing
+        singleQuoteChars = ["'", ur'\u2018', ur'\u2019', "&"]
+        pattern = u'({0})'.format('|'.join(singleQuoteChars))
+        matchedSingleQuote = re.search(pattern, myString)  # match against whole string
+        if matchedSingleQuote:
+            log('AGNT  :: Search Query:: Removing Single Quote Characters in string. Found one of these {0}'.format(pattern))
+            myString = re.sub(pattern, "", myString)
             myString = ' '.join(myString.split())   # remove continous white space
             log('AGNT  :: Amended Search Query [{0}]'.format(myString))
         else:
@@ -148,7 +138,7 @@ class Fagalicious(Agent.Movies):
 
         # Fagalicious seems to fail to find Titles which have invalid chars in them split at first incident and take first split, just to search but not compare
         # the back tick is added to the list as users who can not include quotes in their filenames can use these to replace them without changing the scrappers code
-        badChars = ["'", '"', '`', ur'\u201c', ur'\u201d', ur'\u2018', ur'\u2019']
+        badChars = ['"', '`', ur'\u201c', ur'\u201d', ur'\u2018', ur'\u2019']
         pattern = u'({0})'.format('|'.join(badChars))
         matched = re.search(pattern, myString[0])  # match against first character
         if matched:
@@ -168,8 +158,10 @@ class Fagalicious(Agent.Movies):
 
         # string can not be longer than 21 characters and enquote
         if len(myString) > 21:
+            log('AGNT  :: Search Query:: Reducing Search Query length to 21 Characters Max')
             lastSpace = myString[:21].rfind(' ')
-            myString = '"{0}"'.format(myString[:lastSpace])
+            myString = myString[:lastSpace]
+            myString = myString if matchedSingleQuote else '"{0}"'.format(myString[:lastSpace])
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())
@@ -234,8 +226,7 @@ class Fagalicious(Agent.Movies):
             for title in titleList:
                 # Site Entry : Composed of Studio, then Scene Title separated by a Colon
                 try:
-                    siteEntry = title.xpath('./h2/a/text()')
-                    siteEntry = ''.join(siteEntry)
+                    siteEntry = title.xpath('./h1[@class="entry-title"]/a/text()')[0]
                     log('SEARCH:: Site Entry: %s', siteEntry)
                     siteStudio, siteTitle = siteEntry.split(": ", 1)
                     log(LOG_BIGLINE)
@@ -264,7 +255,7 @@ class Fagalicious(Agent.Movies):
 
                 # Site Title URL
                 try:
-                    siteURL = title.xpath('./h2/a/@href')[0]
+                    siteURL = title.xpath('./h1[@class="entry-title"]/a/@href')[0]
                     siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
                     FILMDICT['SiteURL'] = siteURL
                     log('SEARCH:: Site Title url                %s', siteURL)
@@ -276,7 +267,8 @@ class Fagalicious(Agent.Movies):
 
                 # Site Release Date
                 try:
-                    siteReleaseDate = title.xpath('./ul/li[@class="meta-date"]/a/text()[normalize-space()]')[0]
+                    siteReleaseDate = title.xpath('.//li[@class="meta-date"]/a/text()')[0]
+                    log('SEARCH:: Site Release Date: %s', siteReleaseDate)
                     try:
                         siteReleaseDate = utils.matchReleaseDate(siteReleaseDate, FILMDICT)
                         log(LOG_BIGLINE)
@@ -300,7 +292,7 @@ class Fagalicious(Agent.Movies):
         utils.logHeaders('UPDATE', media, lang)
 
         # Fetch HTML.
-        FILMDICT = ast.literal_eval(metadata.id)    # use ast.literal_eval does not convert strings to unicode
+        FILMDICT = json.loads(metadata.id)
         log('UPDATE:: Film Dictionary Variables:')
         for key in sorted(FILMDICT.keys()):
             log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
@@ -319,11 +311,11 @@ class Fagalicious(Agent.Movies):
         #        g. Collection Info      : From title group of filename 
 
         # 1a.   Set Studio
-        metadata.studio = FILMDICT['Studio'].decode('unicode-escape')
+        metadata.studio = FILMDICT['Studio']
         log('UPDATE:: Studio: %s' , metadata.studio)
 
         # 1b.   Set Title
-        metadata.title = FILMDICT['Title'].decode('unicode-escape')
+        metadata.title = FILMDICT['Title']
         log('UPDATE:: Title: %s' , metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
@@ -359,7 +351,7 @@ class Fagalicious(Agent.Movies):
         genreList = []
         try:
             testStudio = FILMDICT['Studio'].lower().replace(' ', '')
-            ignoreGenres = ['Raging Stallion', 'Trailers', 'Hot House', 'BelAmi', 'NakedSword']
+            ignoreGenres = ['Raging Stallion', 'Trailers', 'Hot House', 'BelAmi', 'NakedSword', 'CutlersDen']
             useGenres = ['bareback', 'big dicks', 'black studs', 'double penetration', 'hairy', 'daddy', 'hairy', 'interracial', 'muscle hunks', 'uncut', 'jocks', 'latino', 'gaycest', 'group']
             htmltags = html.xpath('//ul/a[contains(@href, "https://fagalicious.com/tag/")]/text()')
             log('UPDATE:: %s Genres/Cast Tags Found: "%s"', len(htmltags), htmltags)
@@ -390,16 +382,16 @@ class Fagalicious(Agent.Movies):
         # Process Cast
         log(LOG_SUBLINE)
         try:
-            castdict = iafd.ProcessIAFD(castList, FILMDICT)
+            castDict = utils.getCast(castList, FILMDICT)
 
             # sort the dictionary and add key(Name)- value(Photo, Role) to metadata - if there is no phot assume its a genre
             metadata.roles.clear()
-            for key in sorted(castdict):
+            for key in sorted(castDict):
                 newRole = metadata.roles.new()
-                if castdict[key]['Photo'] or len(key.split()) == 2:          # most actors will have 2 names
+                if castDict[key]['Photo'] or len(key.split()) == 2:          # most actors will have 2 names
                     newRole.name = key
-                    newRole.photo = castdict[key]['Photo']
-                    newRole.role = castdict[key]['Role']
+                    newRole.photo = castDict[key]['Photo']
+                    newRole.role = castDict[key]['Role']
                     # add cast name to collection
                     if COLCAST:
                         metadata.collections.add(key)
@@ -463,15 +455,16 @@ class Fagalicious(Agent.Movies):
             pattern = re.compile(regex, re.IGNORECASE)
             synopsis = re.sub(pattern, '', synopsis)
 
+            synopsis = utils.TranslateString(synopsis, lang)
+
         except Exception as e:
             log('UPDATE:: Error getting Synopsis: %s', e)
 
         # combine and update
         log(LOG_SUBLINE)
-        castLegend = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(castLegend, synopsis.strip())
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['CastLegend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
-        metadata.summary = utils.TranslateString(summary, lang)
+        metadata.summary = summary
 
         log(LOG_BIGLINE)
         log('UPDATE:: Finished Update Routine')

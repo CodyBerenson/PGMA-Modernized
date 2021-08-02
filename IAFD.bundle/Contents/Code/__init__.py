@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-# pylint: disable=line-too-long
-# pylint: disable=W0702, W0703, C0103, C0410
 # encoding=utf8
 '''
 # IAFD - (IAFD)
@@ -27,43 +25,36 @@
                                    Enhancements to IAFD search routine, including Levenshtein Matching on Cast names
                                    Added iafd legend to summary
     28 Mar 2021   2020.04.22.11    Added code to create actor collections
+    27 Jul 2021   2020.04.22.12    Merged all libraries into utils.py
+                                   improvements to film matching within iafd and scraping data at match
+                                   Fix Issue: IAFD Unable to match three titles #105
 
 ---------------------------------------------------------------------------------------------------------------
 '''
-import datetime, platform, os, re, sys, json
-from unidecode import unidecode
-from googletrans import Translator
-import utils
+import json, re
+from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.04.22.11'
+VERSION_NO = '2020.04.22.12'
 PLUGIN_LOG_TITLE = 'IAFD'
-LOG_BIGLINE = '------------------------------------------------------------------------------'
-LOG_SUBLINE = '      ------------------------------------------------------------------------'
+
+# log section separators
+LOG_BIGLINE = '--------------------------------------------------------------------------------'
+LOG_SUBLINE = '      --------------------------------------------------------------------------'
 
 # Preferences
-REGEX = Prefs['regex']                      # file matching pattern
-YEAR = Prefs['year']                        # is year mandatory in the filename?
-DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
-PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
-COLCLEAR = Prefs['clearcollections']        # clear previously set collections
-COLSTUDIO = Prefs['studiocollection']       # add studio name to collection
-COLTITLE = Prefs['titlecollection']         # add title [parts] to collection
-COLGENRE = Prefs['genrecollection']         # add genres to collection
-COLDIRECTOR = Prefs['directorcollection']   # add director to collection
-COLCAST = Prefs['castcollection']           # add cast to collection
-COLCOUNTRY = Prefs['countrycollection']     # add country to collection
-
-# IAFD Related variables
-IAFD_BASE = 'https://www.iafd.com'
-IAFD_SEARCH_URL = IAFD_BASE + '/results.asp?searchtype=comprehensive&searchstring={0}'
-
-IAFD_ABSENT = u'\U0000274C'        # red cross mark - not on IAFD
-IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
-IAFD_THUMBSUP = u'\U0001F44D'      # thumbs up unicode character
-IAFD_THUMBSDOWN = u'\U0001F44E'    # thumbs down unicode character
-IAFD_LEGEND = u'CAST LEGEND\u2003{0} Actor not on IAFD\u2003{1} Actor on IAFD\u2003:: {2} Film on IAFD ::'
+DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
+DURATIONDX = 60 # int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
+DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
+COLCLEAR = Prefs['clearcollections']                # clear previously set collections
+COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
+COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
+COLGENRE = Prefs['genrecollection']                 # add genres to collection
+COLDIRECTOR = Prefs['directorcollection']           # add director to collection
+COLCAST = Prefs['castcollection']                   # add cast to collection
+COLCOUNTRY = Prefs['countrycollection']             # add country to collection
 
 # dictionary holding film variables
 FILMDICT = {}
@@ -94,6 +85,18 @@ def anyOf(iterable):
     return None
 
 # ----------------------------------------------------------------------------------------------------------------------------------
+def log(message, *args):
+    ''' log messages '''
+    if re.search('ERROR', message, re.IGNORECASE):
+        Log.Error(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+    else:
+        Log.Info(PLUGIN_LOG_TITLE + '  - ' + message, *args)
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# imports placed here to use previously declared variables
+import utils
+
+# ----------------------------------------------------------------------------------------------------------------------------------
 class IAFD(Agent.Movies):
     ''' define Agent class '''
     name = 'Internet Adult Film Database'
@@ -104,13 +107,10 @@ class IAFD(Agent.Movies):
     contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultFilms', 'com.plexapp.agents.GayAdultScenes']
     accepts_from = ['com.plexapp.agents.localmedia']
 
-    # import General Functions
-    from genfunctions import *
-
     #-------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
         ''' Prepare Title for search query '''
-        self.log('AGNT  :: Original Search Query        : {0}'.format(myString))
+        log('AGNT  :: Original Search Query        : {0}'.format(myString))
 
         myString = myString.strip().lower()
 
@@ -120,11 +120,11 @@ class IAFD(Agent.Movies):
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             numPos = matched.start()
-            self.log('SELF:: Search Query:: Splitting at position [{0}]. Found one of these {1}'.format(numPos, pattern))
+            log('SELF:: Search Query:: Splitting at position [{0}]. Found one of these {1}'.format(numPos, pattern))
             myString = myString[:numPos]
-            self.log('SELF:: Amended Search Query [{0}]'.format(myString))
+            log('SELF:: Amended Search Query [{0}]'.format(myString))
         else:
-            self.log('SELF:: Search Query:: Split not attempted. String has none of these {0}'.format(pattern))
+            log('SELF:: Search Query:: Split not attempted. String has none of these {0}'.format(pattern))
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString)
@@ -132,7 +132,7 @@ class IAFD(Agent.Movies):
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string 
         myString = myString.replace('%25', '%').replace('*', '')
 
-        self.log('AGNT  :: Returned Search Query        : {0}'.format(myString))
+        log('AGNT  :: Returned Search Query        : {0}'.format(myString))
 
         return myString
 
@@ -141,177 +141,36 @@ class IAFD(Agent.Movies):
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
             return
-        folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
 
-        self.log(LOG_BIGLINE)
-        self.log('SEARCH:: Version                       : v.%s', VERSION_NO)
-        self.log('SEARCH:: Python                        : %s', sys.version_info)
-        self.log('SEARCH:: Platform                      : %s %s', platform.system(), platform.release())
-        self.log('SEARCH:: Preferences:')
-        self.log('SEARCH::  > Cast Legend Before Summary : %s', PREFIXLEGEND)
-        self.log('SEARCH::  > Collection Gathering')
-        self.log('SEARCH::      > Cast                   : %s', COLCAST)
-        self.log('SEARCH::      > Director(s)            : %s', COLDIRECTOR)
-        self.log('SEARCH::      > Studio                 : %s', COLSTUDIO)
-        self.log('SEARCH::      > Film Title             : %s', COLTITLE)
-        self.log('SEARCH::      > Genres                 : %s', COLGENRE)
-        self.log('SEARCH::  > Delay                      : %s', DELAY)
-        self.log('SEARCH::  > Language Detection         : %s', DETECT)
-        self.log('SEARCH::  > Library:Site Language      : %s:%s', lang, SITE_LANGUAGE)
-        self.log('SEARCH:: Media Title                   : %s', media.title)
-        self.log('SEARCH:: File Name                     : %s', filename)
-        self.log('SEARCH:: File Folder                   : %s', folder)
-        self.log(LOG_BIGLINE)
+        utils.logHeaders('SEARCH', media, lang)
 
         # Check filename format
         try:
-            FILMDICT = self.matchFilename(filename)
+            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
         except Exception as e:
-            self.log('SEARCH:: Error: %s', e)
-            return
-        self.log(LOG_BIGLINE)
-
-        # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
-        # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
-        searchTitle = self.CleanSearchString(FILMDICT['IAFDTitle'])
-        searchQuery = IAFD_SEARCH_URL.format(searchTitle)
-        self.log('SEARCH:: Search Query: %s', searchQuery)
-
-        # iafd displays the first 50 results, clicking on "See More Results"  appends the rest
-        try:
-            req = utils.HTTPRequest(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
-            html = HTML.ElementFromString(req.text)
-        except Exception as e:
-            self.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+            log('SEARCH:: Error: %s', e)
             return
 
-        try:
-            searchQuery = html.xpath('//a[text()="See More Results..."]/@href')[0].strip()
-            if IAFD_BASE not in searchQuery:
-                searchQuery = IAFD_BASE + '/' + searchQuery
-            self.log('SEARCH:: Loading Additional Search Results: %s', searchQuery)
-            req = HTTPRequest(searchQuery, timeout=90, errors='ignore', sleep=DELAY)
-            html = HTML.ElementFromString(req.text)
-        except:
-            self.log('SEARCH:: No Additional Search Results')
+        log(LOG_BIGLINE)
 
-        titleList = html.xpath('//table[@id="titleresult"]/tbody/tr')
-        self.log('SEARCH:: Titles List: %s Found', len(titleList))
-        for title in titleList:
-            # Site Title Check
-            try:
-                siteTitle = title.xpath('./td[1]/a/text()')[0]
-                self.matchTitle(siteTitle, FILMDICT)
-                self.log(LOG_BIGLINE)
-            except Exception as e:
-                self.log('SEARCH:: Error getting Site Title; Try AKA Site Title: %s', e)
-                self.log(LOG_SUBLINE)
-                try:
-                    siteAKATitle = title.xpath('./td[4]/text()')[0]
-                    self.matchTitle(siteAKATitle, FILMDICT)
-                    self.log(LOG_BIGLINE)
-                except Exception as e:
-                    self.log('SEARCH:: Error getting AKA Site Title: %s', e)
-                    self.log(LOG_SUBLINE)
-                    continue
-
-            # Site Title URL Check
-            try:
-                siteURL = title.xpath('./td[1]/a/@href')[0]
-                siteURL = ('/' if siteURL[0] != '/' else '') + siteURL
-                siteURL = (IAFD_BASE if IAFD_BASE not in siteURL else '') + siteURL
-                FILMDICT['SiteURL'] = siteURL
-                self.log('SEARCH:: Site Title url                %s', siteURL)
-                self.log(LOG_BIGLINE)
-            except Exception as e:
-                self.log('SEARCH:: Error getting Site Title Url: %s', e)
-                self.log(LOG_SUBLINE)
-                continue
-
-            # Search Website for date - date is in format yyyy
-            firstdateMatch = True
-            try:
-                siteReleaseDate = title.xpath('./td[2]/text()')[0].strip()
-                try:
-                    siteReleaseDate = self.matchReleaseDate(siteReleaseDate, FILMDICT)
-                    self.log(LOG_BIGLINE)
-                except Exception as e:
-                    self.log('SEARCH:: Error getting Site Release Date: %s', e)
-                    self.log(LOG_SUBLINE)
-                    firstdateMatch = False
-            except Exception as e:
-                self.log('SEARCH:: Error getting Site Release Date: Default to Filename Date [%s]', e)
-                self.log(LOG_BIGLINE)
-
-            # Site Studio Check: IAFD lists distributor on main page, look in Site URL for this
-            # Access Site URL for Studio Name information and release date
-            try:
-                self.log('SEARCH:: Reading Site URL page         %s', siteURL)
-                req = utils.HTTPRequest(siteURL, sleep=DELAY)
-                html = HTML.ElementFromString(req.text)
-                self.log(LOG_BIGLINE)
-            except Exception as e:
-                self.log('SEARCH:: Error reading Site URL page: %s', e)
-                self.log(LOG_SUBLINE)
-                continue
-
-            # Studio Name
-            try:
-                siteStudio = html.xpath('//p[@class="bioheading" and text()="Studio"]//following-sibling::p[1]/a/text()')[0]
-                self.matchStudio(siteStudio, FILMDICT)
-                self.log(LOG_BIGLINE)
-            except Exception as e:
-                self.log('SEARCH:: Error getting Site Studio; Try Distributor: %s', e)
-                try:
-                    siteDistributor = html.xpath('//p[@class="bioheading" and text()="Distributor"]//following-sibling::p[1]/a/text()')[0]
-                    self.matchStudio(siteDistributor, FILMDICT)
-                    self.log(LOG_BIGLINE)
-                except Exception as e:
-                    self.log('SEARCH:: Error getting Site Distributor: %s', e)
-                    self.log(LOG_SUBLINE)
-                    continue
-
-            # get release date: if none recorded use main results page value
-            try:
-                siteReleaseDate = html.xpath('//p[@class="bioheading" and text()="Release Date"]//following-sibling::p[1]/text()')[0].strip()
-                try:
-                    siteReleaseDate = self.matchReleaseDate(siteReleaseDate, FILMDICT)
-                    self.log(LOG_BIGLINE)
-                except Exception as e:
-                    self.log('SEARCH:: Error getting Site Release Date: %s', e)
-                    self.log(LOG_SUBLINE)
-                    if not firstdateMatch:  # if the first match also failed.... skip this title
-                        continue
-            except Exception as e:
-                self.log('SEARCH:: Error getting Site Release Date: Default to Filename Date [%s]', e)
-                self.log(LOG_BIGLINE)
-
-            # we should have a match on studio, title and year now
-            FILMDICT['FoundOnIAFD'] = 'Yes'
-            self.log('SEARCH:: Finished Search Routine')
-            self.log(LOG_BIGLINE)
+        if FILMDICT['FoundOnIAFD'] == 'Yes':
             results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
-            return
+            log(LOG_BIGLINE)
+
+        log('SEARCH:: Finished Search Routine')
+        return
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
-        folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
-        self.log(LOG_BIGLINE)
-        self.log('UPDATE:: Version                      : v.%s', VERSION_NO)
-        self.log('UPDATE:: File Name                    : %s', filename)
-        self.log('UPDATE:: File Folder                  : %s', folder)
-        self.log(LOG_BIGLINE)
+        utils.logHeaders('UPDATE', media, lang)
 
-        # Fetch HTML.
+        # Fetch FILMDICT
         FILMDICT = json.loads(metadata.id)
-        self.log('UPDATE:: Film Dictionary Variables:')
+        log('UPDATE:: Film Dictionary Variables:')
         for key in sorted(FILMDICT.keys()):
-            self.log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
-        self.log(LOG_BIGLINE)
-
-        req = utils.HTTPRequest(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
-        html = HTML.ElementFromString(req.text)
+            log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
+        log(LOG_BIGLINE)
 
         #  The following bits of metadata need to be established and used to update the movie on plex
         #    1.  Metadata that is set by Agent as default
@@ -325,24 +184,23 @@ class IAFD(Agent.Movies):
 
         # 1a.   Set Studio
         metadata.studio = FILMDICT['Studio']
-        self.log('UPDATE:: Studio: %s' , metadata.studio)
+        log('UPDATE:: Studio: %s' , metadata.studio)
 
         # 1b.   Set Title
         metadata.title = FILMDICT['Title']
-        self.log('UPDATE:: Title: %s' , metadata.title)
+        log('UPDATE:: Title: %s' , metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
-        if 'CompareDate' in FILMDICT:
-            metadata.originally_available_at = datetime.datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-            metadata.year = metadata.originally_available_at.year
-        self.log('UPDATE:: Tagline: %s', metadata.tagline)
-        self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
+        metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+        metadata.year = metadata.originally_available_at.year
+        log('UPDATE:: Tagline: %s', metadata.tagline)
+        log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
         # 1e/f. Set Content Rating to Adult/18 years
         metadata.content_rating = 'X'
         metadata.content_rating_age = 18
-        self.log('UPDATE:: Content Rating - Content Rating Age: X - 18')
+        log('UPDATE:: Content Rating - Content Rating Age: X - 18')
 
         # 1g. Collection
         if COLCLEAR:
@@ -351,7 +209,7 @@ class IAFD(Agent.Movies):
         collections = FILMDICT['Collection']
         for collection in collections:
             metadata.collections.add(collection)
-        self.log('UPDATE:: Collection Set From filename: %s', collections)
+        log('UPDATE:: Collection Set From filename: %s', collections)
 
         #    2.  Metadata retrieved from website
         #        a. Directors
@@ -359,32 +217,10 @@ class IAFD(Agent.Movies):
         #        c. Summary              : Synopsis, Scene Breakdown and Comments
 
         # 2a.   Directors
-        self.log(LOG_BIGLINE)
-        try:
-            directorDict = {}
-            htmldirectors = html.xpath('//p[@class="bioheading" and text()="Directors"]//following-sibling::p[1]')
-            for director in htmldirectors:
-                directorName = director.xpath('./a/text()')[0]
-                directorURL = director.xpath('./a/@href')[0]
-                try:
-                    req = utils.HTTPRequest(directorURL, sleep=DELAY)
-                    dhtml = HTML.ElementFromString(req.text)
-                    try:
-                        directorPhoto = dhtml.xpath('//div[@class="headshot"]/img/@src')[0]
-                        directorPhoto = '' if 'nophoto' in directorPhoto else directorPhoto
-                    except Exception as e:
-                        directorPhoto = ''
-                except Exception as e:
-                    self.log('UPDATE:: Error getting Director Page: %s', e)
-
-                self.log('UPDATE:: Director Name:               \t%s', directorName)
-                self.log('UPDATE:: Director URL:                \t%s', directorURL)
-                self.log('UPDATE:: Director Photo:              \t%s', directorPhoto)
-                self.log(LOG_SUBLINE)
-
-                directorDict[directorName] = directorPhoto
-
-            # sort the dictionary and add kv to metadata
+        log(LOG_BIGLINE)
+        if FILMDICT['Directors']:
+            directorDict = FILMDICT['Directors']
+            log('UPDATE:: Director List %s', directorDict.keys())
             metadata.directors.clear()
             for key in sorted(directorDict):
                 newDirector = metadata.directors.new()
@@ -393,104 +229,96 @@ class IAFD(Agent.Movies):
                 # add director to collection
                 if COLDIRECTOR:
                     metadata.collections.add(key)
-        except Exception as e:
-            self.log('UPDATE:: Error getting Director(s): %s', e)
+        else:
+            log('UPDATE:: Error No Directors Recorded')
 
 
         # 2b.   Cast
-        self.log(LOG_BIGLINE)
-        castdict = {}
-        try:
-            htmlcast = html.xpath('//h3[.="Performers"]/ancestor::div[@class="panel panel-default"]//div[@class[contains(.,"castbox")]]/p')
-            for cast in htmlcast:
-                actorName = cast.xpath('./a/text()')[0].strip()
-                actorURL = IAFD_BASE + cast.xpath('./a/@href')[0]
-                actorPhoto = cast.xpath('./a/img/@src')[0].strip()
-                actorPhoto = '' if 'nophoto' in actorPhoto else actorPhoto
-                actorRole = cast.xpath('./text()')
-                actorRole = ' '.join(actorRole).strip()
-
-                try:
-                    actorAlias = cast.xpath('./i/text()')[0].split(':')[1].replace(')', '').strip()
-                except:
-                    actorAlias = ''
-                    pass
-
-                actorRole = 'AKA: {0}'.format(actorAlias) if actorAlias else IAFD_FOUND
-
-                self.log('UPDATE:: Actor Name:                  \t%s', actorName)
-                self.log('UPDATE:: Actor Alias:                 \t%s', actorAlias)
-                self.log('UPDATE:: Actor URL:                   \t%s', actorURL)
-                self.log('UPDATE:: Actor Photo:                 \t%s', actorPhoto)
-                self.log('UPDATE:: Actor Role:                  \t%s', actorRole)
-                self.log(LOG_SUBLINE)
-
-                myDict = {}
-                myDict['Photo'] = actorPhoto
-                myDict['Role'] = actorRole
-                castdict[actorName] = myDict
+        log(LOG_BIGLINE)
+        if FILMDICT['Cast']:
+            castDict = FILMDICT['Cast']
+            log('UPDATE:: Cast List %s', castDict.keys())
 
             # sort the dictionary and add kv to metadata
             metadata.roles.clear()
-            for key in sorted(castdict):
+            for key in sorted(castDict):
                 cast = metadata.roles.new()
                 cast.name = key
-                cast.photo = castdict[key]['Photo']
-                cast.role = castdict[key]['Role']
+                cast.photo = castDict[key]['Photo']
+                cast.role = castDict[key]['Role']
                 # add cast name to collection
                 if COLCAST:
                     metadata.collections.add(key)
+        else:
+            log('UPDATE:: Error No Cast Recorded')
 
-        except Exception as e:
-            self.log('UPDATE:: Error getting Cast: %s', e)
+        # 2c.   Reviews - Put all Scene Information here
+        log(LOG_BIGLINE)
+        if FILMDICT['Scenes']:
+            htmlscenes = FILMDICT['Scenes'].split('##')
+            log('UPDATE:: Possible Number of Scenes [%s]', len(htmlscenes))
 
-        # 2c.   Summary (IAFD Legend + synopsis + Scene Breakdown + Comments)
-        self.log(LOG_BIGLINE)
+            metadata.reviews.clear()
+            sceneCount = 0 # avoid enumerating the number of scenes as some films have empty scenes
+            for count, scene in enumerate(htmlscenes, start=1):
+                log('UPDATE:: Scene No %s', count)
+                if '. ' in scene:
+                    title, writing = scene.split('. ', 1)
+                else:
+                    title = scene
+                    writing = ''
+
+                # if no title and no scene write up
+                if not title and not writing:
+                    continue
+                sceneCount += 1
+
+                newReview = metadata.reviews.new()
+                newReview.author = 'IAFD'
+                newReview.link  = FILMDICT['SiteURL']
+                if len(title) > 40:
+                    for i in range(40, -1, -1):
+                        if title[i] == ' ':
+                            title = title[0:i]
+                            break
+                newReview.source = '{0}. {1}...'.format(sceneCount, title if title else FILMDICT['Title'])
+                if len(writing) > 275:
+                    for i in range(275, -1, -1):
+                        if writing[i] in ['.', '!', '?']:
+                            writing = writing[0:i + 1]
+                            break
+                newReview.text = utils.TranslateString(writing, lang)
+                log(LOG_SUBLINE)
+        else:
+            log('UPDATE:: Error No Scenes Recorded')
+
+        # 2d.   Summary (IAFD Legend + synopsis + Comments)
+        log(LOG_BIGLINE)
         # synopsis
-        try:
-            synopsis = html.xpath('//div[@id="synopsis"]/div/ul/li//text()')[0].strip()
-            self.log('UPDATE:: Summary - Synopsis Found: %s', synopsis)
-        except Exception as e:
+        if FILMDICT['Synopsis']:
+            synopsis = FILMDICT['Synopsis']
+            log('UPDATE:: Synopsis Found: %s', synopsis)
+        else:
             synopsis = ''
-            self.log('UPDATE:: Error getting Synopsis: %s', e)
-
-        # scenes
-        self.log(LOG_SUBLINE)
-        try:
-            scene = html.xpath('//div[@id="sceneinfo"]/ul/li//text()')[0] # will error if no scenebreakdown
-            htmlscenes = html.xpath('//div[@id="sceneinfo"]/ul/li//text()')
-            scene = ''
-            for item in htmlscenes:
-                scene += '{0}\n'.format(item)
-            scene = '\nScene Breakdown:\n' + scene
-            self.log('UPDATE:: Scene Breakdown Found: %s', scene)
-        except Exception as e:
-            scene = ''
-            self.log('UPDATE:: Error getting Scene Breakdown: %s', e)
+            log('UPDATE:: Error No Synopsis Recorded')
 
         # comments
-        self.log(LOG_SUBLINE)
-        try:
-            comment = html.xpath('//div[@id="commentsection"]/ul/li//text()')[0] # will error if no comments
-            htmlcomments = html.xpath('//div[@id="commentsection"]/ul/li//text()')
-            listEven = htmlcomments[::2] # Elements from htmlcomments starting from 0 iterating by 2
-            listOdd = htmlcomments[1::2] # Elements from htmlcomments starting from 1 iterating by 2
-            comment = ''
-            for sceneNo, movie in zip(listEven, listOdd):
-                comment += '{0} -- {1}\n'.format(sceneNo, movie)
-            comment = 'Comments:\n' + comment
-            self.log('UPDATE:: Comments Found: %s', comment)
-        except Exception as e:
-            comment = ''
-            self.log('UPDATE:: Error getting Comments: %s', e)
+        log(LOG_SUBLINE)
+        if FILMDICT['Comments']:
+            comments = FILMDICT['Comments'].replace('##', '\n')
+            log('UPDATE:: Comments Found: %s', comments)
+        else:
+            comments = ''
+            log('UPDATE:: Error No Comments Recorded')
 
         # combine and update
-        self.log(LOG_SUBLINE)
-        castLegend = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN)
-        summary = ('{0}\n{1}\n{2}\n{3}' if PREFIXLEGEND else '{1}\n{2}\n{3}\n{0}').format(castLegend, synopsis.strip(), scene.strip(), comment.strip())
+        log(LOG_SUBLINE)
+        summary = ('{0}\n{1}').format(synopsis.strip(), comments.strip())
+        summary = utils.TranslateString(summary, lang)
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['CastLegend'], summary)
         summary = summary.replace('\n\n', '\n')
-        metadata.summary = self.TranslateString(summary, lang)
+        metadata.summary = summary
 
-        self.log(LOG_BIGLINE)
-        self.log('UPDATE:: Finished Update Routine')
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
+        log('UPDATE:: Finished Update Routine')
+        log(LOG_BIGLINE)

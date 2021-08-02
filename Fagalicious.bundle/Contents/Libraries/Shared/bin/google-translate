@@ -1,0 +1,186 @@
+#!c:\python27\python.exe
+# -*- coding: UTF-8 -*-
+
+"""Command line utility of google_translate package.
+
+Attributes:
+    LOG_FORMAT (string): Logging messages format.
+
+    CONFIG_PATH (string): Absolute path to the configuration directory.
+
+    CACHE_FILE (string): Absolute path to the translation cache file.
+
+    NEWLINE_REPLACE (string): Replacement for the newline character. Used to
+        avoid bad translations from Google translate. Google removes some of
+        the newline characters so we use the NEWLINE_REPLACE characters to mark
+        the position of the newline chars in order to replace them back
+        after the translation.
+
+    NEWLINE_REPLACE_PATTERN (regexp): Regexp used to replace the NEWLINE_REPLACE
+        pattern back to the original newline character.
+
+"""
+
+from __future__ import unicode_literals
+
+import re
+import sys
+import os.path
+import logging
+
+if __package__ is None and not hasattr(sys, "frozen"):
+    # Direct call no package installed
+    PATH = os.path.realpath(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(PATH)))
+
+from google_translate import (
+    UserAgentSelector,
+    GoogleTranslator,
+    ProxySelector,
+    parse_options,
+    utils
+)
+
+LOG_FORMAT = "[%(levelname)s]: %(message)s"
+#LOG_FORMAT = "[%(levelname)s]: %(message).200s"  # Limit log msg chars to 200
+
+CONFIG_PATH = "{home}/.config/google-translate".format(home=os.path.expanduser('~'))
+
+CACHE_FILE = os.path.join(CONFIG_PATH, "translate-cache")
+
+NEWLINE_REPLACE = '\n\u2622\n'
+
+NEWLINE_REPLACE_PATTERN = re.compile('\n?\u2622\n?', re.UNICODE)
+
+
+def print_results(results, output_type, encoding):
+    """Format and print the results to the screen."""
+    assert results is not None
+
+    if output_type == "text":
+        print "\"{0}\"".format(", ".join(unicode(item) for item in results))
+
+    if output_type == "json":
+        print results
+
+    if output_type == "dict":
+        print utils.display_unicode_item(results)
+
+    if output_type == "file":
+        print results.encode(encoding),
+
+
+def main():
+    """Main method execution starts here."""
+    args = parse_options()
+
+    # Set up logging
+    if args.verbose == 0:
+        log_level = logging.WARNING
+    elif args.verbose == 1:
+        log_level = logging.INFO
+    else:
+        log_level = logging.DEBUG
+
+    if args.no_warnings:
+        log_level = logging.ERROR
+
+    logging.basicConfig(level=log_level, format=LOG_FORMAT)
+    logger = logging.getLogger(__name__)
+
+    logger.debug("Args: %r", args)
+    logger.debug("Config path: %r", CONFIG_PATH)
+
+    # Initiate objects
+    proxy_selector = ProxySelector(args.proxy,
+                                   args.proxy_file,
+                                   args.no_fallback,
+                                   args.random_proxy)
+
+    ua_selector = UserAgentSelector(args.user_agent,
+                                    args.user_agent_file,
+                                    args.user_agent_http,
+                                    args.single_ua)
+
+    translator = GoogleTranslator(proxy_selector,
+                                  ua_selector,
+                                  args.simulate,
+                                  args.http,
+                                  args.timeout,
+                                  args.retries,
+                                  args.wait_time,
+                                  args.rand_wait,
+                                  args.encoding)
+
+    # Load cache content
+    if not args.disable_cache:
+        success = translator.cache.load(CACHE_FILE)
+        logger.debug("Cache file found: %r", success)
+
+        if success:
+            logger.debug("Items loaded: (%s)", len(translator.cache))
+            translator.cache.remove_old()
+
+    # Add the extra HTTP headers to the translator
+    if args.header is not None:
+        for header in args.header:
+            translator.add_header(tuple(header.split(':', 1)))
+
+    results = None
+
+    # Translate the given words - file
+    if len(args.words) == 1 and args.words[0].startswith("file://"):
+        filename = args.words[0].split('/')[-1]
+
+        with open(filename) as input_file:
+            # Read the text line by line from the given file
+            # Strip the extra characters Google removes them anyway
+            # Decode the content to unicode
+            # Put the NEWLINE_REPLACE chars at the end of each line
+            content = [line.strip().decode(args.encoding) + NEWLINE_REPLACE for line in input_file]
+
+            content = ''.join(content)
+
+        quoted_punctuations = [utils.quote_unicode(char) for char in utils.PUNCTUATIONS]
+        quoted_content = utils.quote_unicode(content)
+
+        # Split the text into chunks of max size and translate each one
+        trans_content = []
+        for text in utils.split_text(quoted_content, GoogleTranslator.MAX_INPUT_SIZE, quoted_punctuations):
+            trans_content.append(translator.translate(utils.unquote_unicode(text), args.dst_lang, args.src_lang))
+
+        trans_content = ' '.join(trans_content)
+
+        # Replace the NEWLINE_REPLACE chars with the newline char
+        results = NEWLINE_REPLACE_PATTERN.sub('\n', trans_content)
+
+        # In order to print the text as is in the print_results function
+        output_type = "file"
+    else:
+        if args.mode == "translate" or args.mode == "t":
+            results = translator.translate(args.words, args.dst_lang, args.src_lang, args.additional, args.output)
+
+        if args.mode == "romanize" or args.mode == "r":
+            results = translator.romanize(args.words, args.src_lang, args.output)
+
+        if args.mode == "exist" or args.mode == "e":
+            results = translator.word_exists(args.words, args.dst_lang, args.output)
+
+        if args.mode == "detect" or args.mode == "d":
+            results = translator.detect(args.words, args.output)
+
+        output_type = args.output
+
+    # Store cache content
+    if not args.disable_cache:
+        translator.cache.store(CACHE_FILE)
+
+    print_results(results, output_type, args.encoding)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        print "KeyboardInterrupt"
+        sys.exit(1)

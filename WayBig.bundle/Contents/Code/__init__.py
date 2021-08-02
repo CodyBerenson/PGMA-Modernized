@@ -8,15 +8,6 @@
                                                   ---------------
     Date            Version                         Modification
     22 Dec 2019   2019.12.22.1     Corrected scrapping of collections
-    28 Apr 2020   2019.08.12.16    update IAFD routine
-    08 May 2020   2019.08.12.17    Added [ and ] to characters not be be url encoded as titles were not returning results
-                                   updated removal of stand alone '1' in comparison routine
-    26 May 2020   2019.08.12.18    Corrected error in summary scrape
-    01 Jun 2020   2019.08.12.19    Implemented translation of summary
-                                   improved getIAFDActor search
-    26 Jun 2020   2019.08.12.20    Improvement to Summary Translation: Translate into Plex Library Language
-                                   stripping of intenet domain suffixes from studio names when matching
-                                   handling of unicode characters in film titles and comparision string normalisation
     14 Aug 2020   2019.08.12.21    Change to regex matching code - site titles which had studio name in them were failing to match to 
                                    file titles as regex was different between the two
     22 Sep 2020   2019.08.12.22    correction to summary xpath to cater for different layouts
@@ -33,38 +24,33 @@
                                    use of ast module to avoid unicode issues in some libraries
                                    Removal of REGEX preference
                                    code reorganisation like moving logging fuction out of class so it can be used by all imports
+    11 May 2021   2019.08.12.30    Further code reorganisation
+    29 Jul 2021   2019.08.12.31    Further code reorganisation
 
 ---------------------------------------------------------------------------------------------------------------
 '''
-import platform, os, re, sys, subprocess, json, ast
+import json, re
 from datetime import datetime
-from PIL import Image
-from io import BytesIO
 
 # Version / Log Title
-VERSION_NO = '2019.12.22.29'
+VERSION_NO = '2019.12.22.31'
 PLUGIN_LOG_TITLE = 'WayBig'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
 
 # Preferences
-DELAY = int(Prefs['delay'])                 # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-DETECT = Prefs['detect']                    # detect the language the summary appears in on the web page
-PREFIXLEGEND = Prefs['prefixlegend']        # place cast legend at start of summary or end
-COLCLEAR = Prefs['clearcollections']        # clear previously set collections
-COLSTUDIO = Prefs['studiocollection']       # add studio name to collection
-COLTITLE = Prefs['titlecollection']         # add title [parts] to collection
-COLGENRE = Prefs['genrecollection']         # add genres to collection
-COLDIRECTOR = Prefs['directorcollection']   # add director to collection
-COLCAST = Prefs['castcollection']           # add cast to collection
-COLCOUNTRY = Prefs['countrycollection']     # add country to collection
-
-# IAFD Related variables
-IAFD_ABSENT = u'\U0000274C'        # red cross mark - not on IAFD
-IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
-IAFD_THUMBSUP = u'\U0001F44D'      # thumbs up unicode character
-IAFD_THUMBSDOWN = u'\U0001F44E'    # thumbs down unicode character
-IAFD_LEGEND = u'CAST LEGEND\u2003{0} Actor not on IAFD\u2003{1} Actor on IAFD\u2003:: {2} Film on IAFD ::'
+DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+MATCHSITEDURATION = int(Prefs['matchsiteduration']) # Acceptable difference between actual duration of video file and that on agent website
+DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
+DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
+COLCLEAR = Prefs['clearcollections']                # clear previously set collections
+COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
+COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
+COLGENRE = Prefs['genrecollection']                 # add genres to collection
+COLDIRECTOR = Prefs['directorcollection']           # add director to collection
+COLCAST = Prefs['castcollection']                   # add cast to collection
+COLCOUNTRY = Prefs['countrycollection']             # add country to collection
 
 # PLEX API /CROP Script/online image cropper
 load_file = Core.storage.load
@@ -113,8 +99,7 @@ def log(message, *args):
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # imports placed here to use previously declared variables
-import iafd
-import genfunctions
+import utils
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 class WayBig(Agent.Movies):
@@ -180,85 +165,16 @@ class WayBig(Agent.Movies):
         return myString
 
     # -------------------------------------------------------------------------------------------------------------------------------
-    def getFilmImages(self, imageType, imageURL, whRatio):
-        ''' get Film images - posters/background art and crop if necessary '''
-        pic = imageURL
-        picContent = ''
-        picInfo = Image.open(BytesIO(HTTP.Request(pic).content))
-        width, height = picInfo.size
-        dispWidth = '{:,d}'.format(width)       # thousands separator
-        dispHeight = '{:,d}'.format(height)     # thousands separator
-
-        log('AGNT  :: {0} Found: Width ({1}) x Height ({2}); URL: {3}'.format(imageType, dispWidth, dispHeight, imageURL))
-
-        maxHeight = float(width * whRatio)      # Maximum allowable height
-
-        cropHeight = float(maxHeight if maxHeight <= height else height)
-        cropWidth = float(cropHeight / whRatio)
-
-        DxHeight = 0.0 if cropHeight == height else (abs(cropHeight - height) / height) * 100.0
-        DxWidth = 0.0 if cropWidth == width else (abs(cropWidth - width) / width) * 100.0
-
-        cropRequired = True if DxWidth >= 10 or DxHeight >=10 else False
-        cropWidth = int(cropWidth)
-        cropHeight = int(cropHeight)
-        desiredWidth = '{0:,d}'.format(cropWidth)     # thousands separator
-        desiredHeight = '{0:,d}'.format(cropHeight)   # thousands separator
-        DxWidth = '{0:.2f}'.format(DxWidth)    # percent format
-        DxHeight = '{0:.2f}'.format(DxHeight)  # percent format
-        log('AGNT  :: Crop {0} {1}: Actual (w{2} x h{3}), Desired (w{4} x h{5}), % Dx = w[{6}%] x h[{7}%]'.format("Required:" if cropRequired else "Not Required:", imageType, dispWidth, dispHeight, desiredWidth, desiredHeight, DxWidth, DxHeight))
-        if cropRequired:
-            try:
-                log('AGNT  :: Using Thumbor to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
-                pic = THUMBOR.format(cropWidth, cropHeight, imageURL)
-                picContent = HTTP.Request(pic).content
-            except Exception as e:
-                log('AGNT  :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
-                try:
-                    if os.name == 'nt':
-                        log('AGNT  :: Using Script to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
-                        envVar = os.environ
-                        TempFolder = envVar['TEMP']
-                        LocalAppDataFolder = envVar['LOCALAPPDATA']
-                        pic = os.path.join(TempFolder, imageURL.split("/")[-1])
-                        cmd = CROPPER.format(LocalAppDataFolder, imageURL, pic, cropWidth, cropHeight)
-                        subprocess.call(cmd)
-                        picContent = load_file(pic)
-                except Exception as e:
-                    log('AGNT  :: Error Script Failed to Crop Image to: {0} x {1}'.format(desiredWidth, desiredHeight))
-        else:
-            picContent = HTTP.Request(pic).content
-
-        return pic, picContent
-
-    # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
             return
 
-        log(LOG_BIGLINE)
-        log('SEARCH:: Version                      : v.%s', VERSION_NO)
-        log('SEARCH:: Python                       : %s', sys.version_info)
-        log('SEARCH:: Platform                     : %s %s', platform.system(), platform.release())
-        log('SEARCH:: Preferences:')
-        log('SEARCH::  > Cast Legend Before Summary: %s', PREFIXLEGEND)
-        log('SEARCH::  > Collection Gathering')
-        log('SEARCH::      > Cast                  : %s', COLCAST)
-        log('SEARCH::      > Director(s)           : %s', COLDIRECTOR)
-        log('SEARCH::      > Studio                : %s', COLSTUDIO)
-        log('SEARCH::      > Film Title            : %s', COLTITLE)
-        log('SEARCH::      > Genres                : %s', COLGENRE)
-        log('SEARCH::  > Delay                     : %s', DELAY)
-        log('SEARCH::  > Language Detection        : %s', DETECT)
-        log('SEARCH::  > Library:Site Language     : %s:%s', lang, SITE_LANGUAGE)
-        log('SEARCH:: Media Title                  : %s', media.title)
-        log('SEARCH:: File Path                    : %s', media.items[0].parts[0].file)
-        log(LOG_BIGLINE)
+        utils.logHeaders('SEARCH', media, lang)
 
         # Check filename format
         try:
-            FILMDICT = genfunctions.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
@@ -275,7 +191,7 @@ class WayBig(Agent.Movies):
         regex = ur'^{0} |at {0}$'.format(re.escape(FILMDICT['CompareStudio']))
         pattern = re.compile(regex, re.IGNORECASE)
         compareTitle = re.sub(pattern, '', searchTitle)
-        compareTitle = genfunctions.NormaliseComparisonString(compareTitle)
+        compareTitle = utils.NormaliseComparisonString(compareTitle)
 
         log('SEARCH:: Search Title: %s', searchTitle)
 
@@ -326,6 +242,10 @@ class WayBig(Agent.Movies):
                         siteStudio, siteTitle = siteEntry.split('? ', 1)
                     elif ', ' in siteEntry:
                         siteStudio, siteTitle = siteEntry.split(', ', 1)
+                    elif FILMDICT['Studio'].lower() in siteEntry:       # in case the film title is mssing a separator between the studio and clip name
+                        log('SEARCH:: Warning: Site Entry did not have a clear separator to separate Studio from Title')
+                        siteStudio = FILMDICT['Studio'].lower()
+                        siteTitle = FILMDICT['Title'].lower() if FILMDICT['Title'].lower() in siteEntry else ''
                     else:
                         log('SEARCH:: Error determining Site Studio and Title from Site Entry')
                         log(LOG_SUBLINE)
@@ -340,7 +260,7 @@ class WayBig(Agent.Movies):
 
                 # Site Title
                 try:
-                    genfunctions.matchTitle(siteTitle, FILMDICT)
+                    utils.matchTitle(siteTitle, FILMDICT)
                     log(LOG_BIGLINE)
                 except Exception as e:
                     log('SEARCH:: Error getting Site Title: %s', e)
@@ -349,7 +269,7 @@ class WayBig(Agent.Movies):
 
                 # Studio Name
                 try:
-                    genfunctions.matchStudio(siteStudio, FILMDICT)
+                    utils.matchStudio(siteStudio, FILMDICT)
                     log(LOG_BIGLINE)
                 except Exception as e:
                     log('SEARCH:: Error getting Site Studio: %s', e)
@@ -372,7 +292,7 @@ class WayBig(Agent.Movies):
                 try:
                     siteReleaseDate = title.xpath('./div/span[@class="meta-date"]/strong/text()[normalize-space()]')[0]
                     try:
-                        siteReleaseDate = genfunctions.matchReleaseDate(siteReleaseDate, FILMDICT)
+                        siteReleaseDate = utils.matchReleaseDate(siteReleaseDate, FILMDICT)
                         log(LOG_BIGLINE)
                     except Exception as e:
                         log('SEARCH:: Error getting Site URL Release Date: %s', e)
@@ -391,15 +311,10 @@ class WayBig(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
-        folder, filename = os.path.split(os.path.splitext(media.items[0].parts[0].file)[0])
-        log(LOG_BIGLINE)
-        log('UPDATE:: Version                      : v.%s', VERSION_NO)
-        log('UPDATE:: File Name                    : %s', filename)
-        log('UPDATE:: File Folder                  : %s', folder)
-        log(LOG_BIGLINE)
+        utils.logHeaders('UPDATE', media, lang)
 
         # Fetch HTML.
-        FILMDICT = ast.literal_eval(metadata.id)    # use ast.literal_eval does not convert strings to unicode
+        FILMDICT = json.loads(metadata.id)
         log('UPDATE:: Film Dictionary Variables:')
         for key in sorted(FILMDICT.keys()):
             log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
@@ -418,11 +333,11 @@ class WayBig(Agent.Movies):
         #        g. Collection Info      : From title group of filename 
 
         # 1a.   Set Studio
-        metadata.studio = FILMDICT['Studio'].decode('unicode-escape')
+        metadata.studio = FILMDICT['Studio']
         log('UPDATE:: Studio: %s' , metadata.studio)
 
         # 1b.   Set Title
-        metadata.title = FILMDICT['Title'].decode('unicode-escape')
+        metadata.title = FILMDICT['Title']
         log('UPDATE:: Title: %s' , metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
@@ -444,6 +359,7 @@ class WayBig(Agent.Movies):
         collections = FILMDICT['Collection']
         for collection in collections:
             metadata.collections.add(collection)
+
         log('UPDATE:: Collection Set From filename: %s', collections)
 
         #    2.  Metadata retrieved from website
@@ -453,7 +369,9 @@ class WayBig(Agent.Movies):
 
         # 2a. Tags - Waybigs stores the cast as tags
         log(LOG_BIGLINE)
+        castList = []
         try:
+            ignoreCast = ['British', 'Furry', 'Hairy', 'Hawaiian', 'Solo', 'U.K', 'United Kingdom']
             htmlcast = html.xpath('//a[contains(@href,"https://www.waybig.com/blog/tag/")]/text()')
             htmlcast = [x.replace(u'\u2019s', '') for x in htmlcast]
             htmlcast = list(set(htmlcast))
@@ -462,9 +380,22 @@ class WayBig(Agent.Movies):
             htmlcast = [x for x in htmlcast if not '.com' in x.lower()]
             htmlcast = [x for x in htmlcast if not '.net' in x.lower()]
             htmlcast = [x for x in htmlcast if not FILMDICT['Studio'].replace(' ', '').lower() in x.replace(' ', '').lower()]
+            # actors will have initial capitals for names
+            for count, cast in enumerate(htmlcast):
+                words = cast.split()
+                wordcount = len(words)
+                words = [x for x in words if x[0].isupper() and (x[1].islower() or x[1]=="'")] # cater for irish style names like O'Leary
+                capcount = len(words)
+                htmlcast[count] = cast if wordcount == capcount else ''
+
+            htmlcast = [x for x in htmlcast if x]
+
+            for cast in htmlcast:
+                if anyOf(x in cast for x in ignoreCast):
+                    continue
+                castList.append(cast)
 
         except Exception as e:
-            htmlcast = []
             log('UPDATE:: Error getting Cast: No Tags Found, Get Cast from Film Title: %s', e)
             pattern = u'([A-Z]\w+(?=[\s\-][A-Z])(?:[\s\-][A-Z]\w*)+)'
             matches = re.findall(pattern, FILMDICT['Title'])  # match against Film title
@@ -473,17 +404,17 @@ class WayBig(Agent.Movies):
                 for count, castname in enumerate(matches, 1):
                     log('UPDATE:: {0}. Found Possible Cast Name: {1}'.format(count, castname))
                     if castname:
-                        htmlcast.append(castname)
+                        castList.append(castname)
 
         try:
-            castdict = iafd.ProcessIAFD(htmlcast, FILMDICT)
+            castDict = utils.getCast(castList, FILMDICT)
             # sort the dictionary and add key(Name)- value(Photo, Role) to metadata
             metadata.roles.clear()
-            for key in sorted(castdict):
+            for key in sorted(castDict):
                 newRole = metadata.roles.new()
                 newRole.name = key
-                newRole.photo = castdict[key]['Photo']
-                newRole.role = castdict[key]['Role']
+                newRole.photo = castDict[key]['Photo']
+                newRole.role = castDict[key]['Role']
                 # add cast name to collection
                 if COLCAST:
                     metadata.collections.add(key)
@@ -505,7 +436,7 @@ class WayBig(Agent.Movies):
                     break
                 whRatio = 1.5 if index == 0 else 0.5625
                 imageType = 'Poster' if index == 0 else 'Art'
-                pic, picContent = self.getFilmImages(imageType, image, whRatio)    # height is 1.5 times the width for posters
+                pic, picContent = utils.getFilmImages(imageType, image, whRatio)    # height is 1.5 times the width for posters
                 if index == 0:      # processing posters
                     #  clean up and only keep the posters we have added
                     metadata.posters[pic] = Proxy.Media(picContent, sort_order=1)
@@ -526,20 +457,17 @@ class WayBig(Agent.Movies):
             for item in htmlsynopsis:
                 synopsis = '{0}{1}\n'.format(synopsis, item.text_content())
             log('UPDATE:: Synopsis Found: %s', synopsis)
-        except:
-            log('UPDATE:: Error getting Synopsis')
-
-        synopsis = genfunctions.NormaliseUnicode(synopsis)
-        regex = r'Watch.*at.*'
-        pattern = re.compile(regex, re.IGNORECASE)
-        synopsis = re.sub(pattern, '', synopsis)
+            pattern = re.compile(r'Watch.*at.*', re.IGNORECASE)
+            synopsis = re.sub(pattern, '', synopsis)
+            synopsis = utils.TranslateString(synopsis, lang)
+        except Exception as e:
+            log('UPDATE:: Error getting Synopsis: %s', e)
 
         # combine and update
         log(LOG_SUBLINE)
-        castLegend = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if FILMDICT['FoundOnIAFD'] == "Yes" else IAFD_THUMBSDOWN)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(castLegend, synopsis.strip())
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['CastLegend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
-        metadata.summary = genfunctions.TranslateString(summary, lang)
+        metadata.summary = summary
 
         log(LOG_BIGLINE)
         log('UPDATE:: Finished Update Routine')
