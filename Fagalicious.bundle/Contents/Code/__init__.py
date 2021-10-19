@@ -124,13 +124,24 @@ class Fagalicious(Agent.Movies):
 
         myString = myString.lower().strip()
 
-        # replace curly single apostrophes and ampersand with nothing
-        singleQuoteChars = ["'", ur'\u2018', ur'\u2019', "&"]
+        # replace ampersand with nothing
+        pattern = u'&'
+        matched = re.search(pattern, myString)  # match against whole string
+        if matched:
+            log('AGNT  :: Search Query:: Removing Single Quote Characters in string. Found one of these {0}'.format(pattern))
+            myString = re.sub(pattern, "", myString)
+            myString = ' '.join(myString.split())   # remove continous white space
+            log('AGNT  :: Amended Search Query [{0}]'.format(myString))
+        else:
+            log('AGNT  :: Search Query:: String has none of these {0}'.format(pattern))
+
+        # replace curly single apostrophes with straight quote
+        singleQuoteChars = [ur'\u2018', ur'\u2019']
         pattern = u'({0})'.format('|'.join(singleQuoteChars))
         matchedSingleQuote = re.search(pattern, myString)  # match against whole string
         if matchedSingleQuote:
-            log('AGNT  :: Search Query:: Removing Single Quote Characters in string. Found one of these {0}'.format(pattern))
-            myString = re.sub(pattern, "", myString)
+            log('AGNT  :: Search Query:: Replace Curly Single Quote Characters with Straight Quote. Found one of these {0}'.format(pattern))
+            myString = re.sub(pattern, "'", myString)
             myString = ' '.join(myString.split())   # remove continous white space
             log('AGNT  :: Amended Search Query [{0}]'.format(myString))
         else:
@@ -280,10 +291,14 @@ class Fagalicious(Agent.Movies):
                     log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
                     log(LOG_BIGLINE)
 
-                # we should have a match on studio, title and year now
+                # we should have a match on studio, title and year now. Find corresponding film on IAFD
+                log('SEARCH:: Check for Film on IAFD:')
+                utils.getFilmOnIAFD(FILMDICT)
+
+                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
+                log(LOG_BIGLINE)
                 log('SEARCH:: Finished Search Routine')
                 log(LOG_BIGLINE)
-                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
                 return
 
     # -------------------------------------------------------------------------------------------------------------------------------
@@ -455,14 +470,14 @@ class Fagalicious(Agent.Movies):
             pattern = re.compile(regex, re.IGNORECASE)
             synopsis = re.sub(pattern, '', synopsis)
 
-            synopsis = utils.TranslateString(synopsis, lang)
+            synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
 
         except Exception as e:
             log('UPDATE:: Error getting Synopsis: %s', e)
 
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['CastLegend'], synopsis.strip())
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

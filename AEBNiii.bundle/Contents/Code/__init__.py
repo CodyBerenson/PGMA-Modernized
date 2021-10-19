@@ -25,6 +25,7 @@
                                    Added iafd legend to summary
                                    improved logging
     31 Jul 2021   2020.05.21.09    Code reorganisation, use of review area for scene info
+                                   changes to xpath for film duration
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -75,7 +76,18 @@ def Start():
 # ----------------------------------------------------------------------------------------------------------------------------------
 def ValidatePrefs():
     ''' validate changed user preferences '''
-    pass
+    DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+    MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
+    DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
+    DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+    PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
+    COLCLEAR = Prefs['clearcollections']                # clear previously set collections
+    COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
+    COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
+    COLGENRE = Prefs['genrecollection']                 # add genres to collection
+    COLDIRECTOR = Prefs['directorcollection']           # add director to collection
+    COLCAST = Prefs['castcollection']                   # add cast to collection
+    COLCOUNTRY = Prefs['countrycollection']             # add country to collection
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def anyOf(iterable):
@@ -177,6 +189,7 @@ class AEBNiii(Agent.Movies):
         if matched:
             try:
                 siteReleaseDate = title.xpath('./section//li[contains(@class,"item-release-date")]/text()')[0].strip() if ExactMatches else html.xpath('//li[contains(@class,"item-release-date")]/text()')[0].strip()
+                siteReleaseDate = siteReleaseDate.replace('Sept', 'Sep')    # AEBN uses 4 letter abbreviation for September
                 log('AGNT  :: Site URL Release Date         %s', siteReleaseDate)
                 try:
                     siteReleaseDate = utils.matchReleaseDate(siteReleaseDate, FILMDICT)
@@ -192,7 +205,7 @@ class AEBNiii(Agent.Movies):
         # Site Film Duration
         if matched:
             try:
-                siteDuration = title.xpath('./section//li[contains(@class,"list-item-duration")]/text()')[0].strip() if ExactMatches else html.xpath('//li[contains(@class,"list-item-duration")]/text()')[0].strip()
+                siteDuration = title.xpath('./section//span[text()="Running Time:"]/parent::li/text()')[0].strip() if ExactMatches else html.xpath('//li[contains(@class,"list-item-duration")]/text()')[0].strip()
                 log('SEARCH:: Site Film Duration            %s', siteDuration)
                 try:
                     utils.matchDuration(siteDuration, FILMDICT, MATCHSITEDURATION)
@@ -243,7 +256,7 @@ class AEBNiii(Agent.Movies):
 
         log(LOG_BIGLINE)
 
-        # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
+        # Search Query - for use to search the internet, remove all non alphabetic characters.
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
         searchTitleList = self.CleanSearchString(FILMDICT['SearchTitle'])
         for count, searchTitle in enumerate(searchTitleList, start=1):
@@ -259,9 +272,14 @@ class AEBNiii(Agent.Movies):
 
                     # we should have a match on studio, title and year now
                     if matchedTitle:
+                        # we should have a match on studio, title and year now. Find corresponding film on IAFD
+                        log('SEARCH:: Check for Film on IAFD:')
+                        utils.getFilmOnIAFD(FILMDICT)
+
+                        results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
+                        log(LOG_BIGLINE)
                         log('SEARCH:: Finished Search Routine')
                         log(LOG_BIGLINE)
-                        results.Append(MetadataSearchResult(id=json.dumps(FILMDICT, ensure_ascii=True, separators=(',', ':')), name=FILMDICT['Title'], score=100, lang=lang))
                         return
             except Exception as e:
                 log('SEARCH:: Error: Search Query did find any Exact Movie Matches: %s', e)
@@ -280,7 +298,7 @@ class AEBNiii(Agent.Movies):
                         break   # out of WHILE loop to the FOR loop
                 except Exception as e:
                     log('SEARCH:: Error: Search Query did not pull any results: %s', e)
-                    return
+                    break
 
                 try:
                     searchQuery = html.xpath('//ul[@class="dts-pagination"]/li[@class="active" and text()!="..."]/following::li/a[@class="dts-paginator-tagging"]/@href')[0]
@@ -300,10 +318,14 @@ class AEBNiii(Agent.Movies):
                     # get film variables in dictionary format: if dict is filled we have a match
                     matchedTitle = self.matchFilmTitle(False, title, FILMDICT)
                     if matchedTitle:
-                        # we should have a match on studio, title and year now
+                        # we should have a match on studio, title and year now. Find corresponding film on IAFD
+                        log('SEARCH:: Check for Film on IAFD:')
+                        utils.getFilmOnIAFD(FILMDICT)
+
+                        results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
+                        log(LOG_BIGLINE)
                         log('SEARCH:: Finished Search Routine')
                         log(LOG_BIGLINE)
-                        results.Append(MetadataSearchResult(id=json.dumps(FILMDICT, ensure_ascii=True, separators=(',', ':')), name=FILMDICT['Title'], score=100, lang=lang))
                         return
 
     # -------------------------------------------------------------------------------------------------------------------------------
@@ -371,7 +393,7 @@ class AEBNiii(Agent.Movies):
         # 2a.   Genres
         log(LOG_BIGLINE)
         try:
-            ignoreGenres = ['feature', 'exclusive', 'new release']
+            ignoreGenres = ['exclusive', 'feature', 'high definition', 'new release', 'sale downloads', 'sale rentals', 'sale streaming']
             genres = []
             htmlgenres = html.xpath('//span[@class="dts-image-display-name"]/text()')
             htmlgenres = [x.strip() for x in htmlgenres if x.strip()]
@@ -485,48 +507,48 @@ class AEBNiii(Agent.Movies):
                     castList = htmlscene.xpath('./ul/li[descendant::span[text()="Stars:"]]/a/text()')
                     if castList:
                         castList = [x.split('(')[0] for x in castList]
-                        title = ', '.join(castList)
-                        log('UPDATE:: Title: Cast List [%s]', title)
+                        reviewSource = ', '.join(castList)
+                        log('UPDATE:: Title: Cast List [%s]', reviewSource)
                     else:
-                        title = ''
+                        reviewSource = ''
 
                     actsList = htmlscene.xpath('./ul/li[descendant::span[text()="Sex acts:"]]/a/text()')
                     if actsList:
                         actsList = [x for x in actsList if x]
-                        writing = ', '.join(actsList)
-                        log('UPDATE:: Writing: Sex Acts [%s]', writing)
+                        reviewText = ', '.join(actsList)
+                        log('UPDATE:: Writing: Sex Acts [%s]', reviewText)
                     else:
-                        writing = ''
+                        reviewText = ''
 
                     # if no title and no scene write up
-                    if not title and not writing:
+                    if not reviewSource and not reviewText:
                         continue
                     sceneCount += 1
 
                     settingsList = htmlscene.xpath('./ul/li[descendant::span[text()="Settings:"]]/a/text()')
                     if settingsList:
                         settingsList = [x for x in settingsList if x]
-                        author = ', '.join(settingsList)
-                        log('UPDATE:: Author: Setting List [%s]', author)
-                        settings = ('[{0}] Setting: {1}').format(heading.strip(), author)
+                        reviewAuthor = ', '.join(settingsList)
+                        log('UPDATE:: Author: Setting List [%s]', reviewAuthor)
+                        reviewAuthor = ('[{0}] Setting: {1}').format(heading.strip(), reviewAuthor)
                     else:
-                        author = '[{0}]'.format(heading.strip())
+                        reviewAuthor = '[{0}]'.format(heading.strip())
 
                     newReview = metadata.reviews.new()
-                    newReview.author = author
+                    newReview.author = reviewAuthor
                     newReview.link  = FILMDICT['SiteURL']
-                    if len(title) > 40:
+                    if len(reviewSource) > 40:
                         for i in range(40, -1, -1):
-                            if title[i] == ' ':
-                                title = title[0:i]
+                            if reviewSource[i] == ' ':
+                                reviewSource = reviewSource[0:i]
                                 break
-                    newReview.source = '{0}. {1}...'.format(sceneCount, title if title else FILMDICT['Title'])
-                    if len(writing) > 275:
+                    newReview.source = '{0}. {1}...'.format(sceneCount, reviewSource if reviewSource else FILMDICT['Title'])
+                    if len(reviewText) > 275:
                         for i in range(275, -1, -1):
-                            if writing[i] in ['.', '!', '?']:
-                                writing = writing[0:i + 1]
+                            if reviewText[i] in ['.', '!', '?']:
+                                reviewText = reviewText[0:i + 1]
                                 break
-                    newReview.text = utils.TranslateString(writing, lang)
+                    newReview.text = utils.TranslateString(reviewText, SITE_LANGUAGE, lang, DETECT)
                     log(LOG_SUBLINE)
                 except Exception as e:
                     log('UPDATE:: Error getting Scene No. %s: %s', count, e)
@@ -538,14 +560,14 @@ class AEBNiii(Agent.Movies):
         try:
             synopsis = html.xpath('//div[@class="dts-section-page-detail-description-body"]/text()')[0].strip()
             log('UPDATE:: Synopsis Found: %s', synopsis)
-            synopsis = utils.TranslateString(synopsis, lang)
+            synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
         except Exception as e:
             synopsis = ''
             log('UPDATE:: Error getting Synopsis: %s', e)
 
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['CastLegend'], synopsis.strip())
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

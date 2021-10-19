@@ -7,42 +7,18 @@
     Date            Version                         Modification
     07 Oct 2020   2019.12.25.21    IAFD - change to https
                                    GEVI now searches all returned results and stops if return is alphabetically greater than title
-    22 Nov 2020   2019.12.25.22    Improved generation of search string - previously titles like The 1000 Load Fuck would not match
-                                   as both first word and second word can not be used to search for movies in GEVI. i.e numeric and indefinite article
-    26 Dec 2020   2020.12.25.23    Improved on IAFD search, actors sexual roles if recorded are returned, if not shows a red circle.
-                                   if actor is not credited on IAFD but is on Agent Site it shows as a Yellow Box below the actor
-                                   sped up search by removing search by actor/director... less hits on IAFD per actor...
-    09 Jan 2021   2020.12.25.24    Adjusted poster/background image collection as website xpath had changed
-                                   change to the collection of images - first image is now poster, second image defaults to backgroun
-                                   image 3 onwards are added to both collections to give a choice.
-    09 Jan 2021   2020.12.25.25    change of xpath to images - website changed way images were placed
-    09 Feb 2021   2020.12.25.27    Moved IAFD and general functions to other py files
-                                   Enhancements to IAFD search routine, including LevenShtein Matching on Cast names
-                                   set content_rating age to 18
-                                   Set collections from filename + countries, cast and directors
-                                   Added directors photos
-                                   included studio on iafd processing of filename
-                                   Added iafd legend to summary
-                                   improved logging
-    28 Mar 2021   2020.12.25.28    Added # to list of chars to be stripped from search string, removed indefinite article/numeric strip of first word in title
-    18 Apr 2021   2020.12.25.29    Implemented code from CodeAnator to bypass CloudFlare protection on iafd website
-                                   Made year optional.....
-    03 May 2021   2020.12.25.30    removed googlesearch routine as was calling unlisted routines and was not being used in utils.py
-                                   Issue #96 - changed title sort so that 'title 21' sorts differently to 'title 12'
-                                   duration matching with iafd entries as iafd has scene titles that match with film titles
-                                   use of ast module to avoid unicode issues in some libraries
-                                   Removal of REGEX preference
-                                   code reorganisation like moving logging fuction out of class so it can be used by all imports
-    08 May 2021   2020.12.25.31    Use of duration matching
-    27 Jul 2021   2020.12.25.32    Use of review area for scene matching
+    08 May 2021   2019.12.25.31    Use of duration matching
+    27 Jul 2021   2019.12.25.32    Use of review area for scene matching
+    21 Aug 2021   2019.12.25.33    IAFD will be only searched if film found on agent Catalogue
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import json, re
 from datetime import datetime
+from helpers import clear_posters, clear_art
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.32'
+VERSION_NO = '2019.12.25.33'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 # log section separators
@@ -123,12 +99,18 @@ class GEVI(Agent.Movies):
         # convert to lower case and trim
         myString = myString.lower().strip()
 
-        # replace mr. with null
-        if ' mr. ' in myString:
-            myString = myString.replace(' mr. ', ' ')
-            log('AGNT  :: Search Query:: [{0}] after replacing " mr. "'.format(myString))
+        # replace honorifics in string with null
+        foundHonorific = False
+        honorifics = ['mr.', 'sgt.', 'lt.', 'gen.', 'cpt.']
+        for honorific in honorifics:
+            if honorific in myString:
+                myString = myString.replace(honorific, '')
+                foundHonorific = True
+
+        if foundHonorific:
+            log('AGNT  :: Search Query:: [{0}] after removing one of these {1}'.format(myString, honorifics))
         else:
-            log('AGNT  :: Search Query:: [{0}] found no " mr. "'.format(myString))
+            log('AGNT  :: Search Query:: [{0}] found none of these {0}'.format(myString, honorifics))
 
         # replace & with and
         if ' & ' in myString:
@@ -143,7 +125,7 @@ class GEVI(Agent.Movies):
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             myString = re.sub(pattern, '', myString)
-            log('AGNT  :: Search Query:: [{0}] after removing any of these {1}'.format(myString, pattern))
+            log('AGNT  :: Search Query:: [{0}] after removing one of these {1}'.format(myString, pattern))
         else:
             log('AGNT  :: Search Query:: [{0}] found none of these {0}'.format(myString, pattern))
 
@@ -153,8 +135,7 @@ class GEVI(Agent.Movies):
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             myString = re.sub(pattern, ' ', myString)
-            myString = ' '.join(myString.split())   # remove continous white space
-            log('AGNT  :: Search Query:: [{0}] after removing any of these {1}'.format(myString, pattern))
+            log('AGNT  :: Search Query:: [{0}] after removing one of these {1}'.format(myString, pattern))
         else:
             log('AGNT  :: Search Query:: [{0}] found none of these {0}'.format(myString, pattern))
 
@@ -166,8 +147,7 @@ class GEVI(Agent.Movies):
         prt = ['um', 'uma', 'uns', 'umas', 'o', 'a', 'os', 'as']
         esp = ['un', 'una', 'unos', 'unas', 'el', 'la', 'los', 'las']
         ger = ['ein', 'eine', 'eines', 'einen', 'einem', 'einer', 'das', 'die', 'der', 'dem', 'den', 'des']
-        oth = ['mr']
-        regexes = eng + fre + prt + esp + ger + oth
+        regexes = eng + fre + prt + esp + ger
         pattern = r'|'.join(r'\b{0}\b'.format(regex) for regex in regexes)
         matched = re.search(pattern, myWords[0].lower())  # match against first word
         if matched:
@@ -202,6 +182,9 @@ class GEVI(Agent.Movies):
             log('AGNT  :: Search Query:: [{0}] after splitting at position <{1}> subsequent words have some of these {2}'.format(myString, numPos, pattern))
         else:
             log('AGNT  :: Search Query:: [{0}] split not attempted. Subsequent words have none of these {1}'.format(myString, pattern))
+
+        # remove continuous spaces in string
+        myString = ' '.join(myString.split())
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())
@@ -377,16 +360,15 @@ class GEVI(Agent.Movies):
                     log(LOG_SUBLINE)
                     continue
 
-                # we should have a match on studio, title and year now
+                # we should have a match on studio, title and year now. Find corresponding film on IAFD
+                log('SEARCH:: Check for Film on IAFD:')
+                utils.getFilmOnIAFD(FILMDICT)
+
+                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
                 log(LOG_BIGLINE)
                 log('SEARCH:: Finished Search Routine')
                 log(LOG_BIGLINE)
-                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
                 return
-
-        log(LOG_BIGLINE)
-        log('SEARCH:: Finished Search Routine')
-        log(LOG_BIGLINE)
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
@@ -549,11 +531,13 @@ class GEVI(Agent.Movies):
 
             image = htmlimages[0]
             log('UPDATE:: Poster Image Found: [1] - %s', image)
+            clear_posters(metadata)
             metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.posters.validate_keys([image])
 
             image = htmlimages[1]
             log('UPDATE:: Art Image Found: [2] - %s', image)
+            clear_art(metadata)
             metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.art.validate_keys([image])
 
@@ -584,42 +568,43 @@ class GEVI(Agent.Movies):
                 log('UPDATE:: Scene No %s', count)
                 try:
                     try:
-                        title = scene.xpath('./span[@class="plist"]//text()[normalize-space()]')
-                        title = ''.join(title).strip()
-                        title = re.sub(' \(.*?\)', '', title)    # GEVI sometimes has the studio in brackets after the cast name
-                        log('UPDATE:: Scene Title: %s', title)
+                        reviewSource = scene.xpath('./span[@class="plist"]//text()[normalize-space()]')
+                        reviewSource = ''.join(reviewSource).strip()
+                        reviewSource = re.sub(' \(.*?\)', '', reviewSource)    # GEVI sometimes has the studio in brackets after the cast name
+                        log('UPDATE:: Scene Title: %s', reviewSource)
                     except:
                         log('UPDATE:: No Scene Title')
-                        title = ''
+                        reviewSource = ''
 
                     try:
-                        writing = scene.xpath('./span[@style]//text()[normalize-space()]')
-                        writing = ''.join(writing).strip()
-                        log('UPDATE:: Scene Text: %s', writing)
+                        reviewText = scene.xpath('./span[@style]//text()[normalize-space()]')
+                        reviewText = ''.join(reviewText).strip()
+                        log('UPDATE:: Scene Text: %s', reviewText)
                     except:
-                        log('UPDATE:: No Scene writing')
-                        writing = ''
+                        log('UPDATE:: No Scene Writing')
+                        reviewText = ''
 
                     # if no title and no scene write up
-                    if not title and not writing:
+                    if not reviewSource and not reviewText:
                         continue
                     sceneCount += 1
 
                     newReview = metadata.reviews.new()
                     newReview.author = legend if legend else 'GEVI'
-                    newReview.link  = FILMDICT['SiteURL']
-                    if len(title) > 40:
+                    newReview.link = FILMDICT['SiteURL']
+                    newReview.source = FILMDICT['Title']
+                    if len(reviewSource) > 40:
                         for i in range(40, -1, -1):
-                            if title[i] == ' ':
-                                title = title[0:i]
+                            if reviewSource[i] == ' ':
+                                reviewSource = reviewSource[0:i]
                                 break
-                    newReview.source = '{0}. {1}...'.format(sceneCount, title if title else FILMDICT['Title'])
-                    if len(writing) > 275:
+                    newReview.source = '{0}. {1}...'.format(sceneCount, reviewSource if reviewSource else FILMDICT['Title'])
+                    if len(reviewText) > 275:
                         for i in range(275, -1, -1):
-                            if writing[i] in ['.', '!', '?']:
-                                writing = writing[0:i + 1]
+                            if reviewText[i] in ['.', '!', '?']:
+                                reviewText = reviewText[0:i + 1]
                                 break
-                    newReview.text = utils.TranslateString(writing, lang)
+                    newReview.text = utils.TranslateString(reviewText, SITE_LANGUAGE, lang, DETECT)
                     log(LOG_SUBLINE)
                 except Exception as e:
                     log('UPDATE:: Error getting Scene No. %s: %s', count, e)
@@ -639,14 +624,14 @@ class GEVI(Agent.Movies):
             regex = r'View this scene at.*|found in compilation.*|see also.*|^\d+\.$'
             pattern = re.compile(regex, re.IGNORECASE | re.MULTILINE)
             synopsis = re.sub(pattern, '', synopsis)
-            synopsis = utils.TranslateString(synopsis, lang)
+            synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
         except Exception as e:
             synopsis = ''
             log('UPDATE:: Error getting Synopsis: %s', e)
 
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['CastLegend'], synopsis.strip())
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

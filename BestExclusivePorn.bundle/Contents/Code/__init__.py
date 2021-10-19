@@ -209,7 +209,7 @@ class BestExclusivePorn(Agent.Movies):
                 if matched:
                     siteTitle = matched.group()
                     siteStudio = re.sub(pattern, '', siteEntry).strip()
-                    log('SEARCH:: Studio and Studio from Site Entry: %s - %s', siteStudio, siteTitle)
+                    log('SEARCH:: Studio and Title from Site Entry: %s - %s', siteStudio, siteTitle)
                     log(LOG_BIGLINE)
                 else:
                     log('SEARCH:: Failed to get Studio and Title from Site Entry:')
@@ -260,10 +260,14 @@ class BestExclusivePorn(Agent.Movies):
                     log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
                     log(LOG_BIGLINE)
 
-                # we should have a match on studio, title and year now
+                # we should have a match on studio, title and year now. Find corresponding film on IAFD
+                log('SEARCH:: Check for Film on IAFD:')
+                utils.getFilmOnIAFD(FILMDICT)
+
+                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
+                log(LOG_BIGLINE)
                 log('SEARCH:: Finished Search Routine')
                 log(LOG_BIGLINE)
-                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
                 return
 
     # -------------------------------------------------------------------------------------------------------------------------------
@@ -296,7 +300,7 @@ class BestExclusivePorn(Agent.Movies):
 
         # 1b.   Set Title
         FILMDICT['Title'] = FILMDICT['Title']
-        metadata.title = " ".join(word.capitalize() if "'s" in word else word.title() for word in FILMDICT['Title'].split())
+        metadata.title = " ".join(word.capitalize() if "'s" in word or "’s" in word else word.title() for word in FILMDICT['Title'].split())
         log('UPDATE:: Title: %s' , metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
@@ -427,7 +431,7 @@ class BestExclusivePorn(Agent.Movies):
         try:
             synopsis = html.xpath('.//div[@class="entry"]/p/text()[contains(.,"Description: ")]')[0].strip().replace('Description: ', '')
             log('UPDATE:: Synopsis Found: %s', synopsis)
-            synopsis = utils.TranslateString(synopsis, lang)
+            synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
 
         except Exception as e:
             synopsis = ''
@@ -435,7 +439,7 @@ class BestExclusivePorn(Agent.Movies):
 
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['CastLegend'], synopsis.strip())
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

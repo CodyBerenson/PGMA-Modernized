@@ -294,10 +294,14 @@ class QueerClick(Agent.Movies):
                     log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
                     log(LOG_BIGLINE)
 
-                # we should have a match on studio, title and year now
+                # we should have a match on studio, title and year now. Find corresponding film on IAFD
+                log('SEARCH:: Check for Film on IAFD:')
+                utils.getFilmOnIAFD(FILMDICT)
+
+                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
+                log(LOG_BIGLINE)
                 log('SEARCH:: Finished Search Routine')
                 log(LOG_BIGLINE)
-                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
                 return
 
     # -------------------------------------------------------------------------------------------------------------------------------
@@ -430,14 +434,14 @@ class QueerClick(Agent.Movies):
             regex = r'See more.*'
             pattern = re.compile(regex, re.IGNORECASE)
             synopsis = re.sub(pattern, '', synopsis)
-            synopsis = utils.TranslateString(synopsis, lang)
+            synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
         except:
             synopsis = ''
             log('UPDATE:: Error getting Synopsis: %s', e)
 
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['CastLegend'], synopsis.strip())
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

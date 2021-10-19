@@ -13,10 +13,12 @@ General Functions found in all agents
                   Improvements to name matching, Levenshtein and Soundex and translation
                   Changes to matching films against IAFD
                   Improved iafd matching and reduction of http requests to iafd
+    20 Aug 2021   IAFD only searched after film found on Agent Website - Code Changes
+                  improved code dealing with ffprobe duration garthering - as wmv returns were in a different arrangement, causing errors
+                  show scraper name on summary legend line
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, re, subprocess, unicodedata
-from google_translate import GoogleTranslator
 from datetime import datetime
 from unidecode import unidecode
 from urlparse import urlparse
@@ -26,10 +28,6 @@ IAFD_BASE = 'https://www.iafd.com'
 IAFD_SEARCH_URL = IAFD_BASE + '/results.asp?searchtype=comprehensive&searchstring={0}'
 IAFD_ABSENT = u'\U0000274C'        # red cross mark - not on IAFD
 IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
-IAFD_THUMBSUP = u'\U0001F44D'      # thumbs up unicode character
-IAFD_THUMBSDOWN = u'\U0001F44E'    # thumbs down unicode character
-IAFD_STACKED = u'\u2003Stacked \U0001F4FD\u2003::'
-IAFD_LEGEND = u'CAST LEGEND\u2003::\u2003{2} Film on IAFD\u2003::\u2003{1} / {0} Actor on Cast List?\u2003::{3}'
 
 # getHTTPRequest variable 
 scraper = None
@@ -107,18 +105,130 @@ def getDirectors(agntDirectorList, FILMDICT):
     return directorDict
 
 # -------------------------------------------------------------------------------------------------------------------------------
-def getFilm(FILMDICT):
+def getFilmInfo(filmPath):
+    ''' Checks video information from file name '''
+    filmInfo = None
+    try:
+        command = ['ffprobe', '-v', 'fatal', '-show_entries', 'stream=duration', '-of', 'default=noprint_wrappers=1', filmPath]
+        ffprobe = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE )
+        output = ffprobe.communicate()
+        out, err = output
+        log('UTILS :: FFProbe All Output           : %s', output)
+        log('UTILS :: FFProbe Error                : %s', err if err else 'None')
+
+        filmInfo = {'duration' : 0}
+        for elem in out.split('\r\n')[:2]:                                # get first two elements
+            if 'duration' in elem:
+                filmInfo['duration'] = int(float(elem.split('=')[1])/60)  # convert seconds to minutes
+                if filmInfo['duration'] > 0:
+                    break
+
+        log('UTILS :: FFProbe Output - Duration    : %s mins', filmInfo['duration'])
+
+    except Exception as e:
+        # should error if ffmpeg is not installed
+        log('UTILS :: FFProbe Error: Duration Matching will be skipped: %s', e)
+
+    log(LOG_BIGLINE)
+
+    return filmInfo
+
+# -------------------------------------------------------------------------------------------------------------------------------
+def getFilmImages(imageType, imageURL, whRatio):
+    ''' Only for Scene Agents: get Film images - posters/background art and crop if necessary '''
+    from io import BytesIO
+    from PIL import Image
+
+    pic = imageURL
+    picContent = ''
+    picInfo = Image.open(BytesIO(HTTP.Request(pic).content))
+    width, height = picInfo.size
+    dispWidth = '{:,d}'.format(width)       # thousands separator
+    dispHeight = '{:,d}'.format(height)     # thousands separator
+
+    log('UTILS :: {0} Found: Width ({1}) x Height ({2}); URL: {3}'.format(imageType, dispWidth, dispHeight, imageURL))
+
+    maxHeight = float(width * whRatio)      # Maximum allowable height
+
+    cropHeight = float(maxHeight if maxHeight <= height else height)
+    cropWidth = float(cropHeight / whRatio)
+
+    DxHeight = 0.0 if cropHeight == height else (abs(cropHeight - height) / height) * 100.0
+    DxWidth = 0.0 if cropWidth == width else (abs(cropWidth - width) / width) * 100.0
+
+    cropRequired = True if DxWidth >= 10 or DxHeight >=10 else False
+    cropWidth = int(cropWidth)
+    cropHeight = int(cropHeight)
+    desiredWidth = '{0:,d}'.format(cropWidth)     # thousands separator
+    desiredHeight = '{0:,d}'.format(cropHeight)   # thousands separator
+    DxWidth = '{0:.2f}'.format(DxWidth)    # percent format
+    DxHeight = '{0:.2f}'.format(DxHeight)  # percent format
+    log('UTILS :: Crop {0} {1}: Actual (w{2} x h{3}), Desired (w{4} x h{5}), % Dx = w[{6}%] x h[{7}%]'.format("Required:" if cropRequired else "Not Required:", imageType, dispWidth, dispHeight, desiredWidth, desiredHeight, DxWidth, DxHeight))
+    if cropRequired:
+        try:
+            log('UTILS :: Using Thumbor to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
+            pic = THUMBOR.format(cropWidth, cropHeight, imageURL)
+            picContent = HTTP.Request(pic).content
+        except Exception as e:
+            log('UTILS :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
+            try:
+                if os.name == 'nt':
+                    log('UTILS :: Using Script to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
+                    envVar = os.environ
+                    TempFolder = envVar['TEMP']
+                    LocalAppDataFolder = envVar['LOCALAPPDATA']
+                    pic = os.path.join(TempFolder, imageURL.split("/")[-1])
+                    cmd = CROPPER.format(LocalAppDataFolder, imageURL, pic, cropWidth, cropHeight)
+                    subprocess.call(cmd)
+                    picContent = load_file(pic)
+            except Exception as e:
+                log('UTILS :: Error Script Failed to Crop Image to: {0} x {1}'.format(desiredWidth, desiredHeight))
+    else:
+        picContent = HTTP.Request(pic).content
+
+    return pic, picContent
+
+# -------------------------------------------------------------------------------------------------------------------------------
+def getFilmOnIAFD(FILMDICT):
     ''' check IAFD web site for better quality thumbnails per movie'''
     FILMDICT['Cast'] = {}
-    FILMDICT['CastLegend'] = ''
     FILMDICT['Comments'] = ''
-    FILMDICT['Compilation'] = 'No'
     FILMDICT['Directors'] = {}
     FILMDICT['FoundOnIAFD'] = 'No'
     FILMDICT['IAFDFilmURL'] = ''
-    FILMDICT['SiteURL'] = ''
     FILMDICT['Scenes'] = ''
     FILMDICT['Synopsis'] = ''
+
+    # prepare IAFD Title and Search String
+    FILMDICT['IAFDTitle'] = makeASCII(FILMDICT['ShortTitle']).replace(' - ', ': ').replace('- ', ': ')       # iafd needs colons in place to search correctly
+    FILMDICT['IAFDTitle'] = FILMDICT['IAFDTitle'].replace(' &', ' and')                                      # iafd does not use &
+    FILMDICT['IAFDTitle'] = FILMDICT['IAFDTitle'].replace('!', '')                                           # remove !
+
+    # split and take up to first occurence of character
+    splitChars = ['[', '(', ur'\u2013', ur'\u2014']
+    pattern = ur'[{0}]'.format(''.join(splitChars))
+    matched = re.search(pattern, FILMDICT['IAFDTitle'])  # match against whole string
+    if matched:
+        FILMDICT['IAFDTitle'] = FILMDICT['IAFDTitle'][:matched.start()]
+
+    # strip standalone '1's'
+    pattern = ur'(?<!\d)1(?!\d)'
+    FILMDICT['IAFDTitle'] = re.sub(pattern, '', FILMDICT['IAFDTitle'])
+
+    # strip definite and indefinite english articles
+    pattern = ur'^(The|An|A) '
+    matched = re.search(pattern, FILMDICT['IAFDTitle'], re.IGNORECASE)  # match against whole string
+    if matched:
+        FILMDICT['IAFDTitle'] = FILMDICT['IAFDTitle'][matched.end():]
+        tempCompare = SortAlphaChars(NormaliseComparisonString(FILMDICT['IAFDTitle']))
+        if tempCompare not in FILMDICT['IAFDCompareTitle']:
+            FILMDICT['IAFDCompareTitle'].append(tempCompare)
+
+    # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string, also remove '!'
+    FILMDICT['IAFDSearchTitle'] = FILMDICT['IAFDTitle']
+    FILMDICT['IAFDSearchTitle'] = String.StripDiacritics(FILMDICT['IAFDSearchTitle']).strip()
+    FILMDICT['IAFDSearchTitle'] = String.URLEncode(FILMDICT['IAFDSearchTitle'])
+    FILMDICT['IAFDSearchTitle'] = FILMDICT['IAFDSearchTitle'].replace('%25', '%').replace('*', '')
 
     # search for Film Title on IAFD
     try:
@@ -211,7 +321,6 @@ def getFilm(FILMDICT):
             # if we get here we have found a film match
             FILMDICT['FoundOnIAFD'] = 'Yes'
             FILMDICT['IAFDFilmURL'] = iafdfilmURL
-            FILMDICT['SiteURL'] = iafdfilmURL   # initially assign the IAFD url to the SiteURL
 
             # check if film is a compilation
             try:
@@ -272,89 +381,19 @@ def getFilm(FILMDICT):
     except Exception as e:
         log('UTILS :: Error: IAFD Film Search Failure, %s', e)
 
+    # set up the the legend that can be prefixed/suffixed to the film summary 
+    IAFD_ThumbsUp = u'\U0001F44D'      # thumbs up unicode character
+    IAFD_ThumbsDown = u'\U0001F44E'    # thumbs down unicode character
+    IAFD_Stacked = u'\u2003Stacked \U0001F4FD\u2003::'
+    agentName = u'\u2003{0}\u2003::'.format(FILMDICT['Agent'])
+    IAFD_Legend = u'::\u2003Film on IAFD {2}\u2003::\u2003{1} / {0} Actor on Cast List?\u2003::{3}{4}'
+    presentOnIAFD = IAFD_ThumbsUp if FILMDICT['FoundOnIAFD'] == 'Yes' else IAFD_ThumbsDown
+    stackedStatus = IAFD_Stacked if FILMDICT['Stacked'] == 'Yes' else ''
+    FILMDICT['Legend'] = IAFD_Legend.format(IAFD_ABSENT, IAFD_FOUND, presentOnIAFD, stackedStatus, agentName)
+
     return FILMDICT
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-def getFilmInfo(filmPath) :
-    ''' Checks video information from file name '''
-    FilmInfo = None
-    try:
-        command = ['ffprobe', '-v', 'fatal', '-show_entries', 'stream=width,height,r_frame_rate,duration', '-of', 'default=noprint_wrappers=1:nokey=1', filmPath, '-sexagesimal']
-        ffmpeg = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE )
-        out, err = ffmpeg.communicate()
-        if err:
-            log('UTILS :: FFProbe Issues: %s', err)
-
-        out = out.split('\n')
-        filmLength = [float(x.strip()) for x in out[3].split(':')]
-        duration = int(filmLength[0] * 60 + filmLength[1])
-
-        FilmInfo = {'width': int(out[0]),
-                    'height': int(out[1]),
-                    'fps': float(out[2].split('/')[0])/float(out[2].split('/')[1]),
-                    'duration': duration}
-    except Exception as e:
-        # should error if ffmpeg is not installed
-        log('UTILS :: FFProbe Error: Duration Matching will be skipped: %s', e)
-
-    return FilmInfo
-
-# -------------------------------------------------------------------------------------------------------------------------------
-def getFilmImages(imageType, imageURL, whRatio):
-    ''' Only for Scene Agents: get Film images - posters/background art and crop if necessary '''
-    from io import BytesIO
-    from PIL import Image
-
-    pic = imageURL
-    picContent = ''
-    picInfo = Image.open(BytesIO(HTTP.Request(pic).content))
-    width, height = picInfo.size
-    dispWidth = '{:,d}'.format(width)       # thousands separator
-    dispHeight = '{:,d}'.format(height)     # thousands separator
-
-    log('UTILS :: {0} Found: Width ({1}) x Height ({2}); URL: {3}'.format(imageType, dispWidth, dispHeight, imageURL))
-
-    maxHeight = float(width * whRatio)      # Maximum allowable height
-
-    cropHeight = float(maxHeight if maxHeight <= height else height)
-    cropWidth = float(cropHeight / whRatio)
-
-    DxHeight = 0.0 if cropHeight == height else (abs(cropHeight - height) / height) * 100.0
-    DxWidth = 0.0 if cropWidth == width else (abs(cropWidth - width) / width) * 100.0
-
-    cropRequired = True if DxWidth >= 10 or DxHeight >=10 else False
-    cropWidth = int(cropWidth)
-    cropHeight = int(cropHeight)
-    desiredWidth = '{0:,d}'.format(cropWidth)     # thousands separator
-    desiredHeight = '{0:,d}'.format(cropHeight)   # thousands separator
-    DxWidth = '{0:.2f}'.format(DxWidth)    # percent format
-    DxHeight = '{0:.2f}'.format(DxHeight)  # percent format
-    log('UTILS :: Crop {0} {1}: Actual (w{2} x h{3}), Desired (w{4} x h{5}), % Dx = w[{6}%] x h[{7}%]'.format("Required:" if cropRequired else "Not Required:", imageType, dispWidth, dispHeight, desiredWidth, desiredHeight, DxWidth, DxHeight))
-    if cropRequired:
-        try:
-            log('UTILS :: Using Thumbor to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
-            pic = THUMBOR.format(cropWidth, cropHeight, imageURL)
-            picContent = HTTP.Request(pic).content
-        except Exception as e:
-            log('UTILS :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
-            try:
-                if os.name == 'nt':
-                    log('UTILS :: Using Script to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
-                    envVar = os.environ
-                    TempFolder = envVar['TEMP']
-                    LocalAppDataFolder = envVar['LOCALAPPDATA']
-                    pic = os.path.join(TempFolder, imageURL.split("/")[-1])
-                    cmd = CROPPER.format(LocalAppDataFolder, imageURL, pic, cropWidth, cropHeight)
-                    subprocess.call(cmd)
-                    picContent = load_file(pic)
-            except Exception as e:
-                log('UTILS :: Error Script Failed to Crop Image to: {0} x {1}'.format(desiredWidth, desiredHeight))
-    else:
-        picContent = HTTP.Request(pic).content
-
-    return pic, picContent
-
-# -------------------------------------------------------------------------------------------------------------------------------
 def getHTTPRequest(url, **kwargs):
     headers = kwargs.pop('headers', {})
     cookies = kwargs.pop('cookies', {})
@@ -381,7 +420,7 @@ def getHTTPRequest(url, **kwargs):
 
     HTTPRequest = None
     try:
-        log('UTILS :: CloudScraper Request         \t%s', url)
+        log('UTILS :: CloudScraper Request           %s', url)
         if scraper is None:
             scraper = cloudscraper.CloudScraper()
             scraper.headers.update(headers)
@@ -531,12 +570,13 @@ def logHeaders(header, media, lang):
     log('%s:: Platform                     : %s - %s %s', header, platform.machine(), platform.system(), platform.release())
     log('%s:: Preferences:', header)
     log('%s::  > Cast Legend Before Summary: %s', header, PREFIXLEGEND)
+    log('%s::  > Clear Previous Collections: %s - %s', header, COLCLEAR, type(COLCLEAR))
     log('%s::  > Collection Gathering', header)
-    log('%s::      > Cast                  : %s', header, COLCAST)
-    log('%s::      > Director(s)           : %s', header, COLDIRECTOR)
-    log('%s::      > Studio                : %s', header, COLSTUDIO)
-    log('%s::      > Film Title            : %s', header, COLTITLE)
-    log('%s::      > Genres                : %s', header, COLGENRE)
+    log('%s::      > Cast                  : %s - %s', header, COLCAST, type(COLCAST))
+    log('%s::      > Director(s)           : %s - %s', header, COLDIRECTOR, type(COLDIRECTOR))
+    log('%s::      > Studio                : %s - %s', header, COLSTUDIO, type(COLSTUDIO))
+    log('%s::      > Film Title            : %s - %s', header, COLTITLE, type(COLTITLE))
+    log('%s::      > Genres                : %s - %s', header, COLGENRE, type(COLGENRE))
     log('%s::  > Match Site Duration       : %s', header, MATCHSITEDURATION)
     log('%s::  > Duration Difference       : ±%s Minutes', header, DURATIONDX)
     log('%s::  > Language Detection        : %s', header, DETECT)
@@ -1027,6 +1067,7 @@ def matchDirectors(agntDirectorList, FILMDICT):
 def matchFilename(filmPath):
     ''' Check filename on disk corresponds to regex preference format '''
     filmVars = {}
+    filmVars['Agent'] = PLUGIN_LOG_TITLE
 
     # file matching pattern
     filmVars['FileName'] = os.path.basename(filmPath)
@@ -1043,16 +1084,17 @@ def matchFilename(filmPath):
 
     groups = matched.groupdict()
     filmVars['Format'] = '(Studio) - Title' if groups['Year0'] is None else '(Studio) - Title (Year)'
-    studio = groups['Studio1'] if groups['Year0'] is None else groups['Studio0']
-    filmVars['Studio'] = studio.split(';')[0].strip() if ';' in studio else studio
-    filmVars['IAFDStudio'] = studio.split(';')[1].strip() if ';' in studio else ''
+    filmVars['FileStudio'] = groups['Studio1'] if groups['Year0'] is None else groups['Studio0']
+    filmVars['Studio'] = filmVars['FileStudio'].split(';')[0].strip() if ';' in filmVars['FileStudio'] else filmVars['FileStudio']
     filmVars['CompareStudio'] = NormaliseComparisonString(filmVars['Studio'])
+    filmVars['IAFDStudio'] = filmVars['FileStudio'].split(';')[1].strip() if ';' in filmVars['FileStudio'] else ''
     filmVars['CompareIAFDStudio'] = NormaliseComparisonString(filmVars['IAFDStudio']) if filmVars['IAFDStudio'] else ''
 
     filmVars['Title'] =  groups['Title1'] if groups['Year0'] is None else groups['Title0']
     filmVars['SearchTitle'] = filmVars['Title']
     filmVars['ShortTitle'] = filmVars['Title']
     filmVars['CompareTitle'] = [SortAlphaChars(NormaliseComparisonString(filmVars['ShortTitle']))]
+
     # if film starts with a determinate, strip the detrminate and add the title to the comparison list
     pattern = ur'^(The |An |A )'
     matched = re.search(pattern, filmVars['ShortTitle'], re.IGNORECASE)  # match against whole string
@@ -1105,42 +1147,6 @@ def matchFilename(filmPath):
         filmVars['CompareTitle'].append(SortAlphaChars(NormaliseComparisonString(filmVars['ShortTitle'])))
     filmVars['SearchTitle'] = filmVars['ShortTitle']
     
-    # prepare IAFD Title and Search String
-    filmVars['IAFDTitle'] = makeASCII(filmVars['ShortTitle']).replace(' - ', ': ').replace('- ', ': ')       # iafd needs colons in place to search correctly, removed all unicode
-    filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace(' &', ' and')                                      # iafd does not use &
-    filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace('!', '')                                           # remove !
-
-    # split and take up to first occurence of character
-    splitChars = ['[', '(', ur'\u2013', ur'\u2014']
-    pattern = ur'[{0}]'.format(''.join(splitChars))
-    matched = re.search(pattern, filmVars['IAFDTitle'])  # match against whole string
-    if matched:
-        filmVars['IAFDTitle'] = filmVars['IAFDTitle'][:matched.start()]
-
-    # strip standalone '1's'
-    pattern = ur'(?<!\d)1(?!\d)'
-    filmVars['IAFDTitle'] = re.sub(pattern, '', filmVars['IAFDTitle'])
-
-    # strip definite and indefinite english articles
-    pattern = ur'^(The|An|A) '
-    matched = re.search(pattern, filmVars['IAFDTitle'], re.IGNORECASE)  # match against whole string
-    if matched:
-        filmVars['IAFDTitle'] = filmVars['IAFDTitle'][matched.end():]
-        tempCompare = SortAlphaChars(NormaliseComparisonString(filmVars['IAFDTitle']))
-        if tempCompare not in filmVars['IAFDCompareTitle']:
-            filmVars['IAFDCompareTitle'].append(tempCompare)
-
-    # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string, also remove '!'
-    filmVars['IAFDSearchTitle'] = filmVars['IAFDTitle']
-    filmVars['IAFDSearchTitle'] = String.StripDiacritics(filmVars['IAFDSearchTitle']).strip()
-    filmVars['IAFDSearchTitle'] = String.URLEncode(filmVars['IAFDSearchTitle'])
-    filmVars['IAFDSearchTitle'] = filmVars['IAFDSearchTitle'].replace('%25', '%').replace('*', '')
-
-    # search for IAFD film
-    log('UTILS :: Check for Film on IAFD:')
-    filmVars = getFilm(filmVars)
-    filmVars['CastLegend'] = IAFD_LEGEND.format(IAFD_ABSENT, IAFD_FOUND, IAFD_THUMBSUP if filmVars['FoundOnIAFD'] == 'Yes' else IAFD_THUMBSDOWN, IAFD_STACKED if filmVars['Stacked'] == 'Yes' else '')
-
     # print out dictionary values / normalise unicode
     log('UTILS :: Film Dictionary Variables:')
     for key in sorted(filmVars.keys()):
@@ -1153,12 +1159,12 @@ def matchFilename(filmPath):
 def matchDuration(siteDuration, FILMDICT, matchDuration=True):
     ''' match file duration against iafd duration: Only works if ffmpeg is installed and duration recorded: Boolean Return '''
     siteDuration = siteDuration.strip()
-    fileDuration = 0
+    fileDuration = int(FILMDICT['Duration'])
     testDuration = True
 
     if FILMDICT['Stacked'] == 'Yes':
         testDuration = 'Skipped - Movie in Parts [Stacked]'
-    elif siteDuration and matchDuration == True and FILMDICT['Duration']:
+    elif siteDuration and matchDuration == True and fileDuration > 0:
         if ':' in siteDuration:
             # convert hours and minutes to minutes if time is in format hh:mm:ss OR mm:ss (assume film can not be longer than 5 hours)
             siteDuration = siteDuration.split(':')
@@ -1173,7 +1179,6 @@ def matchDuration(siteDuration, FILMDICT, matchDuration=True):
             # assume time is in minutes: first convert to float incase there is a decimal point
             siteDuration = int(float(siteDuration))
 
-        fileDuration = int(FILMDICT['Duration'])
         testDuration = 'Passed' if abs(fileDuration - siteDuration) <= DURATIONDX else 'Failed'
     else:
         testDuration = 'Skipped - Duration Requirements Not Met'
@@ -1295,8 +1300,8 @@ def NormaliseComparisonString(myString):
     # change string to ASCII
     myString = makeASCII(myString)
 
-    # strip domain suffixes, vol., volume from string, standalone '1's'
-    pattern = ur'[.]([a-z]{2,3}|co[.][a-z]{2})|Vol[.]|Vols[.]|\bVolume\b|\bVolumes\b|(?<!\d)1(?!\d)|\bPart\b|[^A-Za-z0-9]+'
+    # strip domain suffixes, vol., volume from string, standalone '1's', resolution
+    pattern = ur'[.]([a-z]{2,3}|co[.][a-z]{2})|Vol[.]|Vols[.]|\bVolume\b|\bVolumes\b|(?<!\d)1(?!\d)|\bPart\b|[^A-Za-z0-9]+|\d{3,4}p'
     myString = re.sub(pattern, '', myString, flags=re.IGNORECASE)
 
     return myString
@@ -1371,13 +1376,15 @@ def soundex(name, len=5):
     return (sndx + (len * '0'))[:len]
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-def TranslateString(myString, languageCode):
+def TranslateString(myString, siteLanguage, plexLibLanguageCode, detectLanguage):
     ''' Translate string into Library language '''
+    from google_translate import GoogleTranslator
+
     myString = myString.strip()
     saveString = myString
     msg = ''
-    if languageCode == 'xn' or languageCode == 'xx':    # no language or language unknown
-        log('UTILS :: Run Translation: [Skip] - Library Language: [%s]', 'No Language' if languageCode == 'xn' else 'Unknown')
+    if plexLibLanguageCode == 'xn' or plexLibLanguageCode == 'xx':    # no language or language unknown
+        log('UTILS :: Run Translation: [Skip] - Library Language: [%s]', 'No Language' if plexLibLanguageCode == 'xn' else 'Unknown')
     elif myString:
         dictLanguages = {'af' : 'afrikaans', 'sq' : 'albanian', 'ar' : 'arabic', 'hy' : 'armenian', 'az' : 'azerbaijani', 'eu' : 'basque', 'be' : 'belarusian', 'bn' : 'bengali', 'bs' : 'bosnian', 
                             'bg' : 'bulgarian', 'ca' : 'catalan', 'ceb' : 'cebuano', 'ny' : 'chichewa', 'zh-cn' : 'chinese simplified', 'zh-tw' : 'chinese traditional', 'zh-cn' : '#chinese simplified', 
@@ -1389,19 +1396,19 @@ def TranslateString(myString, languageCode):
                             'my' : 'myanmar (burmese)', 'ne' : 'nepali', 'no' : 'norwegian', 'fa' : 'persian', 'pl' : 'polish', 'pt' : 'portuguese', 'ma' : 'punjabi', 'ro' : 'romanian', 'ru' : 'russian', 
                             'sr' : 'serbian', 'st' : 'sesotho', 'si' : 'sinhala', 'sk' : 'slovak', 'sl' : 'slovenian', 'so' : 'somali', 'es' : 'spanish', 'su' : 'sudanese', 'sw' : 'swahili', 'sv' : 'swedish', 
                             'tg' : 'tajik', 'ta' : 'tamil', 'te' : 'telugu', 'th' : 'thai', 'tr' : 'turkish', 'uk' : 'ukrainian', 'ur' : 'urdu', 'uz' : 'uzbek', 'vi' : 'vietnamese', 'cy' : 'welsh', 'yi' : 'yiddish', 'yo' : 'yoruba', 'zu' : 'zulu'}
-        language = dictLanguages.get(languageCode)
+        language = dictLanguages.get(plexLibLanguageCode)
 
         translator = GoogleTranslator()
-        runTranslation = 'Yes' if languageCode != SITE_LANGUAGE else 'No'
-        msg = 'Run Translation: [{0}] - Site Language: [{1}] to Library Language: [{2}]'.format(runTranslation, dictLanguages.get(SITE_LANGUAGE), language)
-        if DETECT and runTranslation == 'No':
+        runTranslation = 'Yes' if plexLibLanguageCode != siteLanguage else 'No'
+        msg = 'Run Translation: [{0}] - Site Language: [{1}] to Library Language: [{2}]'.format(runTranslation, dictLanguages.get(siteLanguage), language)
+        if detectLanguage and runTranslation == 'No':
             try:
                 detectString = re.findall(ur'.*?[.!?]', myString)[:4]   # take first 4 sentences of string to detect language
                 detectString = ''.join(detectString)
                 if detectString:
-                    detectedLanguage = translator.detect(detectString)
-                    runTranslation = 'Yes' if language != detectedLanguage else 'No'
-                    msg = 'Run Translation: [{0}] - Detected Language: [{1}] to Library Language: [{2}]'.format(runTranslation, detectedLanguage, language)
+                    detectedTextLanguage = translator.detect(detectString)
+                    runTranslation = 'Yes' if language != detectedTextLanguage else 'No'
+                    msg = 'Run Translation: [{0}] - Detected Language: [{1}] to Library Language: [{2}]'.format(runTranslation, detectedTextLanguage, language)
                 else:
                     msg = 'Run Translation: [{0}] - Not enough available text to detect language'.format(runTranslation)
             except Exception as e:
@@ -1418,7 +1425,7 @@ def TranslateString(myString, languageCode):
                 except Exception as e:
                     log('UTILS :: Error Translating Text: %s', e)
             else:
-                log('UTILS :: Translation Skipped: Language Code [%s] not recognised', languageCode)
+                log('UTILS :: Translation Skipped: Language Code [%s] not recognised', plexLibLanguageCode)
 
     myString = myString if myString else ' ' # return single space to initialise metadata summary field
     return myString

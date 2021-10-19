@@ -143,6 +143,7 @@ class GayDVDEmpire(Agent.Movies):
             log('SEARCH:: Error: %s', e)
             return
 
+        FILMDICT['Scraper'] = GayDVDEmpire.name
         log(LOG_BIGLINE)
 
         # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
@@ -242,10 +243,14 @@ class GayDVDEmpire(Agent.Movies):
                         log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
                         log(LOG_BIGLINE)
 
-                # we should have a match on studio, title and year now
+                # we should have a match on studio, title and year now. Find corresponding film on IAFD
+                log('SEARCH:: Check for Film on IAFD:')
+                utils.getFilmOnIAFD(FILMDICT)
+
+                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
+                log(LOG_BIGLINE)
                 log('SEARCH:: Finished Search Routine')
                 log(LOG_BIGLINE)
-                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
                 return
 
     # -------------------------------------------------------------------------------------------------------------------------------
@@ -451,7 +456,7 @@ class GayDVDEmpire(Agent.Movies):
                             if writing[i] in ['.', '!', '?']:
                                 writing = writing[0:i + 1]
                                 break
-                    newReview.text = utils.TranslateString(writing, lang)
+                    newReview.text = utils.TranslateString(writing, SITE_LANGUAGE, lang, DETECT)
                     log(LOG_SUBLINE)
                 except Exception as e:
                     log('UPDATE:: Error getting Scene No. %s: %s', count, e)
@@ -465,14 +470,14 @@ class GayDVDEmpire(Agent.Movies):
             synopsis = html.xpath('//div[@class="col-xs-12 text-center p-y-2 bg-lightgrey"]/div/p')[0].text_content().strip()
             synopsis = re.sub('<[^<]+?>', '', synopsis)
             log('UPDATE:: Synopsis Found: %s', synopsis)
-            synopsis = utils.TranslateString(synopsis, lang)
+            synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
         except Exception as e:
             synopsis = ''
             log('UPDATE:: Error getting Synopsis: %s', e)
 
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['CastLegend'], synopsis.strip())
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

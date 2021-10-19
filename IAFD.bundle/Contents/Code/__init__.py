@@ -152,12 +152,15 @@ class IAFD(Agent.Movies):
             return
 
         log(LOG_BIGLINE)
+        log('SEARCH:: Check for Film on IAFD:')
+        utils.getFilmOnIAFD(FILMDICT)
 
         if FILMDICT['FoundOnIAFD'] == 'Yes':
             results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
-            log(LOG_BIGLINE)
 
+        log(LOG_BIGLINE)
         log('SEARCH:: Finished Search Routine')
+        log(LOG_BIGLINE)
         return
 
     # -------------------------------------------------------------------------------------------------------------------------------
@@ -287,7 +290,7 @@ class IAFD(Agent.Movies):
                         if writing[i] in ['.', '!', '?']:
                             writing = writing[0:i + 1]
                             break
-                newReview.text = utils.TranslateString(writing, lang)
+                newReview.text = utils.TranslateString(writing, SITE_LANGUAGE, lang, DETECT)
                 log(LOG_SUBLINE)
         else:
             log('UPDATE:: Error No Scenes Recorded')
@@ -314,8 +317,8 @@ class IAFD(Agent.Movies):
         # combine and update
         log(LOG_SUBLINE)
         summary = ('{0}\n{1}').format(synopsis.strip(), comments.strip())
-        summary = utils.TranslateString(summary, lang)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['CastLegend'], summary)
+        summary = utils.TranslateString(summary, SITE_LANGUAGE, lang, DETECT)
+        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], summary)
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 
