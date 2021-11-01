@@ -204,19 +204,20 @@ class AEBNiii(Agent.Movies):
 
         # Site Film Duration
         if matched:
-            try:
-                siteDuration = title.xpath('./section//span[text()="Running Time:"]/parent::li/text()')[0].strip() if ExactMatches else html.xpath('//li[contains(@class,"list-item-duration")]/text()')[0].strip()
-                log('SEARCH:: Site Film Duration            %s', siteDuration)
+            if MATCHSITEDURATION:
                 try:
-                    utils.matchDuration(siteDuration, FILMDICT, MATCHSITEDURATION)
-                    log(LOG_BIGLINE)
-                except Exception as e:
-                    log('SEARCH:: Error getting Site Film Duration: %s', e)
+                    siteDuration = title.xpath('//span[text()="Running Time:"]/parent::li/text()')[0].strip() if ExactMatches else html.xpath('//span[text()="Running Time:"]/parent::li/text()')[0].strip()
+                    log('SEARCH:: Site Film Duration            %s', siteDuration)
+                    try:
+                        utils.matchDuration(siteDuration, FILMDICT, MATCHSITEDURATION)
+                        log(LOG_BIGLINE)
+                    except Exception as e:
+                        log('SEARCH:: Error getting Site Film Duration: %s', e)
+                        log(LOG_SUBLINE)
+                        matched = False
+                except:
+                    log('AGNT  :: Error getting Site Film Duration')
                     log(LOG_SUBLINE)
-                    matched = False
-            except:
-                log('AGNT  :: Error getting Site Film Duration')
-                log(LOG_SUBLINE)
 
         return matched
 

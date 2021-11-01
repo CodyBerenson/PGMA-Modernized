@@ -251,6 +251,11 @@ class GEVI(Agent.Movies):
                 # Site Title
                 try:
                     siteTitle = title[0].text_content().strip()
+                    unwantedWords = ['[sic]']
+                    for unwantedWord in unwantedWords:
+                        if unwantedWord in siteTitle:
+                            siteTitle = siteTitle.replace(unwantedWord, '')
+
                     utils.matchTitle(siteTitle, FILMDICT)
                     log(LOG_BIGLINE)
                 except Exception as e:
@@ -350,15 +355,74 @@ class GEVI(Agent.Movies):
                             continue
 
                 # Duration
+                if MATCHSITEDURATION:
+                    try:
+                        siteDuration = html.xpath('//td[.="length"]/following-sibling::td[1]/text()[normalize-space()]')[0].strip()
+                        log('SEARCH:: Site Film Duration            %s Minutes', siteDuration)
+                        utils.matchDuration(siteDuration, FILMDICT, MATCHSITEDURATION)
+                        log(LOG_BIGLINE)
+                    except Exception as e:
+                        log('SEARCH:: Error getting Site Film Duration: %s', e)
+                        log(LOG_SUBLINE)
+                        continue
+
+                # GEVI usually sets its Genre to General Hardcore rather than having a more robust system like other websites, however it stores links to the film on the other websites
+                # Check AEBN/GayDVDEmpire/GayHotMovies Links and take genre information from them: Store them as 'Genres'Key in FILMDICT
+                FilmLinks = {}
+                ignoreGenres = ['exclusive', 'feature', 'high definition', 'new release', 'sale downloads', 'sale rentals', 'sale streaming', 'sale', '4k ultra hd', 'language', 'gay', 'movies', 'website', 'settings', 'locale', 'plot', 'character']
+                genres = {}
                 try:
-                    siteDuration = html.xpath('//td[.="length"]/following-sibling::td[1]/text()[normalize-space()]')[0].strip()
-                    log('SEARCH:: Site Film Duration            %s Minutes', siteDuration)
-                    utils.matchDuration(siteDuration, FILMDICT, MATCHSITEDURATION)
-                    log(LOG_BIGLINE)
+                    webURLs = html.xpath('//td[contains(text(),"this production at")]/a/@href')
+                    for webURL in webURLs:
+                        if webURL not in FilmLinks:        # links are sometimes duplicated in GEVI
+                            FilmLinks[webURL] = ''
+                            fhtml = HTML.ElementFromURL(webURL, sleep=DELAY)
+                            if 'aebn' in webURL:
+                                fhtmlgenres = fhtml.xpath('//span[@class="dts-image-display-name"]/text()')
+                                fhtmlgenres = [x.strip() for x in fhtmlgenres if x.strip()]
+                                log('SEARCH:: AEBN Genres                   %s', fhtmlgenres)
+                                for genre in fhtmlgenres:
+                                    if anyOf(x in genre.lower() for x in ignoreGenres):
+                                        continue
+                                    if genre not in genres:
+                                        genres[genre] = ''
+                                    if 'compilation' in genre.lower():
+                                        FILMDICT['Compilation'] = 'Compilation'
+                            elif 'gayhotmovies' in webURL:
+                                fhtmlgenres = fhtml.xpath('//a[contains(@href,"https://www.gayhotmovies.com/category/")]/@title')
+                                fhtmlgenres = [x.strip() for x in fhtmlgenres if x.strip()]
+                                log('SEARCH:: GayHotMovies Genres           %s', fhtmlgenres)
+                                for genre in fhtmlgenres:
+                                    if anyOf(x in genre.lower() for x in ignoreGenres):
+                                        continue
+                                    elif 'international' in genre.lower():
+                                        continue
+                                    else:
+                                        genre = genre.replace('Bareback ->', 'Bareback ')
+                                        genre = genre.split('->')[-1]
+                                    if genre not in genres:
+                                        genres[genre] = ''
+                                    if 'compilation' in genre.lower():
+                                        FILMDICT['Compilation'] = 'Compilation'
+                            elif 'gaydvdempire' in webURL:
+                                fhtmlgenres = fhtml.xpath('//ul[@class="list-unstyled m-b-2"]//a[@label="Category"]/text()[normalize-space()]')
+                                fhtmlgenres = [x.strip() for x in fhtmlgenres if x.strip()]
+                                log('SEARCH:: GayDVDEmpire Genres           %s', fhtmlgenres)
+                                for genre in fhtmlgenres:
+                                    if anyOf(x in genre.lower() for x in ignoreGenres):
+                                        continue
+                                    if genre not in genres:
+                                        genres[genre] = ''
+                                    if 'compilation' in genre.lower():
+                                        FILMDICT['Compilation'] = 'Compilation'
+
                 except Exception as e:
-                    log('SEARCH:: Error getting Site Film Duration: %s', e)
+                    log('SEARCH:: Error getting View Production Links: %s', e)
                     log(LOG_SUBLINE)
-                    continue
+                
+                finally:
+                    FILMDICT['Genres'] = genres
+                    log('SEARCH:: Genres Found                  %s', genres)
 
                 # we should have a match on studio, title and year now. Find corresponding film on IAFD
                 log('SEARCH:: Check for Film on IAFD:')
@@ -436,8 +500,14 @@ class GEVI(Agent.Movies):
         # 2a.   Genre
         log(LOG_BIGLINE)
         try:
-            htmlgenres = html.xpath('//td[contains(text(),"category")]//following-sibling::td[1]/text()')
+            genres = FILMDICT['Genres']
+            htmlgenres = html.xpath('//td[contains(text(),"category")]//following-sibling::td[1]/text()') # add GEVI genres to those possibly found in AEBN/GayDVDEmpire/GayHotMovies
             htmlgenres = [x.strip() for x in htmlgenres if x.strip()]
+            for genre in htmlgenres:
+                if genre not in genres:
+                    genres[genre] = ''
+            # reset htmlgenres to be a list containing keys of the genre dictionary
+            htmlgenres = list(genres.keys())
             htmlgenres.sort()
             log('UPDATE:: %s Genres Found: %s', len(htmlgenres), htmlgenres)
             metadata.genres.clear()

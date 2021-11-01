@@ -420,7 +420,7 @@ def getHTTPRequest(url, **kwargs):
 
     HTTPRequest = None
     try:
-        log('UTILS :: CloudScraper Request           %s', url)
+        log('UTILS :: CloudScraper Request          %s', url)
         if scraper is None:
             scraper = cloudscraper.CloudScraper()
             scraper.headers.update(headers)
@@ -843,6 +843,7 @@ def matchDirectors(agntDirectorList, FILMDICT):
 
     useFullCareer = True if FILMDICT['Year'] else False  
 
+    log('UTILS :: TEST Unmatched Directors %s', agntDirectorList)
     for agntDirector in agntDirectorList:
         compareAgntDirector = re.sub(r'[\W\d_]', '', agntDirector).strip().lower()
 
@@ -852,9 +853,9 @@ def matchDirectors(agntDirectorList, FILMDICT):
         matchedName = False
         for key, value in FILMDICT['Directors'].items():
             IAFDName = makeASCII(key)
-            IAFDAlias = makeASCII(value['Alias'])
-            IAFDCompareName = makeASCII(value['CompareName'])
-            IAFDCompareAlias = makeASCII(value['CompareAlias'])
+            IAFDAlias = [makeASCII(x) for x in value['Alias']] if type(value['Alias']) is list else makeASCII(value['Alias'])
+            IAFDCompareName = [makeASCII(x) for x in value['CompareName']] if type(value['CompareName']) is list else makeASCII(value['CompareName'])
+            IAFDCompareAlias = [makeASCII(x) for x in value['CompareAlias']] if type(value['CompareAlias']) is list else makeASCII(value['CompareAlias'])
 
             # 1st full match against director name
             matchedName = False
@@ -883,11 +884,14 @@ def matchDirectors(agntDirectorList, FILMDICT):
 
             # Lehvensten and Soundex Matching
             levDistance = len(agntDirector.split()) + 1 if len(agntDirector.split()) > 1 else 1 # Set Lehvenstein Distance - one change/word+1 of cast names or set to 1
-            testName = IAFDName if levDistance > 1 else IAFDName.split()[0] if IAFDName else ''
-            testAlias = IAFDAlias if levDistance > 1 else IAFDAlias.split()[0] if IAFDAlias else ''
             testNameType = 'Full Names' if levDistance > 1 else 'First Name' 
+            testName = IAFDName if levDistance > 1 else IAFDName.split()[0] if IAFDName else ''
+            if IAFDAlias is list:
+                testAlias = [x if levDistance > 1 else x.split()[0] for x in IAFDAlias]
+            else:
+                testAlias = IAFDAlias if levDistance > 1 else IAFDAlias.split()[0] if IAFDAlias else ''
 
-            # 5th Lehvenstein Match against Cast Name
+            # 5th Lehvenstein Match against Director Name
             levScore = String.LevenshteinDistance(agntDirector, testName)
             matchedName = levScore <= levDistance
             if matchedName:
@@ -899,10 +903,16 @@ def matchDirectors(agntDirectorList, FILMDICT):
                 log(LOG_SUBLINE)
                 break
 
-            # 6th Lehvenstein Match against Cast Alias
+            # 6th Lehvenstein Match against Director Alias
             if testAlias:
-                levScore = String.LevenshteinDistance(agntDirector, testAlias)
-                matchedName = levScore <= levDistance
+                levScore = [String.LevenshteinDistance(agntDirector, x) for x in testAlias] if type(testAlias) is list else String.LevenshteinDistance(agntDirector, testAlias)
+                if type(levScore) is list:
+                    for x in levScore:
+                        matchedName = x <= levDistance
+                        if matchedName:
+                            break
+                else:
+                    matchedName = levScore <= levDistance
                 if matchedName:
                     log('UTILS :: Levenshtein Match:           \tUse %s on IAFD', testNameType)
                     log('UTILS ::                              \tIAFD Director Alias : %s', testAlias)
@@ -913,9 +923,9 @@ def matchDirectors(agntDirectorList, FILMDICT):
                     break
 
             # 7th Soundex Matching on Cast Name
-            soundIAFD = soundex(testName)
+            soundIAFD = [soundex(x) for x in testName] if type(testName) is list else soundex(testName)
             soundAgent = soundex(agntDirector)
-            matchedName = soundIAFD == soundAgent
+            matchedName = True if soundAgent in soundIAFD else False
             if matchedName:
                 log('UTILS :: SoundEx Match:               \tUse %s on IAFD', testNameType)
                 log('UTILS ::                              \tIAFD Director Name   : %s', testName)
@@ -924,11 +934,11 @@ def matchDirectors(agntDirectorList, FILMDICT):
                 log('UTILS ::                              \tMatched              : %s', matchedName)
                 break
 
-            # 8th Soundex Matching on Cast Alias
+            # 8th Soundex Matching on Director Alias
             if testAlias:
-                soundIAFD = soundex(testAlias)
+                soundIAFD = [soundex(x) for x in testAlias] if type(testAlias) is list else soundex(testAlias)
                 soundAgent = soundex(agntDirector)
-                matchedName = soundIAFD == soundAgent
+                matchedName = True if soundAgent in soundIAFD else False
                 if matchedName:
                     log('UTILS :: SoundEx Match:               \tUse %s on IAFD', testNameType)
                     log('UTILS ::                              \tIAFD Director Alias : %s', testAlias)
@@ -1019,7 +1029,7 @@ def matchDirectors(agntDirectorList, FILMDICT):
                 # now check if any processed IAFD Directors (FILMDICT) have an alias that matches with this director
                 # this will only work if the film has directors recorded against it on IAFD
                 matchedDirectorWithIAFD = False
-                for key, value in FILMDICT['Directors']:
+                for key, value in FILMDICT['Directors'].items():
                     if not value['CompareAlias']:
                         continue
                     checkName = key
