@@ -24,6 +24,9 @@
                                    Added iafd legend to summary
     11 May 2021   2020.08.09.11    Further code reorganisation
     30 May 2021   2020.08.09.12    Further code reorganisation
+    11 Dec 2021   2021.12.11.01    Be resilient if year not in filename
+                                   Film duration is now relying on Plex native method
+                                   Adding option to use site image as background
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -31,7 +34,7 @@ import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.08.09.12'
+VERSION_NO = '2021.12.11.01'
 PLUGIN_LOG_TITLE = 'BestExclusivePorn'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
@@ -41,6 +44,7 @@ DELAY = int(Prefs['delay'])                         # Delay used when requesting
 MATCHSITEDURATION = int(Prefs['matchsiteduration']) # Acceptable difference between actual duration of video file and that on agent website
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+BACKGROUND = Prefs['background']                    # use the site image as background
 PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']                # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
@@ -129,9 +133,21 @@ class BestExclusivePorn(Agent.Movies):
         else:
             log('AGNT :: Search Query:: String has none of these {0}'.format(pattern))
 
-        # Best Exclusive uses a maximum of 49 characters when searching
+        # Removing & and and from filename to be sure we get the actors
+        spaceChars = [' & ',' and ',',','fucks','barebacks','raw']
+        pattern = u'({0})'.format('|'.join(spaceChars))
+        matched = re.search(pattern, myString)  # match against whole string
+        if matched:
+            log('AGNT  :: Search Query:: Replacing characters in string. Found one of these {0}'.format(pattern))
+            myString = re.sub(pattern, ' ', myString)
+            myString = ' '.join(myString.split())   # remove continous white space
+            log('AGNT  :: Amended Search Query [{0}]'.format(myString))
+        else:
+            log('AGNT  :: Search Query:: String has none of these {0}'.format(pattern))
+
+        """ # Best Exclusive uses a maximum of 49 characters when searching
         myString = myString[:49].strip()
-        myString = myString if myString[-1] != '%' else myString[:48]
+        myString = myString if myString[-1] != '%' else myString[:48] """
 
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string 
         myString = String.StripDiacritics(myString)
@@ -150,9 +166,14 @@ class BestExclusivePorn(Agent.Movies):
 
         utils.logHeaders('SEARCH', media, lang)
 
+        # Calculate duration
+        filmDuration = 0
+        for part in media.items[0].parts:
+                filmDuration += int(long(getattr(part, 'duration')))
+
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media.items[0].parts[0].file, filmDuration)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
@@ -202,13 +223,18 @@ class BestExclusivePorn(Agent.Movies):
                     continue
 
                 # normalise site entry and film title
+                # Sometimes BestExclusivePorn's titles are Title (Studio, Year). If so, we extract the studio
+                studio_search = re.search('\((.*),(.*)\)', siteEntry, re.IGNORECASE)
                 siteEntry = utils.NormaliseComparisonString(siteEntry)
                 normalisedFilmTitle = utils.NormaliseComparisonString(FILMDICT['Title'])
                 pattern = ur'{0}'.format(normalisedFilmTitle)
                 matched = re.search(pattern, siteEntry, re.IGNORECASE)  # match against whole string
                 if matched:
                     siteTitle = matched.group()
-                    siteStudio = re.sub(pattern, '', siteEntry).strip()
+                    if studio_search:
+                        siteStudio = utils.NormaliseComparisonString(studio_search.group(1))
+                    else:
+                        siteStudio = re.sub(pattern, '', siteEntry).strip()
                     log('SEARCH:: Studio and Title from Site Entry: %s - %s', siteStudio, siteTitle)
                     log(LOG_BIGLINE)
                 else:
@@ -222,8 +248,13 @@ class BestExclusivePorn(Agent.Movies):
                     log(LOG_BIGLINE)
                 except Exception as e:
                     log('SEARCH:: Error getting Site Title: %s', e)
-                    log(LOG_SUBLINE)
-                    continue
+                    log('SEARCH:: Trying by extracting actors name from %s', siteTitle)
+                    try:
+                        utils.matchTitleActors(siteTitle, FILMDICT)
+                    except Exception as e:
+                        log('SEARCH:: Error getting Site Title: %s', e)
+                        log(LOG_SUBLINE)
+                        continue
 
                 # Site Title URL
                 try:
@@ -263,6 +294,9 @@ class BestExclusivePorn(Agent.Movies):
                 # we should have a match on studio, title and year now. Find corresponding film on IAFD
                 log('SEARCH:: Check for Film on IAFD:')
                 utils.getFilmOnIAFD(FILMDICT)
+                if FILMDICT['IAFDFilmURL'] == '':
+                    log('SEARCH:: Film not found on IAFD. Trying with actors')
+                    utils.getFilmOnIAFDActors(FILMDICT)
 
                 results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
                 log(LOG_BIGLINE)
@@ -305,8 +339,9 @@ class BestExclusivePorn(Agent.Movies):
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
-        metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-        metadata.year = metadata.originally_available_at.year
+        if FILMDICT['CompareDate']!='':
+            metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+            metadata.year = metadata.originally_available_at.year
         log('UPDATE:: Tagline: %s', metadata.tagline)
         log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
@@ -418,9 +453,10 @@ class BestExclusivePorn(Agent.Movies):
                     metadata.posters[pic] = Proxy.Media(picContent, sort_order=1)
                     metadata.posters.validate_keys([pic])
                     log(LOG_SUBLINE)
-                else:               # processing art
-                    metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
-                    metadata.art.validate_keys([pic])
+                else:
+                    if BACKGROUND:               # processing art
+                        metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
+                        metadata.art.validate_keys([pic])
 
         except Exception as e:
             log('UPDATE:: Error getting %s: %s', imageType, e)
@@ -439,7 +475,7 @@ class BestExclusivePorn(Agent.Movies):
 
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
+        summary = ('{0}\n{1}\n{2}' if PREFIXLEGEND else '{1}\n{0}\n{2}').format(FILMDICT['Legend'], synopsis.strip(), FILMDICT['Synopsis'])
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

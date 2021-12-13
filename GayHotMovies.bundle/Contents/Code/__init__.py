@@ -34,13 +34,16 @@
                                    Code reorganisation
     25 Aug 2021   2019.08.12.13    IAFD will be only searched if film found on agent Catalogue
                                    changes to xpath
+    11 Dec 2021   2021.12.11.01    Be resilient if year not in filename
+                                   Film duration is now relying on Plex native method
+                                   Adding option to use site image as background
 ---------------------------------------------------------------------------------------------------------------
 '''
 import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.13'
+VERSION_NO = '2021.12.11.01'
 PLUGIN_LOG_TITLE = 'GayHotMovies'
 
 # log section separators
@@ -52,6 +55,7 @@ DELAY = int(Prefs['delay'])                         # Delay used when requesting
 MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+BACKGROUND = Prefs['background']                    # use the site image as background
 PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']                # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
@@ -60,6 +64,7 @@ COLGENRE = Prefs['genrecollection']                 # add genres to collection
 COLDIRECTOR = Prefs['directorcollection']           # add director to collection
 COLCAST = Prefs['castcollection']                   # add cast to collection
 COLCOUNTRY = Prefs['countrycollection']             # add country to collection
+ACTASGENRE = Prefs['actasgenre']                    # add the acts detected as genres
 
 # URLS
 BASE_URL = 'https://www.gayhotmovies.com'
@@ -73,6 +78,9 @@ DATEFORMAT = '%b %d, %Y'
 
 # Website Language
 SITE_LANGUAGE = 'en'
+
+# Max delta between file duration and film duration for chapters
+DURATION_DETLA_THRESHOLD = 100000
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def Start():
@@ -152,6 +160,16 @@ class GayHotMovies(Agent.Movies):
 
         return myString
 
+    #--------------------------------------------------------------------------------------------------------------------------------
+
+    def durationSeconds(self, timeStr):
+        ''' Get Seconds from time. '''
+        arrayTime = timeStr.split(':')
+        if len(arrayTime) == 3:
+            return int(arrayTime[0]) * 3600 + int(arrayTime[1]) * 60 + int(arrayTime[2])
+        elif len(arrayTime) == 2:
+            return int(arrayTime[0]) * 60 + int(arrayTime[1])
+
     # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
@@ -160,9 +178,14 @@ class GayHotMovies(Agent.Movies):
 
         utils.logHeaders('SEARCH', media, lang)
 
+        # Calculate duration
+        filmDuration = 0
+        for part in media.items[0].parts:
+                filmDuration += int(long(getattr(part, 'duration')))
+
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media.items[0].parts[0].file, filmDuration)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
@@ -307,8 +330,9 @@ class GayHotMovies(Agent.Movies):
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
-        metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-        metadata.year = metadata.originally_available_at.year
+        if FILMDICT['CompareDate']!='':
+            metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+            metadata.year = metadata.originally_available_at.year
         log('UPDATE:: Tagline: %s', metadata.tagline)
         log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
@@ -454,8 +478,9 @@ class GayHotMovies(Agent.Movies):
             image = html.xpath('//div[@class="lg_inside_wrap"]/@data-back')[0]
             log('UPDATE:: Art Image Found: %s', image)
             #  set Art then only keep it
-            metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-            metadata.art.validate_keys([image])
+            if BACKGROUND:
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+                metadata.art.validate_keys([image])
 
         except Exception as e:
             log('UPDATE:: Error getting Poster/Art: %s', e)
@@ -506,6 +531,16 @@ class GayHotMovies(Agent.Movies):
 
         # Scene Breakdown - append to reviews
         log(LOG_SUBLINE)
+
+        allacts = []
+        isChapters = False
+
+        if isChapters:
+            metadata.chapters.clear()
+            offset = 0
+            totalSceneDuration = 0
+            newChapters=[]
+
         try:
             htmlheadings = html.xpath('//span[@class="right time"]/text()')
             htmlscenes = html.xpath('//div[@class="scene_details_sm"]')
@@ -529,10 +564,35 @@ class GayHotMovies(Agent.Movies):
 
                 actsList = htmlscene.xpath('./div[@class="attributes"]/span[@class="list_attributes"]/a[contains(@href,"scene_attribute")]/text()')
                 if actsList:
+                    if ACT_AS_GENRE:
+                        for act in actsList:
+                            if act not in allacts:
+                                allacts.append(act)
+                                metadata.genres.add(act)
                     log('UPDATE:: %s Sex Acts Found: %s', len(actsList), actsList)
                     reviewText = ', '.join(actsList)
                 else:
                     reviewText = 'No Sex Acts Recorded'
+
+                if isChapters:
+                    sceneTitle = ''
+                    if starsList:
+                        sceneTitle += stars
+                    else:
+                        sceneTitle += heading.split('-')[0].strip()
+                    if actsList:
+                        sceneTitle += ' (' + acts + ')'
+                    sceneDurationStr = heading.split('-')[1].replace('min', ':').replace('sec','').replace('s','').replace(' ', '')
+                    log('UPDATE:: Scene Duration: %s', sceneDurationStr)
+                    sceneDuration = self.durationSeconds(sceneDurationStr) * 1000
+                    totalSceneDuration += sceneDuration
+                    chapter = {}
+                    chapter['title'] = sceneTitle
+                    chapter['start_time_offset'] = offset
+                    offset = offset + sceneDuration
+                    chapter['end_time_offset'] = offset
+                    newChapters.append(chapter)
+                    log('UPDATE:: Chapter - Duration: %s - Title: %s', sceneDuration, sceneTitle)
 
                 reviewsList.append((reviewAuthor, reviewLink, reviewSource, reviewText))
         except Exception as e:
@@ -554,6 +614,19 @@ class GayHotMovies(Agent.Movies):
             except Exception as e:
                 log('UPDATE:: Error getting Review No. %s: %s', count, e)
 
+        
+        # adding chapters
+        if isChapters and len(newChapters)>0:
+            chapterDelta = fileDuration - totalSceneDuration
+            # Note : we assume that potential delta is due to disclamers and intro at the beginning of the movie
+            if chapterDelta >= 0:
+                allscenes = 'Chapters: ' + IAFD_THUMBSUP + '\n' + allscenes
+                for newChapter in newChapters:
+                    chapter = metadata.chapters.new()
+                    chapter.title = newChapter['title']
+                    chapter.start_time_offset = newChapter['start_time_offset'] + chapterDelta
+                    chapter.end_time_offset = newChapter['end_time_offset'] + chapterDelta
+
         # 2h.   Summary = IAFD Legend + Synopsis
         log(LOG_BIGLINE)
         # synopsis
@@ -573,7 +646,7 @@ class GayHotMovies(Agent.Movies):
 
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
+        summary = ('{0}\n{1}\n{2}' if PREFIXLEGEND else '{1}\n{0}\n{2}').format(FILMDICT['Legend'], synopsis.strip(), FILMDICT['Synopsis'])
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

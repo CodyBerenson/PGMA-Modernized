@@ -26,6 +26,12 @@
                                    improved logging
     31 Jul 2021   2020.05.21.09    Code reorganisation, use of review area for scene info
                                    changes to xpath for film duration
+    11 Dec 2021   2021.12.11.01    Be resilient if year not in filename
+                                   Film duration is now relying on Plex native method
+                                   Adding option to use site image as background
+    12 Dec 2021   2021.12.12.01    Adding chapter support
+                                   Change review tempalate to better match scene details
+                                   Ability to add sex act as genre
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -33,7 +39,7 @@ import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.05.21.08'
+VERSION_NO = '2021.12.12.01'
 PLUGIN_LOG_TITLE = 'AEBN iii'
 
 # log section separators
@@ -45,6 +51,7 @@ DELAY = int(Prefs['delay'])                         # Delay used when requesting
 MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+BACKGROUND = Prefs['background']                    # use the site image as background
 PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']                # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
@@ -53,6 +60,7 @@ COLGENRE = Prefs['genrecollection']                 # add genres to collection
 COLDIRECTOR = Prefs['directorcollection']           # add director to collection
 COLCAST = Prefs['castcollection']                   # add cast to collection
 COLCOUNTRY = Prefs['countrycollection']             # add country to collection
+ACTASGENRE = Prefs['actasgenre']                    # add the acts detected as genres
 
 # URLS
 BASE_URL = 'https://gay.aebn.com'
@@ -67,27 +75,14 @@ DATEFORMAT = '%b %d, %Y'
 # Website Language
 SITE_LANGUAGE = 'en'
 
+# Max delta between file duration and film duration for chapters
+DURATION_DETLA_THRESHOLD = 100000
+
 # ----------------------------------------------------------------------------------------------------------------------------------
 def Start():
     ''' initialise process '''
     HTTP.CacheTime = CACHE_1WEEK
     HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-def ValidatePrefs():
-    ''' validate changed user preferences '''
-    DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-    MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
-    DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
-    DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
-    PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
-    COLCLEAR = Prefs['clearcollections']                # clear previously set collections
-    COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
-    COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
-    COLGENRE = Prefs['genrecollection']                 # add genres to collection
-    COLDIRECTOR = Prefs['directorcollection']           # add director to collection
-    COLCAST = Prefs['castcollection']                   # add cast to collection
-    COLCOUNTRY = Prefs['countrycollection']             # add country to collection
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def anyOf(iterable):
@@ -240,6 +235,16 @@ class AEBNiii(Agent.Movies):
 
         return myString
 
+    #--------------------------------------------------------------------------------------------------------------------------------
+
+    def durationSeconds(self, timeStr):
+        ''' Get Seconds from time. '''
+        arrayTime = timeStr.split(':')
+        if len(arrayTime) == 3:
+            return int(arrayTime[0]) * 3600 + int(arrayTime[1]) * 60 + int(arrayTime[2])
+        elif len(arrayTime) == 2:
+            return int(arrayTime[0]) * 60 + int(arrayTime[1])
+
     # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
@@ -248,9 +253,14 @@ class AEBNiii(Agent.Movies):
 
         utils.logHeaders('SEARCH', media, lang)
 
+        # Calculate duration
+        filmDuration = 0
+        for part in media.items[0].parts:
+                filmDuration += int(long(getattr(part, 'duration')))
+
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media.items[0].parts[0].file, filmDuration)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
@@ -363,8 +373,10 @@ class AEBNiii(Agent.Movies):
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
-        metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-        metadata.year = metadata.originally_available_at.year
+        if FILMDICT['CompareDate']!='':
+            log('UPDATE:: CompareDate: %s', FILMDICT['CompareDate'])
+            metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+            metadata.year = metadata.originally_available_at.year
         log('UPDATE:: Tagline: %s', metadata.tagline)
         log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
@@ -481,17 +493,43 @@ class AEBNiii(Agent.Movies):
             metadata.posters.validate_keys([image])
 
             log(LOG_SUBLINE)
-            image = htmlimages[1].split('?')[0]
-            image = ('http:' if 'http:' not in image else '') + image
-            log('UPDATE:: Art Image Found: %s', image)
-            #  clean up and only keep the Art we have added
-            metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-            metadata.art.validate_keys([image])
+            if BACKGROUND:
+                image = htmlimages[1].split('?')[0]
+                image = ('http:' if 'http:' not in image else '') + image
+                log('UPDATE:: Art Image Found: %s', image)
+                #  clean up and only keep the Art we have added
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+                metadata.art.validate_keys([image])
         except Exception as e:
             log('UPDATE:: Error getting Poster/Art: %s', e)
 
         # 2f.   Reviews - Put all Scene Information here
         log(LOG_BIGLINE)
+        allacts = []
+        isChapters = False
+        # we're adding chapters only if the durations are
+        try:
+            htmlduration = html.xpath('//span[text()="Running Time:"]/parent::li/text()')[0].strip()
+            siteDuration = self.durationSeconds(htmlduration)*1000
+            fileDuration = 0
+            for part in media.items[0].parts:
+                fileDuration += int(long(getattr(part, 'duration')))
+            log('UPDATE:: Running time from site: %s', siteDuration)
+            log('UPDATE:: Running time from file: %s', fileDuration)
+            durationDelta = fileDuration - siteDuration
+            log('UPDATE:: Duration delta: %s', durationDelta)
+            if abs(durationDelta) < DURATION_DETLA_THRESHOLD:
+                isChapters = True
+                log('UPDATE:: Adding chapters')
+        except Exception as e:
+            log('UPDATE:: Error getting duration: %s. Do we process chapters? %s', e, isChapters)
+
+        if isChapters:
+            metadata.chapters.clear()
+            offset = 0
+            totalSceneDuration = 0
+            newChapters=[]
+        
         try:
             htmlscenes = html.xpath('//div[@class="col-sm-6 m-b-1"]')
             log('UPDATE:: Possible Number of Scenes [%s]', len(htmlscenes))
@@ -499,60 +537,91 @@ class AEBNiii(Agent.Movies):
             metadata.reviews.clear()
             count = 0
             sceneCount = 0 # avoid enumerating the number of scenes as some films have empty scenes
-            htmlheadings = html.xpath('//header[@class="dts-panel-header"]/div/h1[contains(text(),"Scene")]/text()')
+            htmlheadings = html.xpath('//header[@class="dts-panel-header"]//span[contains(text(),"Scene")]/text()')
             htmlscenes = html.xpath('//div[@class="dts-scene-info dts-list-attributes"]')
-            log('UPDATE:: %s Scenes Found', len(htmlscenes))
-            for (heading, htmlscene) in zip(htmlheadings, htmlscenes):
+            htmldurations = html.xpath('//span[@class="dts-scene-title-metadata dts-no-panel-title-link"]/span/text()')
+            log('UPDATE:: %s Scenes Found, %s Headings found, %s Durations found', len(htmlscenes), len(htmlheadings), len(htmldurations))
+            for (heading, duration, htmlscene) in zip(htmlheadings, htmldurations, htmlscenes):
                 try:
                     count += 1
                     castList = htmlscene.xpath('./ul/li[descendant::span[text()="Stars:"]]/a/text()')
+                    reviewSource = heading.strip()
                     if castList:
                         castList = [x.split('(')[0] for x in castList]
-                        reviewSource = ', '.join(castList)
+                        reviewAuthor = ', '.join(castList)
                         log('UPDATE:: Title: Cast List [%s]', reviewSource)
                     else:
-                        reviewSource = ''
+                        reviewAuthor = FILMDICT['Title']
 
                     actsList = htmlscene.xpath('./ul/li[descendant::span[text()="Sex acts:"]]/a/text()')
                     if actsList:
+                        if ACTASGENRE:
+                            for act in actsList:
+                                if act not in allacts:
+                                    allacts.append(act)
+                                    metadata.genres.add(act)
                         actsList = [x for x in actsList if x]
                         reviewText = ', '.join(actsList)
                         log('UPDATE:: Writing: Sex Acts [%s]', reviewText)
                     else:
                         reviewText = ''
 
-                    # if no title and no scene write up
-                    if not reviewSource and not reviewText:
-                        continue
-                    sceneCount += 1
-
                     settingsList = htmlscene.xpath('./ul/li[descendant::span[text()="Settings:"]]/a/text()')
                     if settingsList:
+                        reviewText += ('\n')
                         settingsList = [x for x in settingsList if x]
-                        reviewAuthor = ', '.join(settingsList)
-                        log('UPDATE:: Author: Setting List [%s]', reviewAuthor)
-                        reviewAuthor = ('[{0}] Setting: {1}').format(heading.strip(), reviewAuthor)
-                    else:
-                        reviewAuthor = '[{0}]'.format(heading.strip())
+                        settings = ', '.join(settingsList)
+                        log('UPDATE:: Writing: Setting List [%s]', settings)
+                        reviewText += ('Setting: {0}').format(settings)
 
-                    newReview = metadata.reviews.new()
-                    newReview.author = reviewAuthor
-                    newReview.link  = FILMDICT['SiteURL']
-                    if len(reviewSource) > 40:
-                        for i in range(40, -1, -1):
-                            if reviewSource[i] == ' ':
-                                reviewSource = reviewSource[0:i]
-                                break
-                    newReview.source = '{0}. {1}...'.format(sceneCount, reviewSource if reviewSource else FILMDICT['Title'])
-                    if len(reviewText) > 275:
-                        for i in range(275, -1, -1):
-                            if reviewText[i] in ['.', '!', '?']:
-                                reviewText = reviewText[0:i + 1]
-                                break
-                    newReview.text = utils.TranslateString(reviewText, SITE_LANGUAGE, lang, DETECT)
-                    log(LOG_SUBLINE)
+                    log('UPDATE:: Review - Source: %s, Author: %s, Text: %s', reviewSource, reviewAuthor, reviewText)
+
+                    # if no title and no scene write up
+                    if  reviewSource and reviewText:
+                        sceneCount += 1
+                        newReview = metadata.reviews.new()
+                        newReview.author = reviewAuthor
+                        newReview.link  = FILMDICT['SiteURL']
+                        if len(reviewSource) > 40:
+                            for i in range(40, -1, -1):
+                                if reviewSource[i] == ' ':
+                                    reviewSource = reviewSource[0:i]
+                                    break
+                        newReview.source = '{0}. {1}...'.format(sceneCount, reviewSource if reviewSource else FILMDICT['Title'])
+                        if len(reviewText) > 275:
+                            for i in range(275, -1, -1):
+                                if reviewText[i] in ['.', '!', '?']:
+                                    reviewText = reviewText[0:i + 1]
+                                    break
+                        newReview.text = utils.TranslateString(reviewText, SITE_LANGUAGE, lang, DETECT)
+                        log(LOG_SUBLINE)
+                        log('UPDATE:: Review added - Source: %s, Author: %s, Text: %s', newReview.source, newReview.author, newReview.text)
+
+                    # adding chapter
+                    if isChapters:
+                        sceneTitle = reviewSource + ': ' + reviewText
+                        sceneDuration = self.durationSeconds(duration.split('(')[0].strip())*1000
+                        totalSceneDuration += sceneDuration
+                        chapter = {}
+                        chapter['title'] = sceneTitle
+                        chapter['start_time_offset'] = offset
+                        offset = offset + sceneDuration
+                        chapter['end_time_offset'] = offset
+                        newChapters.append(chapter)
+                        log('UPDATE:: Chapter - Duration: %s - Title: %s', sceneDuration, sceneTitle)
                 except Exception as e:
                     log('UPDATE:: Error getting Scene No. %s: %s', count, e)
+            
+            # adding chapters
+            if isChapters and len(newChapters)>0:
+                chapterDelta = fileDuration - totalSceneDuration
+                # Note : we assume that potential delta is due to disclamers and intro at the beginning of the movie
+                if chapterDelta >= 0:
+                    for newChapter in newChapters:
+                        chapter = metadata.chapters.new()
+                        chapter.title = newChapter['title']
+                        chapter.start_time_offset = newChapter['start_time_offset'] + chapterDelta
+                        chapter.end_time_offset = newChapter['end_time_offset'] + chapterDelta
         except Exception as e:
             log('UPDATE:: Error getting Scenes: %s', e)
 
@@ -568,7 +637,7 @@ class AEBNiii(Agent.Movies):
 
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
+        summary = ('{0}\n{1}\n{2}' if PREFIXLEGEND else '{1}\n{0}\n{2}').format(FILMDICT['Legend'], synopsis.strip(), FILMDICT['Synopsis'])
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

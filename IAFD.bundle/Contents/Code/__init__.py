@@ -28,6 +28,9 @@
     27 Jul 2021   2020.04.22.12    Merged all libraries into utils.py
                                    improvements to film matching within iafd and scraping data at match
                                    Fix Issue: IAFD Unable to match three titles #105
+    11 Dec 2021   2021.12.11.01    Be resilient if year not in filename
+                                   Film duration is now relying on Plex native method
+                                   Adding option to use site image as background
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -35,7 +38,7 @@ import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.04.22.12'
+VERSION_NO = '2021.12.11.01'
 PLUGIN_LOG_TITLE = 'IAFD'
 
 # log section separators
@@ -144,9 +147,14 @@ class IAFD(Agent.Movies):
 
         utils.logHeaders('SEARCH', media, lang)
 
+        # Calculate duration
+        filmDuration = 0
+        for part in media.items[0].parts:
+                filmDuration += int(long(getattr(part, 'duration')))
+
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media.items[0].parts[0].file, filmDuration)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
@@ -195,8 +203,9 @@ class IAFD(Agent.Movies):
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
-        metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-        metadata.year = metadata.originally_available_at.year
+        if FILMDICT['CompareDate']!='':
+            metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+            metadata.year = metadata.originally_available_at.year
         log('UPDATE:: Tagline: %s', metadata.tagline)
         log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 

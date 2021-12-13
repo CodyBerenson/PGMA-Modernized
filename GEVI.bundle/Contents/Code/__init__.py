@@ -10,6 +10,9 @@
     08 May 2021   2019.12.25.31    Use of duration matching
     27 Jul 2021   2019.12.25.32    Use of review area for scene matching
     21 Aug 2021   2019.12.25.33    IAFD will be only searched if film found on agent Catalogue
+    11 Dec 2021   2021.12.11.01    Be resilient if year not in filename
+                                   Film duration is now relying on Plex native method
+                                   Adding option to use site image as background
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -18,7 +21,7 @@ from datetime import datetime
 from helpers import clear_posters, clear_art
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.33'
+VERSION_NO = '2021.12.11.01'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 # log section separators
@@ -30,6 +33,7 @@ DELAY = int(Prefs['delay'])                         # Delay used when requesting
 MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+BACKGROUND = Prefs['background']                    # use the site image as background
 PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']                # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
@@ -208,9 +212,14 @@ class GEVI(Agent.Movies):
 
         utils.logHeaders('SEARCH', media, lang)
 
+        # Calculate duration
+        filmDuration = 0
+        for part in media.items[0].parts:
+                filmDuration += int(long(getattr(part, 'duration')))
+
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media.items[0].parts[0].file, filmDuration)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
@@ -469,10 +478,9 @@ class GEVI(Agent.Movies):
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
         log('UPDATE:: Tagline: %s', metadata.tagline)
-        if FILMDICT['Year']:
+        if FILMDICT['CompareDate']!='':
             metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
             metadata.year = metadata.originally_available_at.year
-            log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
         # 1e/f. Set Content Rating to Adult/18 years
         metadata.content_rating = 'X'
@@ -605,11 +613,12 @@ class GEVI(Agent.Movies):
             metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.posters.validate_keys([image])
 
-            image = htmlimages[1]
-            log('UPDATE:: Art Image Found: [2] - %s', image)
-            clear_art(metadata)
-            metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-            metadata.art.validate_keys([image])
+            if BACKGROUND:
+                image = htmlimages[1]
+                log('UPDATE:: Art Image Found: [2] - %s', image)
+                clear_art(metadata)
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+                metadata.art.validate_keys([image])
 
         except Exception as e:
             log('UPDATE:: Error getting Poster/Art: %s', e)
@@ -701,7 +710,7 @@ class GEVI(Agent.Movies):
 
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
+        summary = ('{0}\n{1}\n{2}' if PREFIXLEGEND else '{1}\n{0}\n{2}').format(FILMDICT['Legend'], synopsis.strip(), FILMDICT['Synopsis'])
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

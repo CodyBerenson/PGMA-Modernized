@@ -25,6 +25,12 @@
                                    Enhancements to IAFD search routine, including Levenshtein Matching on Cast names
                                    Added iafd legend to summary
     30 May 2021   2020.02.14.21    Further code reorganisation
+    11 Dec 2021   2021.12.11.01    Be resilient if year not in filename
+                                   Film duration is now relying on Plex native method
+                                   Adding option to use site image as background
+    12 Dec 2021   2021.12.12.01    Making the cropping more resilient. Fallback to original image
+    13 Dec 2021   2021.12.13.01    Adding Trailer support
+                                   Adding a fallback search method based on actor names
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -32,7 +38,7 @@ import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.02.14.21'
+VERSION_NO = '2021.12.13.01'
 PLUGIN_LOG_TITLE = 'QueerClick'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
@@ -42,6 +48,7 @@ DELAY = int(Prefs['delay'])                         # Delay used when requesting
 MATCHSITEDURATION = int(Prefs['matchsiteduration']) # Acceptable difference between actual duration of video file and that on agent website
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+BACKGROUND = Prefs['background']                    # use the site image as background
 PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']                # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
@@ -139,6 +146,18 @@ class QueerClick(Agent.Movies):
         else:
             log('AGNT  :: Search Query:: String has none of these {0}'.format(pattern))
 
+        # Removing & and and from filename to be sure we get the actors
+        spaceChars = [' & ',' and ',',','fucks','barebacks','raw']
+        pattern = u'({0})'.format('|'.join(spaceChars))
+        matched = re.search(pattern, myString)  # match against whole string
+        if matched:
+            log('AGNT  :: Search Query:: Replacing characters in string. Found one of these {0}'.format(pattern))
+            myString = re.sub(pattern, ' ', myString)
+            myString = ' '.join(myString.split())   # remove continous white space
+            log('AGNT  :: Amended Search Query [{0}]'.format(myString))
+        else:
+            log('AGNT  :: Search Query:: String has none of these {0}'.format(pattern))
+
         # QueerClick seems to fail to find Titles which have invalid chars in them split at first incident and take first split, just to search but not compare
         # the back tick is added to the list as users who can not include quotes in their filenames can use these to replace them without changing the scrappers code
         badChars = ["'", '"', '`', ur'\u201c', ur'\u201d', ur'\u2018', ur'\u2019']
@@ -184,9 +203,14 @@ class QueerClick(Agent.Movies):
 
         utils.logHeaders('SEARCH', media, lang)
 
+        # Calculate duration
+        filmDuration = 0
+        for part in media.items[0].parts:
+                filmDuration += int(long(getattr(part, 'duration')))
+
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media.items[0].parts[0].file, filmDuration)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
@@ -250,14 +274,25 @@ class QueerClick(Agent.Movies):
                         log('SEARCH:: Error determining Site Studio and Title from Site Entry')
                         continue
 
+                # Site Actors
+                siteActorList = title.xpath('.//div[@class="taxonomy"]//a[@class="titletags"]/text()')
+                log('SEARCH:: Site Actors: %s', siteActorList)
+                siteActors = ' '.join(siteActorList)
+                log('SEARCH:: Site Actors: %s', siteActors)
+
                 # Site Title
                 try:
                     utils.matchTitle(siteTitle, FILMDICT)
                     log(LOG_BIGLINE)
                 except Exception as e:
                     log('SEARCH:: Error getting Site Title: %s', e)
-                    log(LOG_SUBLINE)
-                    continue
+                    log('SEARCH:: Trying by extracting actors name from %s', siteTitle)
+                    try:
+                        utils.matchTitleActors(siteActors, FILMDICT)
+                    except Exception as e:
+                        log('SEARCH:: Error getting Site Title: %s', e)
+                        log(LOG_SUBLINE)
+                        continue
 
                 # Studio Name
                 try:
@@ -297,7 +332,10 @@ class QueerClick(Agent.Movies):
                 # we should have a match on studio, title and year now. Find corresponding film on IAFD
                 log('SEARCH:: Check for Film on IAFD:')
                 utils.getFilmOnIAFD(FILMDICT)
-
+                if FILMDICT['IAFDFilmURL'] == '':
+                    log('SEARCH:: Film not found on IAFD. Trying with actors')
+                    utils.getFilmOnIAFDActors(FILMDICT)
+ 
                 results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
                 log(LOG_BIGLINE)
                 log('SEARCH:: Finished Search Routine')
@@ -338,8 +376,9 @@ class QueerClick(Agent.Movies):
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
-        metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-        metadata.year = metadata.originally_available_at.year
+        if FILMDICT['CompareDate']!='':
+            metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+            metadata.year = metadata.originally_available_at.year
         log('UPDATE:: Tagline: %s', metadata.tagline)
         log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
@@ -360,7 +399,8 @@ class QueerClick(Agent.Movies):
         #    2.  Metadata retrieved from website
         #        a.   Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
         #        b.   Posters/Art
-        #        c.   Summary
+        #        c.   Trailer
+        #        d.   Summary
 
         # 2a    Cast
         #       QueerClick stores the cast as links in the article
@@ -415,8 +455,9 @@ class QueerClick(Agent.Movies):
                     metadata.posters.validate_keys([pic])
                     log(LOG_SUBLINE)
                 else:               # processing art
-                    metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
-                    metadata.art.validate_keys([pic])
+                    if BACKGROUND:
+                        metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
+                        metadata.art.validate_keys([pic])
 
         except Exception as e:
             log('UPDATE:: Error getting %s: %s', imageType, e)
@@ -439,9 +480,37 @@ class QueerClick(Agent.Movies):
             synopsis = ''
             log('UPDATE:: Error getting Synopsis: %s', e)
 
+        # Trailer
+        try:
+            trailerPlayerUrl = html.xpath('//iframe[starts-with(@src,"https://vhs.queerclick.com")]/@src')[0]
+            htmltrailer =  HTML.ElementFromURL(trailerPlayerUrl, timeout=20, sleep=DELAY)
+            log('UPDATE:: htmlTrailer: %s', htmltrailer)
+            trailerUrl = htmltrailer.xpath('//source/@src')[0]
+            log('UPDATE:: Trailer url: %s', trailerUrl)
+            trailerThumb = ''
+            try:
+                trailerStyle = htmltrailer.xpath('//video/@poster')[0]
+                log('UPDATE:: Trailer Style: %s', trailerStyle)
+                trailerThumb = re.search('url\((.*)\)', trailerStyle).group(1)
+                log('UPDATE:: Trailer Thumb: %s', trailerThumb)
+            except:
+                log('UPDATE:: Error getting thumb')
+            extras = []
+            extras.append({ 'type' : 'trailer',
+                            'extra' : TrailerObject (
+                                                    file=trailerUrl,
+                                                    title=metadata.title,
+                                                    thumb=trailerThumb
+                                                     )
+                             })
+            for extra in extras:
+                metadata.extras.add(extra['extra'])
+        except:
+            log('UPDATE:: Error getting trailer')
+
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
+        summary = ('{0}\n{1}\n{2}' if PREFIXLEGEND else '{1}\n{0}\n{2}').format(FILMDICT['Legend'], synopsis.strip(), FILMDICT['Synopsis'])
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

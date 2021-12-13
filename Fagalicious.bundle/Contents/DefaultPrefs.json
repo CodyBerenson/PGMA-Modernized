@@ -26,6 +26,12 @@
         "default": "false"
     },
     {
+        "id": "background",
+        "label": "Use site image as background?",
+        "type": "bool",
+        "default": "false"
+    },
+    {
         "id": "prefixlegend",
         "label": "Place Cast Legend at Start of Summary?",
         "type": "bool",

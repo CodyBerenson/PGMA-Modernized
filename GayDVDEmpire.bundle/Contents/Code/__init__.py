@@ -29,13 +29,18 @@
                                    improved logging
     11 Mar 2021   2019.08.12.13    Cast xpath was picking Bios and Interview along with cast name - corrected
     31 Jul 2021   2019.08.12.14    Code reorganisation
+    11 Dec 2021   2021.12.11.01    Be resilient if year not in filename
+                                   Film duration is now relying on Plex native method
+                                   Added option to use site image as background
+    13 Dec 2021   2021.12.13.01    Added chapter support
+
 ---------------------------------------------------------------------------------------------------------------
 '''
 import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.14'
+VERSION_NO = '2021.12.11.01'
 PLUGIN_LOG_TITLE = 'GayDVDEmpire'
 
 # log section separators
@@ -47,6 +52,7 @@ DELAY = int(Prefs['delay'])                         # Delay used when requesting
 MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+BACKGROUND = Prefs['background']                    # use the site image as background
 PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']                # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
@@ -68,6 +74,9 @@ DATEFORMAT = '%m/%d/%Y'
 
 # Website Language
 SITE_LANGUAGE = 'en'
+
+# Max delta between file duration and film duration for chapters
+DURATION_DETLA_THRESHOLD = 100000
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def Start():
@@ -128,6 +137,16 @@ class GayDVDEmpire(Agent.Movies):
 
         return myString
 
+    #--------------------------------------------------------------------------------------------------------------------------------
+
+    def durationSeconds(self, timeStr):
+        ''' Get Seconds from time. '''
+        arrayTime = timeStr.split(':')
+        if len(arrayTime) == 3:
+            return int(arrayTime[0]) * 3600 + int(arrayTime[1]) * 60 + int(arrayTime[2])
+        elif len(arrayTime) == 2:
+            return int(arrayTime[0]) * 60 + int(arrayTime[1])
+
     # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
@@ -136,9 +155,14 @@ class GayDVDEmpire(Agent.Movies):
 
         utils.logHeaders('SEARCH', media, lang)
 
+        # Calculate duration
+        filmDuration = 0
+        for part in media.items[0].parts:
+                filmDuration += int(long(getattr(part, 'duration')))
+
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media.items[0].parts[0].file, filmDuration)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
@@ -287,8 +311,9 @@ class GayDVDEmpire(Agent.Movies):
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
-        metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-        metadata.year = metadata.originally_available_at.year
+        if FILMDICT['CompareDate']!='':
+            metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+            metadata.year = metadata.originally_available_at.year
         log('UPDATE:: Tagline: %s', metadata.tagline)
         log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
@@ -405,14 +430,41 @@ class GayDVDEmpire(Agent.Movies):
             image = image.replace('h.jpg', 'bh.jpg')
             log('UPDATE:: Art Image Found: %s', image)
             #  set poster then only keep it
-            metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-            metadata.art.validate_keys([image])
+            if BACKGROUND:
+                metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
+                metadata.art.validate_keys([image])
 
         except Exception as e:
             log('UPDATE:: Error getting Poster/Art: %s', e)
 
         # 2f.   Reviews - Put all Scene Information here
         log(LOG_BIGLINE)
+        allacts = []
+        isChapters = False
+
+        try:
+            htmlduration = html.xpath('//small[text()="Length: "]/following-sibling::text()')[0].strip()
+            log('UPDATE:: HTML duration: %s', htmlduration)
+            htmlduration = htmlduration.replace('hrs.', ':').replace('mins.','').replace(' ', '') + ':00'
+            siteDuration = self.durationSeconds(htmlduration)*1000
+            fileDuration = 0
+            for part in media.items[0].parts:
+                fileDuration += int(long(getattr(part, 'duration')))
+            log('UPDATE:: Running time from site: %s', siteDuration)
+            log('UPDATE:: Running time from file: %s', fileDuration)
+            durationDelta = fileDuration - siteDuration
+            log('UPDATE:: Duration delta: %s', durationDelta)
+            if abs(durationDelta) < DURATION_DETLA_THRESHOLD:
+                isChapters = True
+        except Exception as e:
+            log('UPDATE:: Error getting duration: %s', e)
+
+        if isChapters:
+            metadata.chapters.clear()
+            offset = 0
+            totalSceneDuration = 0
+            newChapters=[]
+
         try:
             htmlscenes = html.xpath('//div[@class="col-sm-6 m-b-1"]')
             log('UPDATE:: Possible Number of Scenes [%s]', len(htmlscenes))
@@ -437,27 +489,50 @@ class GayDVDEmpire(Agent.Movies):
                         log('UPDATE:: No Scene writing')
                         writing = ''
 
-                    # if no title and no scene write up
-                    if not title and not writing:
-                        continue
-                    sceneCount += 1
+                    try:
+                        sceneDurationStr = scene.xpath('//span[contains(text()," min")]/text()')[0]
+                        sceneDurationStr = sceneDurationStr.replace(' min', ':') + '00'
+                        log('UPDATE:: Scene Duration: %s', sceneDurationStr)
+                        sceneDuration = self.durationSeconds(sceneDurationStr) * 1000
+                        totalSceneDuration += sceneDuration
+                    except:
+                        log('UPDATE:: No Scene duration')
 
-                    newReview = metadata.reviews.new()
-                    newReview.author = 'Gay DVD Empire'
-                    newReview.link  = FILMDICT['SiteURL']
-                    if len(title) > 40:
-                        for i in range(40, -1, -1):
-                            if title[i] == ' ':
-                                title = title[0:i]
-                                break
-                    newReview.source = '{0}. {1}...'.format(sceneCount, title if title else FILMDICT['Title'])
-                    if len(writing) > 275:
-                        for i in range(275, -1, -1):
-                            if writing[i] in ['.', '!', '?']:
-                                writing = writing[0:i + 1]
-                                break
-                    newReview.text = utils.TranslateString(writing, SITE_LANGUAGE, lang, DETECT)
-                    log(LOG_SUBLINE)
+                    # if no title and no scene write up
+                    if title and writing:
+                        sceneCount += 1
+                        newReview = metadata.reviews.new()
+                        newReview.author = 'Gay DVD Empire'
+                        newReview.link  = FILMDICT['SiteURL']
+                        if len(title) > 40:
+                            for i in range(40, -1, -1):
+                                if title[i] == ' ':
+                                    title = title[0:i]
+                                    break
+                        newReview.source = '{0}. {1}...'.format(sceneCount, title if title else FILMDICT['Title'])
+                        if len(writing) > 275:
+                            for i in range(275, -1, -1):
+                                if writing[i] in ['.', '!', '?']:
+                                    writing = writing[0:i + 1]
+                                    break
+                        newReview.text = utils.TranslateString(writing, SITE_LANGUAGE, lang, DETECT)
+                        log(LOG_SUBLINE)
+
+                        # adding chapter
+                        if isChapters:
+                            if title:
+                                sceneTitle = title
+                                if writing:
+                                    sceneTitle += ': ' + writing
+                            else:
+                                sceneTitle = ''
+                            chapter = {}
+                            chapter['title'] = sceneTitle
+                            chapter['start_time_offset'] = offset
+                            offset = offset + sceneDuration
+                            chapter['end_time_offset'] = offset
+                            newChapters.append(chapter)
+
                 except Exception as e:
                     log('UPDATE:: Error getting Scene No. %s: %s', count, e)
         except Exception as e:
@@ -477,7 +552,7 @@ class GayDVDEmpire(Agent.Movies):
 
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
+        summary = ('{0}\n{1}\n{2}' if PREFIXLEGEND else '{1}\n{0}\n{2}').format(FILMDICT['Legend'], synopsis.strip(), FILMDICT['Synopsis'])
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

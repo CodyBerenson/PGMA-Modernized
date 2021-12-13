@@ -26,6 +26,12 @@
                                    code reorganisation like moving logging fuction out of class so it can be used by all imports
     11 May 2021   2019.08.12.30    Further code reorganisation
     29 Jul 2021   2019.08.12.31    Further code reorganisation
+    11 Dec 2021   2021.12.11.01    Be resilient if year not in filename
+                                   Film duration is now relying on Plex native method
+                                   Adding option to use site image as background
+    12 Dec 2021   2021.12.12.01    Making the cropping more resilient. Fallback to original image
+    13 Dec 2021   2021.12.13.01    Adding Trailer support
+                                   Adding a fallback search method based on actor names
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -33,7 +39,7 @@ import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.22.31'
+VERSION_NO = '2021.12.13.01'
 PLUGIN_LOG_TITLE = 'WayBig'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
@@ -43,6 +49,7 @@ DELAY = int(Prefs['delay'])                         # Delay used when requesting
 MATCHSITEDURATION = int(Prefs['matchsiteduration']) # Acceptable difference between actual duration of video file and that on agent website
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+BACKGROUND = Prefs['background']                    # use the site image as background
 PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 COLCLEAR = Prefs['clearcollections']                # clear previously set collections
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
@@ -148,6 +155,18 @@ class WayBig(Agent.Movies):
             else:
                 log('AGNT  :: Search Query:: Word {0} "{1}" has none of these chracters {2}'.format(count, word, badChars))
 
+        # Removing & and and from filename to be sure we get the actors
+        spaceChars = [' & ',' and ',',','fucks','barebacks','raw']
+        pattern = u'({0})'.format('|'.join(spaceChars))
+        matched = re.search(pattern, myString)  # match against whole string
+        if matched:
+            log('AGNT  :: Search Query:: Replacing characters in string. Found one of these {0}'.format(pattern))
+            myString = re.sub(pattern, ' ', myString)
+            myString = ' '.join(myString.split())   # remove continous white space
+            log('AGNT  :: Amended Search Query [{0}]'.format(myString))
+        else:
+            log('AGNT  :: Search Query:: String has none of these {0}'.format(pattern))
+
         # string can not be longer than 50 characters
         if len(myString) > 50:
             lastSpace = myString[:50].rfind(' ')
@@ -172,9 +191,14 @@ class WayBig(Agent.Movies):
 
         utils.logHeaders('SEARCH', media, lang)
 
+        # Calculate duration
+        filmDuration = 0
+        for part in media.items[0].parts:
+                filmDuration += int(long(getattr(part, 'duration')))
+
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media.items[0].parts[0].file, filmDuration)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
@@ -228,6 +252,9 @@ class WayBig(Agent.Movies):
                     singleQuotes = ["`", "‘", "’"]
                     pattern = ur'[{0}]'.format(''.join(singleQuotes))
                     siteEntry = re.sub(pattern, "'", siteEntry)
+                    
+                    # Strip everything after " (" as it is either the bareback mention or list of actors
+                    siteEntry = siteEntry.split(' (')[0]
 
                     # the siteEntry usual has the format Studio: Title
                     siteEntry = siteEntry.lower()
@@ -258,23 +285,36 @@ class WayBig(Agent.Movies):
                     log(LOG_SUBLINE)
                     continue
 
+                    
+                # Site Actors
+                siteActorList = title.xpath('.//div[@id="tags"]//a/text()')
+                log('SEARCH:: Site Actors: %s', siteActorList)
+                siteActors = ' '.join(siteActorList)
+                log('SEARCH:: Site Actors: %s', siteActors)
+
                 # Site Title
                 try:
                     utils.matchTitle(siteTitle, FILMDICT)
                     log(LOG_BIGLINE)
                 except Exception as e:
                     log('SEARCH:: Error getting Site Title: %s', e)
-                    log(LOG_SUBLINE)
-                    continue
+                    log('SEARCH:: Trying by extracting actors name from %s', siteTitle)
+                    try:
+                        utils.matchTitleActors(siteActors, FILMDICT)
+                    except Exception as e:
+                        log('SEARCH:: Error getting Site Title: %s', e)
+                        log(LOG_SUBLINE)
+                        continue
 
                 # Studio Name
                 try:
                     utils.matchStudio(siteStudio, FILMDICT)
                     log(LOG_BIGLINE)
                 except Exception as e:
-                    log('SEARCH:: Error getting Site Studio: %s', e)
+                    log('SEARCH:: Error getting Site Studio : %s', e)
                     log(LOG_SUBLINE)
                     continue
+                    
 
                 # Site Title URL
                 try:
@@ -305,6 +345,9 @@ class WayBig(Agent.Movies):
                 # we should have a match on studio, title and year now. Find corresponding film on IAFD
                 log('SEARCH:: Check for Film on IAFD:')
                 utils.getFilmOnIAFD(FILMDICT)
+                if FILMDICT['IAFDFilmURL'] == '':
+                    log('SEARCH:: Film not found on IAFD. Trying with actors')
+                    utils.getFilmOnIAFDActors(FILMDICT)
 
                 results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
                 log(LOG_BIGLINE)
@@ -346,8 +389,9 @@ class WayBig(Agent.Movies):
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
         metadata.tagline = FILMDICT['SiteURL']
-        metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-        metadata.year = metadata.originally_available_at.year
+        if FILMDICT['CompareDate']!='':
+            metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+            metadata.year = metadata.originally_available_at.year
         log('UPDATE:: Tagline: %s', metadata.tagline)
         log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
 
@@ -447,11 +491,68 @@ class WayBig(Agent.Movies):
                     metadata.posters.validate_keys([pic])
                     log(LOG_SUBLINE)
                 else:               # processing art
-                    metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
-                    metadata.art.validate_keys([pic])
+                    if BACKGROUND:
+                        metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
+                        metadata.art.validate_keys([pic])
 
         except Exception as e:
             log('UPDATE:: Error getting %s: %s', imageType, e)
+
+        # 2e. Trailer
+        # If trailer if embedded
+        try:
+            htmlTrailer = html.xpath('//iframe[starts-with(@src,"https://www.waybig.com/embed")]/@src')[0]
+            htmltrailer =  HTML.ElementFromURL(trailerPlayerUrl, timeout=20, sleep=DELAY)
+            log('UPDATE:: htmlTrailer: %s', htmltrailer)
+            trailerUrl = htmltrailer.xpath('//source/@src')[0]
+            log('UPDATE:: Trailer url: %s', trailerUrl)
+            trailerThumb = ''
+            try:
+                trailerStyle = htmltrailer.xpath('//video/@poster')[0]
+                log('UPDATE:: Trailer Style: %s', trailerStyle)
+                trailerThumb = re.search('url\((.*)\)', trailerStyle).group(1)
+                log('UPDATE:: Trailer Thumb: %s', trailerThumb)
+            except:
+                log('UPDATE:: Error getting thumb')
+            extras = []
+            extras.append({ 'type' : 'trailer',
+                            'extra' : TrailerObject (
+                                                    file=trailerUrl,
+                                                    title=metadata.title,
+                                                    thumb=trailerThumb
+                                                     )
+                             })
+            for extra in extras:
+                metadata.extras.add(extra['extra'])
+        except:
+            log('UPDATE:: Error getting trailer')
+
+        # If trailer if flowplayer
+        try:
+            htmltrailer = html.xpath('//div[starts-with(@id,"flowplayer-video")]')[0]
+            log('UPDATE:: htmlTrailer: %s', htmltrailer)
+            trailerUrl = htmltrailer.xpath('//source/@src')[0]
+            log('UPDATE:: Trailer url: %s', trailerUrl)
+            trailerThumb = ''
+            try:
+                trailerStyle = htmltrailer.xpath('//div[starts-with(@id,"flowplayer-video")]/@style')[0]
+                log('UPDATE:: Trailer Style: %s', trailerStyle)
+                trailerThumb = re.search('url\((.*)\)', trailerStyle).group(1)
+                log('UPDATE:: Trailer Thumb: %s', trailerThumb)
+            except:
+                log('UPDATE:: Error getting thumb')
+            extras = []
+            extras.append({ 'type' : 'trailer',
+                            'extra' : TrailerObject (
+                                                    file=trailerUrl,
+                                                    title=metadata.title,
+                                                    thumb=trailerThumb
+                                                     )
+                             })
+            for extra in extras:
+                metadata.extras.add(extra['extra'])
+        except:
+            log('UPDATE:: Error getting trailer')
 
         # 2a.   Summary = IAFD Legend + Synopsis
         # synopsis
@@ -469,7 +570,7 @@ class WayBig(Agent.Movies):
 
         # combine and update
         log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
+        summary = ('{0}\n{1}\n{2}' if PREFIXLEGEND else '{1}\n{0}\n{2}').format(FILMDICT['Legend'], synopsis.strip(), FILMDICT['Synopsis'])
         summary = summary.replace('\n\n', '\n')
         metadata.summary = summary
 

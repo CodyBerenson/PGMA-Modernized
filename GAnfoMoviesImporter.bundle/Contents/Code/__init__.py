@@ -27,6 +27,7 @@ import traceback
 import urllib
 import urlparse
 import subtitles
+import utils
 
 if sys.version_info < (3, 0):
     from htmlentitydefs import name2codepoint
@@ -745,14 +746,9 @@ class GANFO(PlexAgent):
                         newrole.name = 'Unknown Name ' + str(n)
                         pass
                     try:
-                        role = actor.xpath('role')[0].text
-                        if role in rroles:
-                            newrole.role = role + ' ' + str(n)
-                        else:
-                            newrole.role = role
+                        newrole.role = actor.xpath('role')[0].text
                         rroles.append (newrole.role)
                     except:
-                        newrole.role = 'Unknown Role ' + str(n)
                         pass
                     newrole.photo = ''
                     athumbloc = preferences['athumblocation']
@@ -810,7 +806,7 @@ class GANFO(PlexAgent):
                             log.debug ('failed setting linked actor photo! Trying to get it from IAFD')
                             newrole.photo = getIAFDActorImage(newrole.name, metadata.year)
                             pass
-
+                
                 if not preferences['localmediaagent']:
                     # Trailer Support
                     # Eden / Frodo
@@ -850,6 +846,34 @@ class GANFO(PlexAgent):
                         for part in item.parts:
                             subtitles.cleanup_subtitle_entries(part, subtitle_files)
 
+                
+                #Trailer
+                try:
+                    trailers = nfo_xml.xpath('trailer')
+                    log.info('Trailers: %s', trailers)
+                    extras = []
+                    for trailer in trailers:
+                        log.info('Trailer: %s', trailer)
+                        trailerThumb=''
+                        trailerUrl = trailer.xpath('url')[0].text
+                        log.info('Trailer URL: %s', trailerUrl)
+                        try:
+                            trailerThumb = trailer.xpath('thumb')[0].text
+                            log.info('Trailer Thumb: %s', trailerThumb)
+                        except:
+                            pass
+                        extras.append({ 'type' : 'trailer',
+                                        'extra' : TrailerObject (
+                                                    file=trailerUrl,
+                                                    title=metadata.title,
+                                                    thumb=trailerThumb)})
+                    
+                    for extra in extras:
+                        metadata.extras.add(extra['extra'])
+                except:
+                    log.info('Error getting trailer')
+                    pass
+                
                 log.info('---------------------')
                 log.info('Movie nfo Information')
                 log.info('---------------------')
@@ -1006,7 +1030,8 @@ def getIAFDActorImage(myString, FilmYear):
         photourl = ''
         try:
             log.info('SELF:: %s. IAFD Actor search string [ %s ] for a movie released in %s', count, url, FilmYear)
-            html = HTML.ElementFromURL(url)
+            req = utils.HTTPRequest(url)
+            html = HTML.ElementFromString(req.text)
             if 'gender=' in url:
                 career = html.xpath('//p[.="Years Active"]/following-sibling::p[1]/text()[normalize-space()]')[0]
                 try:

@@ -26,6 +26,12 @@
         "default": "false"
     },
     {
+        "id": "background",
+        "label": "Use site image as background?",
+        "type": "bool",
+        "default": "false"
+    },
+    {
         "id": "prefixlegend",
         "label": "Place Cast Legend at Start of Summary?",
         "type": "bool",
@@ -72,5 +78,11 @@
         "label": "Create Collections based on Film Production Country",
         "type": "bool",
         "default": "false"
+    },
+    {
+        "id": "actasgenre",
+        "label": "Add acts as genre",
+        "type": "bool",
+        "default": "true"
     }
 ]
