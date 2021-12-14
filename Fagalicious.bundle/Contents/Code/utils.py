@@ -37,6 +37,7 @@ IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
 # getHTTPRequest variable 
 scraper = None
 
+
 # -------------------------------------------------------------------------------------------------------------------------------
 def getCast(agntCastList, FILMDICT):
     ''' Process and match cast list against IAFD '''
@@ -1485,9 +1486,9 @@ def matchTitle(siteTitle, FILMDICT):
 def matchTitleActors(siteTitle, FILMDICT):
     ''' match file title against website/iafd title: Boolean Return '''
 
-    siteTitleActorList = re.findall('\\b[A-Z]\\w*', siteTitle)
+    siteTitleActorList = re.findall('\\b[A-Z]\\w*', siteTitle, re.UNICODE)
     siteTitleActors = ' '.join(siteTitleActorList)
-    shortTitleActorList = re.findall('\\b[A-Z]\\w*', FILMDICT['ShortTitle'])
+    shortTitleActorList = re.findall('\\b[A-Z]\\w*', FILMDICT['ShortTitle'], re.UNICODE)
     shortTitleActors = ' '.join(shortTitleActorList)
 
     compareSiteActors = SortAlphaChars(NormaliseComparisonString(siteTitleActors))
