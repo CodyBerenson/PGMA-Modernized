@@ -144,6 +144,18 @@ class Fagalicious(Agent.Movies):
         else:
             log('AGNT  :: Search Query:: String has none of these {0}'.format(pattern))
 
+        # replace curly double quotes with straight double quotes
+        singleQuoteChars = [ur'\u201C', ur'\u201D']
+        pattern = u'({0})'.format('|'.join(singleQuoteChars))
+        matchedSingleQuote = re.search(pattern, myString)  # match against whole string
+        if matchedSingleQuote:
+            log('AGNT  :: Search Query:: Replace Curly Single Quote Characters with Straight Quote. Found one of these {0}'.format(pattern))
+            myString = re.sub(pattern, "\"", myString)
+            myString = ' '.join(myString.split())   # remove continous white space
+            log('AGNT  :: Amended Search Query [{0}]'.format(myString))
+        else:
+            log('AGNT  :: Search Query:: String has none of these {0}'.format(pattern))
+
         # replace curly single apostrophes with straight quote
         singleQuoteChars = [ur'\u2018', ur'\u2019']
         pattern = u'({0})'.format('|'.join(singleQuoteChars))
@@ -275,9 +287,11 @@ class Fagalicious(Agent.Movies):
                     log(LOG_BIGLINE)
                 except Exception as e:
                     log('SEARCH:: Error getting Site Title: %s', e)
-                    log('SEARCH:: Trying by extracting actors name from %s', siteTitle)
                     try:
-                        utils.matchTitleActors(siteTitle, FILMDICT)
+                        # Removing everything between " or ' as they usually are titles
+                        siteTitleActors = re.sub(ur'\u201C(.*?)\u201D', '', siteTitle)
+                        log('SEARCH:: Trying by extracting actors name from %s', siteTitleActors)
+                        utils.matchTitleActors(siteTitleActors, FILMDICT)
                     except Exception as e:
                         log('SEARCH:: Error getting Site Title: %s', e)
                         log(LOG_SUBLINE)
