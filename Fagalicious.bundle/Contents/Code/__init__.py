@@ -38,6 +38,7 @@
                                    Adding option to use site image as background
     12 Dec 2021   2021.12.12.01    Making the cropping more resilient. Fallback to original image
     13 Dec 2021   2021.12.13.01    Adding Trailer support
+                                   Adding a fallback search method based on actor names
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import json, re
@@ -399,7 +400,7 @@ class Fagalicious(Agent.Movies):
         try:
             testStudio = FILMDICT['Studio'].lower().replace(' ', '')
             ignoreGenres = ['Raging Stallion', 'Trailers', 'Hot House', 'BelAmi', 'NakedSword', 'CutlersDen']
-            useGenres = ['bareback', 'big dicks', 'black studs', 'double penetration', 'hairy', 'daddy', 'hairy', 'interracial', 'muscle hunks', 'uncut', 'jocks', 'latino', 'gaycest', 'group']
+            useGenres = ['bareback', 'big dicks', 'black studs', 'double penetration', 'hairy', 'daddy', 'hairy', 'interracial', 'muscle hunks', 'uncut', 'jocks', 'latino', 'gaycest', 'group', 'creampie', 'twinks', 'watersports']
             htmltags = html.xpath('//ul/a[contains(@href, "https://fagalicious.com/tag/")]/text()')
             log('UPDATE:: %s Genres/Cast Tags Found: "%s"', len(htmltags), htmltags)
             for tag in htmltags:
