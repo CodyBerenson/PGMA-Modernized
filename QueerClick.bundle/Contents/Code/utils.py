@@ -1284,11 +1284,11 @@ def matchFilename(filmPath, filmDuration):
     filmVars['FileFolder'], filmVars['FileName'] = os.path.split(os.path.splitext(filmPath)[0])
     log('Filename %s', filmVars['FileName'])
 
-    pattern = re.compile(r' - (cd|disc|disk|dvd|part|pt|scene)\s?[1-8].*$', re.IGNORECASE)
+    pattern = re.compile(r' -\s?(cd|disc|disk|dvd|part|pt|scene)\s?[1-8].*$', re.IGNORECASE)
     matched = re.search(pattern, filmVars['FileName'])  # match against end of string
     filmVars['Stacked'] = 'Yes' if matched else 'No'
 
-    REGEX = '^\((?P<Studio0>.+)\) - (?P<Title0>.+) \((?P<Year0>\d{4})\)|^\((?P<Studio1>.+)\) - (?P<Title1>.+)'
+    REGEX = '^\((?P<Studio0>.+)\) - (?P<Title0>.+) \((?P<Year0>\d{4})\) -\s?(cd|disc|disk|dvd|part|pt|scene)\s?[1-8].*$|^\((?P<Studio1>.+)\) - (?P<Title1>.+) -\s?(cd|disc|disk|dvd|part|pt|scene)\s?[1-8].*$'
     pattern = re.compile(REGEX)
     matched = pattern.search(filmVars['FileName'])
     if not matched:

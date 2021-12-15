@@ -695,6 +695,7 @@ class GANFO(PlexAgent):
                 # setname since Plex adds 'Collection' in the GUI already
                 setname_pat = re.compile(r'[\s]?(series|collection)$', re.IGNORECASE)
                 metadata.collections.clear()
+                metadata.collections.add(metadata.studio)
 
                 try:
                     sets_list = nfo_reader.read_sets_name()
