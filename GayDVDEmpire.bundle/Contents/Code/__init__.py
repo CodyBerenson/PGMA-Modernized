@@ -517,20 +517,20 @@ class GayDVDEmpire(Agent.Movies):
                         newReview.text = utils.TranslateString(writing, SITE_LANGUAGE, lang, DETECT)
                         log(LOG_SUBLINE)
 
-                        # adding chapter
-                        if isChapters:
-                            if title:
-                                sceneTitle = title
-                                if writing:
-                                    sceneTitle += ': ' + writing
-                            else:
-                                sceneTitle = ''
-                            chapter = {}
-                            chapter['title'] = sceneTitle
-                            chapter['start_time_offset'] = offset
-                            offset = offset + sceneDuration
-                            chapter['end_time_offset'] = offset
-                            newChapters.append(chapter)
+                    # adding chapter
+                    if title and isChapters:
+                        if title:
+                            sceneTitle = title
+                            if writing:
+                                sceneTitle += ': ' + writing
+                        else:
+                            sceneTitle = ''
+                        chapter = {}
+                        chapter['title'] = sceneTitle
+                        chapter['start_time_offset'] = offset
+                        offset = offset + sceneDuration
+                        chapter['end_time_offset'] = offset
+                        newChapters.append(chapter)
 
                 except Exception as e:
                     log('UPDATE:: Error getting Scene No. %s: %s', count, e)
