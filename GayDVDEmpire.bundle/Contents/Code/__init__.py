@@ -460,7 +460,6 @@ class GayDVDEmpire(Agent.Movies):
             log('UPDATE:: Error getting duration: %s', e)
 
         if isChapters:
-            metadata.chapters.clear()
             offset = 0
             totalSceneDuration = 0
             newChapters=[]
@@ -537,6 +536,18 @@ class GayDVDEmpire(Agent.Movies):
                     log('UPDATE:: Error getting Scene No. %s: %s', count, e)
         except Exception as e:
             log('UPDATE:: Error getting Scenes: %s', e)
+
+        # adding chapters
+        if isChapters and len(newChapters)>0:
+            chapterDelta = fileDuration - totalSceneDuration
+            # Note : we assume that potential delta is due to disclamers and intro at the beginning of the movie
+            if chapterDelta >= 0:
+                metadata.chapters.clear()
+                for newChapter in newChapters:
+                    chapter = metadata.chapters.new()
+                    chapter.title = newChapter['title']
+                    chapter.start_time_offset = newChapter['start_time_offset'] + chapterDelta
+                    chapter.end_time_offset = newChapter['end_time_offset'] + chapterDelta
 
         # 2g.   Summary = IAFD Legend + Synopsis
         log(LOG_BIGLINE)

@@ -525,7 +525,6 @@ class AEBNiii(Agent.Movies):
             log('UPDATE:: Error getting duration: %s. Do we process chapters? %s', e, isChapters)
 
         if isChapters:
-            metadata.chapters.clear()
             offset = 0
             totalSceneDuration = 0
             newChapters=[]
@@ -614,6 +613,7 @@ class AEBNiii(Agent.Movies):
             
             # adding chapters
             if isChapters and len(newChapters)>0:
+                metadata.chapters.clear()
                 chapterDelta = fileDuration - totalSceneDuration
                 # Note : we assume that potential delta is due to disclamers and intro at the beginning of the movie
                 if chapterDelta >= 0:

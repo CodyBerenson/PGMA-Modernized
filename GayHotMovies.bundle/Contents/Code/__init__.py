@@ -536,7 +536,6 @@ class GayHotMovies(Agent.Movies):
         isChapters = False
 
         if isChapters:
-            metadata.chapters.clear()
             offset = 0
             totalSceneDuration = 0
             newChapters=[]
@@ -620,6 +619,7 @@ class GayHotMovies(Agent.Movies):
             chapterDelta = fileDuration - totalSceneDuration
             # Note : we assume that potential delta is due to disclamers and intro at the beginning of the movie
             if chapterDelta >= 0:
+                metadata.chapters.clear()
                 allscenes = 'Chapters: ' + IAFD_THUMBSUP + '\n' + allscenes
                 for newChapter in newChapters:
                     chapter = metadata.chapters.new()
