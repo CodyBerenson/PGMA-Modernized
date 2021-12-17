@@ -202,7 +202,7 @@ class IAFD(Agent.Movies):
         log('UPDATE:: Title: %s' , metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
-        metadata.tagline = FILMDICT['SiteURL']
+        #metadata.tagline = FILMDICT['SiteURL']
         if FILMDICT['CompareDate']!='':
             metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
             metadata.year = metadata.originally_available_at.year
