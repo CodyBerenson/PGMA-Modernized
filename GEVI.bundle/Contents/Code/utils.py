@@ -1582,7 +1582,7 @@ def makeASCII(myString):
 def SortAlphaChars(myString):
     numbers = re.sub('[^0-9]','', myString)
     letters = re.sub('[0-9]','', myString)
-    myString = '{0}{1}'.format(numbers, ''.join(sorted(letters)))
+    myString = '{0}{1}'.format(''.join(sorted(numbers)), ''.join(sorted(letters)))
 
     return myString
 

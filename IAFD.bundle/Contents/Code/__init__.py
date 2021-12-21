@@ -285,22 +285,23 @@ class IAFD(Agent.Movies):
                     continue
                 sceneCount += 1
 
-                newReview = metadata.reviews.new()
-                newReview.author = 'IAFD'
-                newReview.link  = FILMDICT['SiteURL']
-                if len(title) > 40:
-                    for i in range(40, -1, -1):
-                        if title[i] == ' ':
-                            title = title[0:i]
-                            break
-                newReview.source = '{0}. {1}...'.format(sceneCount, title if title else FILMDICT['Title'])
-                if len(writing) > 275:
-                    for i in range(275, -1, -1):
-                        if writing[i] in ['.', '!', '?']:
-                            writing = writing[0:i + 1]
-                            break
-                newReview.text = utils.TranslateString(writing, SITE_LANGUAGE, lang, DETECT)
-                log(LOG_SUBLINE)
+                if title != '' or writing != '':
+                    newReview = metadata.reviews.new()
+                    newReview.author = 'IAFD'
+                    #newReview.link  = FILMDICT['SiteURL']
+                    if len(title) > 40:
+                        for i in range(40, -1, -1):
+                            if title[i] == ' ':
+                                title = title[0:i]
+                                break
+                    newReview.source = '{0}. {1}...'.format(sceneCount, title if title else FILMDICT['Title'])
+                    if len(writing) > 275:
+                        for i in range(275, -1, -1):
+                            if writing[i] in ['.', '!', '?']:
+                                writing = writing[0:i + 1]
+                                break
+                    newReview.text = utils.TranslateString(writing, SITE_LANGUAGE, lang, DETECT)
+                    log(LOG_SUBLINE)
         else:
             log('UPDATE:: Error No Scenes Recorded')
 
