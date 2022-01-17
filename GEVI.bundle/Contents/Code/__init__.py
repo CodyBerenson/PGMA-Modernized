@@ -10,6 +10,8 @@
     08 May 2021   2019.12.25.31    Use of duration matching
     27 Jul 2021   2019.12.25.32    Use of review area for scene matching
     21 Aug 2021   2019.12.25.33    IAFD will be only searched if film found on agent Catalogue
+    16 Jan 2021   2019.12.25.34    Gevi changed website design, xml had to change to reflect this, fields affected performers, directors, studio
+                                   added body type information to genres and corrected original code to cater for multiple genres as this was not split on commas
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -18,7 +20,7 @@ from datetime import datetime
 from helpers import clear_posters, clear_art
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.33'
+VERSION_NO = '2019.12.25.34'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 # log section separators
@@ -298,7 +300,7 @@ class GEVI(Agent.Movies):
                 # Site Studio/Distributor
                 try:
                     foundStudio = False
-                    htmlSiteStudio = html.xpath('//a[contains(@href, "/C/")]/parent::td//text()[normalize-space()]')
+                    htmlSiteStudio = html.xpath('//a[contains(@href, "/company/")]/parent::td//text()[normalize-space()]')
                     htmlSiteStudio = [x.strip() for x in htmlSiteStudio if x.strip()]
                     htmlSiteStudio = list(set(htmlSiteStudio))
                     log('SEARCH:: Site URL Distributor/Studio   %s', htmlSiteStudio)
@@ -421,7 +423,7 @@ class GEVI(Agent.Movies):
                     log(LOG_SUBLINE)
                 
                 finally:
-                    FILMDICT['Genres'] = genres
+                    FILMDICT['Genres'] = {key.strip(): value for key, value in genres.items()}
                     log('SEARCH:: Genres Found                  %s', genres)
 
                 # we should have a match on studio, title and year now. Find corresponding film on IAFD
@@ -500,16 +502,35 @@ class GEVI(Agent.Movies):
         # 2a.   Genre
         log(LOG_BIGLINE)
         try:
-            genres = FILMDICT['Genres']
-            htmlgenres = html.xpath('//td[contains(text(),"category")]//following-sibling::td[1]/text()') # add GEVI genres to those possibly found in AEBN/GayDVDEmpire/GayHotMovies
-            htmlgenres = [x.strip() for x in htmlgenres if x.strip()]
+            genres = FILMDICT['Genres'] # genres in AEBN/GayDVDEmpire/GayHotMovies
+            htmlgenres = html.xpath('//td[contains(text(),"category")]//following-sibling::td[1]/text()')[0]            # add GEVI categories to genres
+            try:
+                htmlbodyTypes = html.xpath('//td[contains(text(),"body types")]//following-sibling::td[1]/text()')[0]   # add GEVI body type to genres
+                log('UPDATE:: Body Types Found: %s', htmlbodyTypes)
+                htmlbodyTypes = htmlbodyTypes.replace('Hvy', 'Heavy')
+                htmlgenres = htmlgenres + ',' + htmlbodyTypes
+            except Exception as e:
+                log('UPDATE:: Error getting Body Types: %s', e)
+
+            htmlgenres = htmlgenres.split(',')
+            htmlgenres = [x.strip() for x in htmlgenres if x.strip()]   # trim and remove null elements
             for genre in htmlgenres:
                 if genre not in genres:
-                    genres[genre] = ''
-            # reset htmlgenres to be a list containing keys of the genre dictionary
+                    genres[genre] = ''  # add genre as key, note values are always blank
+
+            # reset htmlgenres to be a list containing keys of the genre dictionary and delete duplicated genres for example bear/bears - should leave only bears
             htmlgenres = list(genres.keys())
-            htmlgenres.sort()
             log('UPDATE:: %s Genres Found: %s', len(htmlgenres), htmlgenres)
+
+            copygenres = htmlgenres[:]
+            for index, genre in enumerate(htmlgenres):
+                for copygenre in copygenres:
+                    if genre != copygenre and genre in copygenre and len(copygenre.split()) == 1:
+                        htmlgenres[index] = ''
+
+            htmlgenres = [x.strip() for x in htmlgenres if x.strip()]   # trim and remove null elements
+            htmlgenres.sort()
+
             metadata.genres.clear()
             for genre in htmlgenres:
                 metadata.genres.add(genre)
@@ -552,7 +573,7 @@ class GEVI(Agent.Movies):
         # 2d.   Directors
         log(LOG_BIGLINE)
         try:
-            htmldirectors = html.xpath('//td[contains(text(),"director")]//following-sibling::td[1]/a/text()')
+            htmldirectors = html.xpath('//td[@class="pd"]/a[contains(@href, "/director/")]/text()')
             htmldirectors = ['{0}'.format(x.strip()) for x in htmldirectors if x.strip()]
             log('UPDATE:: Director List %s', htmldirectors)
             directorDict = utils.getDirectors(htmldirectors, FILMDICT)
@@ -571,7 +592,7 @@ class GEVI(Agent.Movies):
         # 2e.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
         log(LOG_BIGLINE)
         try:
-            htmlcast = html.xpath('//td[@class="pd"]/a/text()')
+            htmlcast = html.xpath('//td[@class="pd"]/a[contains(@href, "/performer/")]//text()')
             log('UPDATE:: Cast List %s', htmlcast)
             castDict = utils.getCast(htmlcast, FILMDICT)
 
