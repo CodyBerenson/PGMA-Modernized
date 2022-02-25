@@ -7,10 +7,16 @@
         "default": "3"
     },
     {
-        "id": "matchsiteduration",
-        "label": "Match against Site's recorded film/scene length, Note: IAFDs entry is always matched",
+        "id": "matchiafdduration",
+        "label": "Match against IAFD's recorded film/scene length",
         "type": "bool",
         "default": "true"
+    },
+    {
+        "id": "matchsiteduration",
+        "label": "Match against Site's recorded film/scene length",
+        "type": "bool",
+        "default": "false"
     },
     {
         "id": "durationdx",
@@ -21,7 +27,7 @@
     },
     {
         "id": "detect",
-        "label": "Determine source language before attempting translation? TICK if film summaries are in different languages",
+        "label": "Determine source language before attempting translation? TICK if film summaries are not in library language",
         "type": "bool",
         "default": "false"
     },

@@ -24,6 +24,9 @@
                                    Added iafd legend to summary
     11 May 2021   2020.08.09.11    Further code reorganisation
     30 May 2021   2020.08.09.12    Further code reorganisation
+    04 Feb 2022   2020.08.09.13    implemented change suggested by Cody: duration matching optional on IAFD matching
+                                   Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
+
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -31,24 +34,25 @@ import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.08.09.12'
+VERSION_NO = '2020.08.09.13'
 PLUGIN_LOG_TITLE = 'BestExclusivePorn'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
 
 # Preferences
-DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-MATCHSITEDURATION = int(Prefs['matchsiteduration']) # Acceptable difference between actual duration of video file and that on agent website
-DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
-DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
-PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
+COLCAST = Prefs['castcollection']                   # add cast to collection
 COLCLEAR = Prefs['clearcollections']                # clear previously set collections
+COLCOUNTRY = Prefs['countrycollection']             # add country to collection
+COLDIRECTOR = Prefs['directorcollection']           # add director to collection
+COLGENRE = Prefs['genrecollection']                 # add genres to collection
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
 COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
-COLGENRE = Prefs['genrecollection']                 # add genres to collection
-COLDIRECTOR = Prefs['directorcollection']           # add director to collection
-COLCAST = Prefs['castcollection']                   # add cast to collection
-COLCOUNTRY = Prefs['countrycollection']             # add country to collection
+DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
+MATCHIAFDDURATION = Prefs['matchiafdduration']      # Match against IAFD Duration value
+MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
+PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 
 # PLEX API /CROP Script/online image cropper
 load_file = Core.storage.load
@@ -122,12 +126,12 @@ class BestExclusivePorn(Agent.Movies):
         pattern = u"\w*[{0}]\w*".format(''.join(badChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
-            log('AGNT :: Search Query:: Replacing characters in string. Found one of these {0}'.format(pattern))
+            log('AGNT  :: Search Query:: Replacing characters in string. Found one of these {0}'.format(pattern))
             myString = re.sub(pattern, '', myString)
             myString = ' '.join(myString.split())   # remove continous white space
-            log('AGNT :: Amended Search Query [{0}]'.format(myString))
+            log('AGNT  :: Amended Search Query [{0}]'.format(myString))
         else:
-            log('AGNT :: Search Query:: String has none of these {0}'.format(pattern))
+            log('AGNT  :: Search Query:: String has none of these {0}'.format(pattern))
 
         # Best Exclusive uses a maximum of 49 characters when searching
         myString = myString[:49].strip()
@@ -152,7 +156,7 @@ class BestExclusivePorn(Agent.Movies):
 
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
@@ -300,7 +304,7 @@ class BestExclusivePorn(Agent.Movies):
 
         # 1b.   Set Title
         FILMDICT['Title'] = FILMDICT['Title']
-        metadata.title = " ".join(word.capitalize() if "'s" in word or "’s" in word else word.title() for word in FILMDICT['Title'].split())
+        metadata.title = " ".join(word.capitalize() if "'s" in word or "’s" in word or "'t" in word or "’t" in word else word.title() for word in FILMDICT['Title'].split())
         log('UPDATE:: Title: %s' , metadata.title)
 
         # 1c/d. Set Tagline/Originally Available from metadata.id
@@ -370,13 +374,15 @@ class BestExclusivePorn(Agent.Movies):
 
         # 2c.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
         #             If there is a Starring heading use it to get the actors else try searching the title for the cast
+        #             if there is a cast list in the filename, use this as the definitive
         log(LOG_BIGLINE)
         try:
             htmlcast = html.xpath('.//div[@class="entry"]/p/text()[contains(.,"Starring: ")]')[0].strip().replace('Starring: ', '').split(',')
 
         except Exception as e:
             htmlcast = []
-            log('UPDATE:: Error getting Cast: No Starring Entry, Get Cast from Film Title: %s', e)
+            log('UPDATE:: Error getting Cast: No Starring Entry: %s', e)
+            log('UPDATE:: Get Cast from Film Title')
             pattern = u'([A-Z]\w+(?=[\s\-][A-Z])(?:[\s\-][A-Z]\w*)+)'
             matches = re.findall(pattern, FILMDICT['Title'])  # match against Film title
             log('UPDATE:: Matches:: {0}'.format(matches))

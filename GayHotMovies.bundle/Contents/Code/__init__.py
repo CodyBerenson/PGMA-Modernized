@@ -34,13 +34,15 @@
                                    Code reorganisation
     25 Aug 2021   2019.08.12.13    IAFD will be only searched if film found on agent Catalogue
                                    changes to xpath
+    04 Feb 2022   2019.18.12.14    implemented change suggested by Cody: duration matching optional on IAFD matching
+                                   Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
 ---------------------------------------------------------------------------------------------------------------
 '''
 import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.13'
+VERSION_NO = '2019.08.12.14'
 PLUGIN_LOG_TITLE = 'GayHotMovies'
 
 # log section separators
@@ -49,6 +51,7 @@ LOG_SUBLINE = '      -----------------------------------------------------------
 
 # Preferences
 DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+MATCHIAFDDURATION = Prefs['matchiafdduration']      # Match against IAFD Duration value
 MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
@@ -162,12 +165,13 @@ class GayHotMovies(Agent.Movies):
 
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
 
         log(LOG_BIGLINE)
+
         # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
         searchTitle = self.CleanSearchString(FILMDICT['SearchTitle'])
@@ -342,7 +346,7 @@ class GayHotMovies(Agent.Movies):
             ignoreCategories = ['language', 'gay', 'movies', 'website', 'settings', 'locale', 'plot', 'character']
             countries = []
             genres = []
-            htmlcategories = html.xpath('//a[contains(@href,"https://www.gayhotmovies.com/category/")]/span/text()')
+            htmlcategories = html.xpath('//a[contains(@href,"https://www.gayhotmovies.com/category/")]/@title')
             htmlcategories = [x.strip() for x in htmlcategories if x.strip()]
             htmlcategories.sort()
             log('UPDATE:: %s Categories Found: %s', len(htmlcategories), htmlcategories)

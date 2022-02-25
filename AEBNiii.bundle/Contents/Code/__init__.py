@@ -26,6 +26,9 @@
                                    improved logging
     31 Jul 2021   2020.05.21.09    Code reorganisation, use of review area for scene info
                                    changes to xpath for film duration
+    04 Feb 2022   2020.05.21.10    implemented change suggested by Cody: duration matching optional on IAFD matching
+                                   Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
+
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -33,7 +36,7 @@ import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.05.21.08'
+VERSION_NO = '2020.05.21.10'
 PLUGIN_LOG_TITLE = 'AEBN iii'
 
 # log section separators
@@ -41,18 +44,19 @@ LOG_BIGLINE = '-----------------------------------------------------------------
 LOG_SUBLINE = '      --------------------------------------------------------------------------'
 
 # Preferences
-DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
-DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
-DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
-PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
+COLCAST = Prefs['castcollection']                   # add cast to collection
 COLCLEAR = Prefs['clearcollections']                # clear previously set collections
+COLCOUNTRY = Prefs['countrycollection']             # add country to collection
+COLDIRECTOR = Prefs['directorcollection']           # add director to collection
+COLGENRE = Prefs['genrecollection']                 # add genres to collection
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
 COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
-COLGENRE = Prefs['genrecollection']                 # add genres to collection
-COLDIRECTOR = Prefs['directorcollection']           # add director to collection
-COLCAST = Prefs['castcollection']                   # add cast to collection
-COLCOUNTRY = Prefs['countrycollection']             # add country to collection
+DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
+MATCHIAFDDURATION = Prefs['matchiafdduration']      # Match against IAFD Duration value
+MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
+PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 
 # URLS
 BASE_URL = 'https://gay.aebn.com'
@@ -250,7 +254,7 @@ class AEBNiii(Agent.Movies):
 
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
@@ -426,7 +430,7 @@ class AEBNiii(Agent.Movies):
             uniqueCollections = [x for x in htmlcollections if x.lower() not in (y.lower() for y in FILMDICT['Collection'])]
             for collection in uniqueCollections:
                 metadata.collections.add(collection)
-                log('UPDATE:: %s Collection Added: %s', collection)
+                log('UPDATE:: Collection Added: %s', collection)
         except Exception as e:
             log('UPDATE:: Error getting Collections: %s', e)
 

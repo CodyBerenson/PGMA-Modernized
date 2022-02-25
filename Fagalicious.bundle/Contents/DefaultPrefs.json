@@ -7,6 +7,12 @@
         "default": "3"
     },
     {
+        "id": "matchiafdduration",
+        "label": "Match against IAFD's recorded film/scene length",
+        "type": "bool",
+        "default": "true"
+    },
+    {
         "id": "matchsiteduration",
         "label": "Match against Site's recorded film/scene length, Note: IAFDs entry is always matched",
         "type": "bool",
@@ -77,6 +83,6 @@
         "id": "thumbor",
         "label": "Web Address of Thumbor: A smart imaging service. It enables on-demand onlines cropping, resizing and flipping of images",
         "type": "text",
-        "default": "http://35.236.230.140:8888/unsafe"
+        "default": "http://34.86.202.9:8888/unsafe"
     }
 ]

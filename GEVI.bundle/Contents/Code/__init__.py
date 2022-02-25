@@ -12,6 +12,8 @@
     21 Aug 2021   2019.12.25.33    IAFD will be only searched if film found on agent Catalogue
     16 Jan 2021   2019.12.25.34    Gevi changed website design, xml had to change to reflect this, fields affected performers, directors, studio
                                    added body type information to genres and corrected original code to cater for multiple genres as this was not split on commas
+    04 Feb 2022   2019.12.25.34    implemented change suggested by Cody: duration matching optional on IAFD matching
+                                   Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -28,18 +30,19 @@ LOG_BIGLINE = '-----------------------------------------------------------------
 LOG_SUBLINE = '      --------------------------------------------------------------------------'
 
 # Preferences
-DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
-DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
-DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
-PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
+COLCAST = Prefs['castcollection']                   # add cast to collection
 COLCLEAR = Prefs['clearcollections']                # clear previously set collections
+COLCOUNTRY = Prefs['countrycollection']             # add country to collection
+COLDIRECTOR = Prefs['directorcollection']           # add director to collection
+COLGENRE = Prefs['genrecollection']                 # add genres to collection
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
 COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
-COLGENRE = Prefs['genrecollection']                 # add genres to collection
-COLDIRECTOR = Prefs['directorcollection']           # add director to collection
-COLCAST = Prefs['castcollection']                   # add cast to collection
-COLCOUNTRY = Prefs['countrycollection']             # add country to collection
+DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
+MATCHIAFDDURATION = Prefs['matchiafdduration']      # Match against IAFD Duration value
+MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
+PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 
 # URLS
 BASE_URL = 'https://www.gayeroticvideoindex.com'
@@ -212,7 +215,7 @@ class GEVI(Agent.Movies):
 
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
@@ -371,7 +374,7 @@ class GEVI(Agent.Movies):
                 # GEVI usually sets its Genre to General Hardcore rather than having a more robust system like other websites, however it stores links to the film on the other websites
                 # Check AEBN/GayDVDEmpire/GayHotMovies Links and take genre information from them: Store them as 'Genres'Key in FILMDICT
                 FilmLinks = {}
-                ignoreGenres = ['exclusive', 'feature', 'high definition', 'new release', 'sale downloads', 'sale rentals', 'sale streaming', 'sale', '4k ultra hd', 'language', 'gay', 'movies', 'website', 'settings', 'locale', 'plot', 'character']
+                ignoreGenres = ['4k ultra hd', 'character', 'exclusive', 'feature', 'gay', 'hd movies', 'high definition', 'language', 'locale', 'movies', 'new release', 'plot', 'sale downloads', 'sale rentals', 'sale streaming', 'sale', 'settings', 'streaming video', 'website']
                 genres = {}
                 try:
                     webURLs = html.xpath('//td[contains(text(),"this production at")]/a/@href')
@@ -530,6 +533,7 @@ class GEVI(Agent.Movies):
 
             htmlgenres = [x.strip() for x in htmlgenres if x.strip()]   # trim and remove null elements
             htmlgenres.sort()
+            log('UPDATE:: %s Filtered and Sorted Genres: %s', len(htmlgenres), htmlgenres)
 
             metadata.genres.clear()
             for genre in htmlgenres:

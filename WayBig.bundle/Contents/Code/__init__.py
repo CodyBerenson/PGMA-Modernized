@@ -26,31 +26,33 @@
                                    code reorganisation like moving logging fuction out of class so it can be used by all imports
     11 May 2021   2019.08.12.30    Further code reorganisation
     29 Jul 2021   2019.08.12.31    Further code reorganisation
-
+    04 Feb 2022   2019.08.12.32    implemented change suggested by Cody: duration matching optional on IAFD matching
+                                   Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
 ---------------------------------------------------------------------------------------------------------------
 '''
 import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.22.31'
+VERSION_NO = '2019.12.22.32'
 PLUGIN_LOG_TITLE = 'WayBig'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
 
 # Preferences
-DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-MATCHSITEDURATION = int(Prefs['matchsiteduration']) # Acceptable difference between actual duration of video file and that on agent website
-DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
-DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
-PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
+COLCAST = Prefs['castcollection']                   # add cast to collection
 COLCLEAR = Prefs['clearcollections']                # clear previously set collections
+COLCOUNTRY = Prefs['countrycollection']             # add country to collection
+COLDIRECTOR = Prefs['directorcollection']           # add director to collection
+COLGENRE = Prefs['genrecollection']                 # add genres to collection
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
 COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
-COLGENRE = Prefs['genrecollection']                 # add genres to collection
-COLDIRECTOR = Prefs['directorcollection']           # add director to collection
-COLCAST = Prefs['castcollection']                   # add cast to collection
-COLCOUNTRY = Prefs['countrycollection']             # add country to collection
+DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
+MATCHIAFDDURATION = Prefs['matchiafdduration']      # Match against IAFD Duration value
+MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
+PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 
 # PLEX API /CROP Script/online image cropper
 load_file = Core.storage.load
@@ -118,20 +120,22 @@ class WayBig(Agent.Movies):
 
         myString = myString.lower().strip()
 
-        # for titles with " - " replace with ":"
-        myString = myString.replace(' - ', ': ')
+        # for titles with "- " replace with ":"
+        if '- ' in myString:
+            myString = myString.replace(' - ', ': ')
+            myString = myString.replace('- ', ': ')
+            log('AGNT  :: Search Query:: Replaced Minus-Dash sequence with Colon')
+            
 
         # replace curly apostrophes with straight as strip diacritics will remove these
         quoteChars = [ur'‘', ur'’', ur'\u2018', ur'\u2019']
         pattern = u'({0})'.format('|'.join(quoteChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
-            log('AGNT  :: Search Query:: Replacing characters in string. Found one of these {0}'.format(quoteChars))
             myString = re.sub(pattern, "'", myString)
             myString = ' '.join(myString.split())   # remove continous white space
+            log('AGNT  :: Search Query:: Replaced characters in string. Found one of these {0}'.format(quoteChars))
             log('AGNT  :: Amended Search Query [{0}]'.format(myString))
-        else:
-            log('AGNT  :: Search Query:: String has none of these {0}'.format(quoteChars))
 
         # WayBig seems to fail to find Titles which have invalid chars in them, split at first incident and take first split, just to search but not compare
         # the back tick is added to the list as users who can not include quotes in their filenames can use these to replace them without changing the scrappers code
@@ -142,16 +146,15 @@ class WayBig(Agent.Movies):
             matched = re.search(pattern, word) # match against first word
             if matched:
                 myWords.remove(myWords[count])
-                log('AGNT  :: Search Query:: Dropping word {0} "{1}". Found one of these {2} characters'.format(count, word, badChars))
+                log('AGNT  :: Search Query:: Dropped word {0} "{1}". Found one of these {2} characters'.format(count, word, badChars))
                 myString = ' '.join(myWords)
                 log('AGNT  :: Amended Search Query [{0}]'.format(myString))
-            else:
-                log('AGNT  :: Search Query:: Word {0} "{1}" has none of these chracters {2}'.format(count, word, badChars))
 
         # string can not be longer than 50 characters
         if len(myString) > 50:
             lastSpace = myString[:50].rfind(' ')
             myString = myString[:lastSpace]
+            log('AGNT  :: Search Query:: Query length trimmed > 50 Characters')
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())
@@ -174,7 +177,7 @@ class WayBig(Agent.Movies):
 
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return

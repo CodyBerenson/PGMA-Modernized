@@ -10,6 +10,9 @@
                                    Enhancements to IAFD search routine, including Levenshtein Matching on Cast names
                                    Added iafd legend to summary
     25 Aug 2021   2020.18.03.08    IAFD will be only searched if film found on agent Catalogue
+    04 Feb 2022   2020.15.03.09    implemented change suggested by Cody: duration matching optional on IAFD matching
+                                   Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
+
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -17,7 +20,7 @@ import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2021.01.06.03'
+VERSION_NO = '2021.01.06.09'
 PLUGIN_LOG_TITLE = 'nymMedia'
 
 # log section separators
@@ -25,18 +28,19 @@ LOG_BIGLINE = '-----------------------------------------------------------------
 LOG_SUBLINE = '      --------------------------------------------------------------------------'
 
 # Preferences
-DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
-DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
-DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
-PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
+COLCAST = Prefs['castcollection']                   # add cast to collection
 COLCLEAR = Prefs['clearcollections']                # clear previously set collections
+COLCOUNTRY = Prefs['countrycollection']             # add country to collection
+COLDIRECTOR = Prefs['directorcollection']           # add director to collection
+COLGENRE = Prefs['genrecollection']                 # add genres to collection
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
 COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
-COLGENRE = Prefs['genrecollection']                 # add genres to collection
-COLDIRECTOR = Prefs['directorcollection']           # add director to collection
-COLCAST = Prefs['castcollection']                   # add cast to collection
-COLCOUNTRY = Prefs['countrycollection']             # add country to collection
+DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
+DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
+DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
+MATCHIAFDDURATION = Prefs['matchiafdduration']      # Match against IAFD Duration value
+MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
+PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 
 # URLS - nymMedia uses post requests rather than building up urls
 BASE_URL = 'https://www.nymmedia.com'
@@ -122,7 +126,7 @@ class nymMedia(Agent.Movies):
 
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media.items[0].parts[0].file)
+            FILMDICT = utils.matchFilename(media)
         except Exception as e:
             log('SEARCH:: Error: %s', e)
             return
