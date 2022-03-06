@@ -1263,7 +1263,8 @@ def matchTitle(siteTitle, FILMDICT):
         amendedSiteTitle = '{0}{1}'.format(re.sub(pattern, '', amendedSiteTitle).strip(), amendedShortTitle) 
 
     compareSiteTitle = SortAlphaChars(amendedSiteTitle)
-    testTitle = 'Passed' if compareSiteTitle in FILMDICT['CompareTitle'] else 'Passed (IAFD)' if compareSiteTitle in FILMDICT['IAFDCompareTitle'] else 'Failed'
+    amendedShortTitle = SortAlphaChars(amendedShortTitle)
+    testTitle = 'Passed' if compareSiteTitle in FILMDICT['CompareTitle'] else 'Passed (IAFD)' if compareSiteTitle in FILMDICT['IAFDCompareTitle'] else 'Passed (Amended Title)' if amendedShortTitle in FILMDICT['CompareTitle'] else 'Failed'
 
     log('UTILS :: Site Title                    %s', siteTitle)
     log('UTILS :: Amended Site Title            %s', amendedSiteTitle)

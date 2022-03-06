@@ -26,7 +26,7 @@
     30 May 2021   2020.08.09.12    Further code reorganisation
     04 Feb 2022   2020.08.09.13    implemented change suggested by Cody: duration matching optional on IAFD matching
                                    Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
-
+    03 Mar 2022   2020.08.09.14    BASE URL changed from http: to https:
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -34,7 +34,7 @@ import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.08.09.13'
+VERSION_NO = '2020.08.09.14'
 PLUGIN_LOG_TITLE = 'BestExclusivePorn'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
@@ -60,7 +60,7 @@ CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/BestExclusivePorn.bundle
 THUMBOR = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}"
 
 # URLS
-BASE_URL = 'http://bestexclusiveporn.com/'
+BASE_URL = 'https://bestexclusiveporn.com/'
 BASE_SEARCH_URL = BASE_URL + '?s={0}'
 
 # dictionary holding film variables

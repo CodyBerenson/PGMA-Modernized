@@ -28,13 +28,15 @@
     29 Jul 2021   2019.08.12.31    Further code reorganisation
     04 Feb 2022   2019.08.12.32    implemented change suggested by Cody: duration matching optional on IAFD matching
                                    Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
+    27 Feb 2022   2019.08.12.33    Solved issue #123
+                                   tags with colons in them are excluded from cast list
 ---------------------------------------------------------------------------------------------------------------
 '''
 import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.22.32'
+VERSION_NO = '2019.12.22.33'
 PLUGIN_LOG_TITLE = 'WayBig'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
@@ -234,11 +236,11 @@ class WayBig(Agent.Movies):
 
                     # the siteEntry usual has the format Studio: Title
                     siteEntry = siteEntry.lower()
-                    if ': ' in siteEntry:
+                    if ' at ' in siteEntry:
+                        siteTitle, siteStudio = siteEntry.rsplit(' at ', 1)
+                    elif ': ' in siteEntry:
                         siteStudio, siteTitle = siteEntry.split(': ', 1)
                         # none standard titles
-                    elif ' at ' in siteEntry:
-                        siteTitle, siteStudio = siteEntry.rsplit(' at ', 1)
                     elif ' on ' in siteEntry:
                         siteTitle, siteStudio = siteEntry.rsplit(' on ', 1)
                     elif '? ' in siteEntry:
@@ -382,11 +384,15 @@ class WayBig(Agent.Movies):
             htmlcast = html.xpath('//a[contains(@href,"https://www.waybig.com/blog/tag/")]/text()')
             htmlcast = [x.replace(u'\u2019s', '') for x in htmlcast]
             htmlcast = list(set(htmlcast))
+
+            # remove all tags with non name characters such as colons
+            htmlcast = [x for x in htmlcast if not ':' in x]
             # remove File Studio Name
             htmlcast = [x for x in htmlcast if not '.tv' in x.lower()]
             htmlcast = [x for x in htmlcast if not '.com' in x.lower()]
             htmlcast = [x for x in htmlcast if not '.net' in x.lower()]
             htmlcast = [x for x in htmlcast if not FILMDICT['Studio'].replace(' ', '').lower() in x.replace(' ', '').lower()]
+
             # actors will have initial capitals for names
             for count, cast in enumerate(htmlcast):
                 words = cast.split()
