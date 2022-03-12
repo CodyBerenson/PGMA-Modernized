@@ -22,6 +22,7 @@ General Functions found in all agents
                         - improve REGEX matching on filenames now includes stacking info
                     implemented change by Cody:
                         - duration matching optional on IAFD matching
+    11 Mar 2022     Corrected creation of iafd url string as links now have https:\\iafd.com in them
     
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -255,7 +256,8 @@ def getFilmOnIAFD(FILMDICT):
             # Film URL
             try:
                 iafdfilmURL = film.xpath('./td[1]/a/@href')[0].replace('+/', '/').replace('-.', '.')
-                iafdfilmURL = '{0}{1}'.format(IAFD_BASE, iafdfilmURL) if iafdfilmURL[0] == '/' else '{0}/{1}'.format(IAFD_BASE, iafdfilmURL)
+                if IAFD_BASE not in iafdfilmURL:
+                    iafdfilmURL = '{0}{1}'.format(IAFD_BASE, iafdfilmURL) if iafdfilmURL[0] == '/' else '{0}/{1}'.format(IAFD_BASE, iafdfilmURL)
                 log('UTILS :: Site Title url                %s', iafdfilmURL)
                 html = getURLElement(iafdfilmURL, UseAdditionalResults=False)
                 log(LOG_BIGLINE)

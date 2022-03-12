@@ -288,7 +288,7 @@ class GayMovie(Agent.Movies):
         # 2a.   Directors
         log(LOG_BIGLINE)
         try:
-            htmldirectors = html.xpath('//div[@class="fusion-text"]/p/descendant::strong[contains(text(),"Director")]/parent::p/strong[last()]/following::text()[normalize-space()]')[0].replace(':', '').split(',')
+            htmldirectors = html.xpath('//strong[text()="Director"]/following::text()[normalize-space()]')[0].replace(':', '').split(',')
             htmldirectors = ['{0}'.format(x.strip()) for x in htmldirectors if x.strip()]
             log('UPDATE:: Director List %s', htmldirectors)
             directorDict = utils.getDirectors(htmldirectors, FILMDICT)
@@ -307,7 +307,7 @@ class GayMovie(Agent.Movies):
         # 2b.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
         log(LOG_BIGLINE)
         try:
-            htmlcast = html.xpath('//strong[text()="Actors"]//following::text()[normalize-space()]')[0].replace(':', '').split(',')
+            htmlcast = html.xpath('//strong[text()="Actors"]/following::text()[normalize-space()]')[0].replace(':', '').split(',')
             log('UPDATE:: Cast List %s', htmlcast)
             castDict = utils.getCast(htmlcast, FILMDICT)
 
