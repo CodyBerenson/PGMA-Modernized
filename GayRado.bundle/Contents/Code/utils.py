@@ -22,6 +22,7 @@ General Functions found in all agents
                         - improve REGEX matching on filenames now includes stacking info
                     implemented change by Cody:
                         - duration matching optional on IAFD matching
+    11 Mar 2022     #137 - Corrected creation of iafd url string as links now have https:\\iafd.com in them
     
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -197,9 +198,11 @@ def getFilmOnIAFD(FILMDICT):
     if matched:
         FILMDICT['IAFDTitle'] = FILMDICT['IAFDTitle'][:matched.start()]
 
-    # strip standalone '1's'
+    # split at standalone '1's'
     pattern = ur'(?<!\d)1(?!\d)'
-    FILMDICT['IAFDTitle'] = re.sub(pattern, '', FILMDICT['IAFDTitle'])
+    matched = re.search(pattern, FILMDICT['IAFDTitle'])  # match against whole string
+    if matched:
+        FILMDICT['IAFDTitle'] = FILMDICT['IAFDTitle'][:matched.start()]
 
     # strip definite and indefinite english articles
     pattern = ur'^(The|An|A) '
@@ -255,7 +258,8 @@ def getFilmOnIAFD(FILMDICT):
             # Film URL
             try:
                 iafdfilmURL = film.xpath('./td[1]/a/@href')[0].replace('+/', '/').replace('-.', '.')
-                iafdfilmURL = '{0}{1}'.format(IAFD_BASE, iafdfilmURL) if iafdfilmURL[0] == '/' else '{0}/{1}'.format(IAFD_BASE, iafdfilmURL)
+                if IAFD_BASE not in iafdfilmURL:
+                    iafdfilmURL = '{0}{1}'.format(IAFD_BASE, iafdfilmURL) if iafdfilmURL[0] == '/' else '{0}/{1}'.format(IAFD_BASE, iafdfilmURL)
                 log('UTILS :: Site Title url                %s', iafdfilmURL)
                 html = getURLElement(iafdfilmURL, UseAdditionalResults=False)
                 log(LOG_BIGLINE)
@@ -1262,15 +1266,14 @@ def matchTitle(siteTitle, FILMDICT):
         pattern = re.compile(re.escape(amendedShortTitle), re.IGNORECASE)
         amendedSiteTitle = '{0}{1}'.format(re.sub(pattern, '', amendedSiteTitle).strip(), amendedShortTitle) 
 
-    compareSiteTitle = SortAlphaChars(amendedSiteTitle)
-    testTitle = 'Passed' if compareSiteTitle in FILMDICT['CompareTitle'] else 'Passed (IAFD)' if compareSiteTitle in FILMDICT['IAFDCompareTitle'] else 'Failed'
+    sortedSiteTitle = SortAlphaChars(amendedSiteTitle)
+    testTitle = 'Passed' if sortedSiteTitle in FILMDICT['CompareTitle'] else 'Passed (IAFD)' if sortedSiteTitle in FILMDICT['IAFDCompareTitle'] else 'Failed'
 
     log('UTILS :: Site Title                    %s', siteTitle)
     log('UTILS :: Amended Site Title            %s', amendedSiteTitle)
     log('UTILS :: File Title                    %s', FILMDICT['Title'])
     log('UTILS :: File Short Title              %s', FILMDICT['ShortTitle'])
-    log('UTILS :: Amended Short Title           %s', amendedShortTitle)
-    log('UTILS :: Compare Site Title            %s', compareSiteTitle)
+    log('UTILS :: Compare Site Title            %s', sortedSiteTitle)
     log('UTILS ::         Agent Title           %s', FILMDICT['CompareTitle'])
     log('UTILS ::         IAFD Title            %s', FILMDICT['IAFDCompareTitle'])
     log('UTILS :: Title Comparison Test         [%s]', testTitle)
