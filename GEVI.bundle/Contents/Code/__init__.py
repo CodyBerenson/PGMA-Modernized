@@ -14,6 +14,7 @@
                                    added body type information to genres and corrected original code to cater for multiple genres as this was not split on commas
     04 Feb 2022   2019.12.25.34    implemented change suggested by Cody: duration matching optional on IAFD matching
                                    Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
+    21 Mar 2022   2019.12.25.35    #147: Implemented simple fix by fivedays555, to add website to Agents Header Referer
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -62,6 +63,7 @@ def Start():
     ''' initialise process '''
     HTTP.CacheTime = CACHE_1WEEK
     HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
+    HTTP.Headers['Referer'] =  'https://www.gayeroticvideoindex.com/new'
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def ValidatePrefs():
@@ -728,6 +730,7 @@ class GEVI(Agent.Movies):
         log(LOG_SUBLINE)
         summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
+        log('UPDATE:: Summary with Legend: %s', summary)
         metadata.summary = summary
 
         log(LOG_BIGLINE)
