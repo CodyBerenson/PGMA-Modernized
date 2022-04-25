@@ -23,6 +23,8 @@ General Functions found in all agents
                     implemented change by Cody:
                         - duration matching optional on IAFD matching
     11 Mar 2022     #137 - Corrected creation of iafd url string as links now have https:\\iafd.com in them
+    04 Apr 2022     #151 - Fixed: No Match when checking against No Duration on IAFD
+    04 Apr 2022     #152 - Fixed: - in IAFD titles
     
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -213,8 +215,9 @@ def getFilmOnIAFD(FILMDICT):
         if tempCompare not in FILMDICT['IAFDCompareTitle']:
             FILMDICT['IAFDCompareTitle'].append(tempCompare)
 
+    # if agent is IAFD split at first colon
     # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string, also remove '!'
-    FILMDICT['IAFDSearchTitle'] = FILMDICT['IAFDTitle']
+    FILMDICT['IAFDSearchTitle'] = FILMDICT['IAFDTitle'] if FILMDICT['Agent'] != 'IAFD' else FILMDICT['IAFDTitle'].split(':')[0]
     FILMDICT['IAFDSearchTitle'] = String.StripDiacritics(FILMDICT['IAFDSearchTitle']).strip()
     FILMDICT['IAFDSearchTitle'] = String.URLEncode(FILMDICT['IAFDSearchTitle'])
     FILMDICT['IAFDSearchTitle'] = FILMDICT['IAFDSearchTitle'].replace('%25', '%').replace('*', '')
@@ -272,7 +275,10 @@ def getFilmOnIAFD(FILMDICT):
             if MATCHIAFDDURATION:
                 try:
                     iafdDuration = html.xpath('//p[@class="bioheading" and text()="Minutes"]//following-sibling::p[1]/text()')[0].strip()
-                    matchDuration(iafdDuration, FILMDICT)
+                    if type(iafdDuration) == int or type(iafdDuration) == float:
+                        matchDuration(iafdDuration, FILMDICT)
+                    else:
+                        log('UTILS :: Error: IAFD Duration not Numeric: %s', iafdDuration)
                     log(LOG_BIGLINE)
                 except Exception as e:
                     log('UTILS :: Error: IAFD Duration: %s', e)
@@ -438,19 +444,39 @@ def getRecordedCast(html):
     ''' retrieve film cast from IAFD film page'''
     filmCast = {}
     try:
-        castList = html.xpath('//h3[.="Performers"]/ancestor::div[@class="panel panel-default"]//div[@class[contains(.,"castbox")]]/p')
+        castList = html.xpath('//div[@class[contains(.,"castbox")]]/p')
         log('UTILS :: %s Cast on IAFD', len(castList))
         for cast in castList:
-            castName = cast.xpath('./a/text()[normalize-space()]')[0].strip()
-            castURL = IAFD_BASE + cast.xpath('./a/@href')[0].strip()
-            castPhoto = cast.xpath('./a/img/@src')[0].strip()
-            castPhoto = '' if 'nophoto' in castPhoto or 'th_iafd_ad' in castPhoto else castPhoto
-            castRole = cast.xpath('./text()[normalize-space()]')
-            castRole = ' '.join(castRole).strip()
+            try:
+                castName = cast.xpath('./a/text()[normalize-space()]')[0].strip()
+            except:
+                log('UTILS :: Error: Getting Cast Name')
+                raise
+
+            try:
+                castURL = IAFD_BASE + cast.xpath('./a/@href')[0].strip()
+            except:
+                log('UTILS :: Error: Getting Cast URL')
+                raise
+
+            try:
+                castPhoto = cast.xpath('./a/img/@src')[0].strip()
+                castPhoto = '' if 'nophoto' in castPhoto or 'th_iafd_ad' in castPhoto else castPhoto
+            except:
+                log('UTILS :: Error: Getting Cast Photo')
+                raise
+
+            try:
+                castRole = cast.xpath('./text()[normalize-space()]')
+                castRole = ' '.join(castRole).strip()
+            except:
+                log('UTILS :: Error: Getting Cast Role')
+                raise
 
             try:
                 castAlias = cast.xpath('./i/text()')[0].split(':')[1].replace(')', '').strip()
             except:
+                log('UTILS :: Error: Getting Cast Alias')
                 castAlias = ''
 
             castRole = castRole if castRole else 'AKA: {0}'.format(castAlias) if castAlias else IAFD_FOUND
@@ -1160,12 +1186,13 @@ def matchFilename(media):
 
     filmVars['Collection'] = collections
     filmVars['Series'] = series
-    filmVars['Title'] = filmVars['Title'] if '- ' not in filmVars['Title'] else re.sub(ur' - |- ', ': ', filmVars['Title']) # put colons back in as they can't be used in the filename
-    pattern = ur'[' + re.escape(''.join(['.', '!', '%', '?'])) + ']+$'
-    filmVars['ShortTitle'] = re.sub(pattern, '', ' '.join(splitFilmTitle).strip())                                          # strip punctuations at end of string
-    if filmVars['ShortTitle'] not in filmVars['CompareTitle']:
-        filmVars['CompareTitle'].append(SortAlphaChars(NormaliseComparisonString(filmVars['ShortTitle'])))
-    filmVars['SearchTitle'] = filmVars['ShortTitle']
+    if filmVars['Agent'] != 'IAFD':
+        filmVars['Title'] = filmVars['Title'] if '- ' not in filmVars['Title'] else re.sub(ur' - |- ', ': ', filmVars['Title']) # put colons back in as they can't be used in the filename
+        pattern = ur'[' + re.escape(''.join(['.', '!', '%', '?'])) + ']+$'
+        filmVars['ShortTitle'] = re.sub(pattern, '', ' '.join(splitFilmTitle).strip())                                          # strip punctuations at end of string
+        if filmVars['ShortTitle'] not in filmVars['CompareTitle']:
+            filmVars['CompareTitle'].append(SortAlphaChars(NormaliseComparisonString(filmVars['ShortTitle'])))
+        filmVars['SearchTitle'] =  filmVars['ShortTitle']
     
     # print out dictionary values / normalise unicode
     log('UTILS :: Film Dictionary Variables:')
@@ -1318,7 +1345,7 @@ def NormaliseComparisonString(myString):
     myString = makeASCII(myString)
 
     # strip domain suffixes, vol., volume from string, standalone '1's'
-    pattern = ur'[.]([a-z]{2,3}|co[.][a-z]{2})|Vol[.]|Vols[.]|\bVolume\b|\bVolumes\b|(?<!\d)1(?!\d)|\bPart\b|[^A-Za-z0-9]+'
+    pattern = ur'[.]([a-z]{2,3}|co[.][a-z]{2})|Vol[.]|Vols[.]|Nr[.]|\bVolume\b|\bVolumes\b|(?<!\d)1(?!\d)|\bPart\b|[^A-Za-z0-9]+'
     myString = re.sub(pattern, '', myString, flags=re.IGNORECASE)
 
     return myString

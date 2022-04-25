@@ -33,14 +33,14 @@
                                    This error was found whilst trying to sort issue #115
     04 Feb 2022   2020.04.22.14    implemented change suggested by Cody: duration matching optional on IAFD matching
                                    Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
-
+    04 Apr 2022   2020.04.22.15    #151 - Fixed: No Match when checking against No Duration on IAFD
 ---------------------------------------------------------------------------------------------------------------
 '''
 import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.04.22.14'
+VERSION_NO = '2020.04.22.15'
 PLUGIN_LOG_TITLE = 'IAFD'
 
 # log section separators
@@ -327,6 +327,7 @@ class IAFD(Agent.Movies):
         summary = utils.TranslateString(summary, SITE_LANGUAGE, lang, DETECT)
         summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], summary)
         summary = summary.replace('\n\n', '\n')
+        log('UPDATE:: Summary with Legend: %s', summary)
         metadata.summary = summary
 
         log(LOG_BIGLINE)
