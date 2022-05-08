@@ -33,16 +33,17 @@
                                    Issue #100
     30 Jul 2021   2020.01.18.25    Further code reorganisation
                                    Issue #107 - change in xpath for site entry
-    04 Feb 2022   2020.01.19.26    implemented change suggested by Cody: duration matching optional on IAFD matching
+    04 Feb 2022   2020.01.18.26    implemented change suggested by Cody: duration matching optional on IAFD matching
                                    Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
-
+    04 Feb 2022   2020.01.18.27    CodeAnator Suggestion: Updated fagalicious genre list to avoid false actor detection
+    20 Mar 2022   2020.01.18.28    CodeAnator: Implemented Extras:Trailers
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.26'
+VERSION_NO = '2020.01.18.28'
 PLUGIN_LOG_TITLE = 'Fagalicious'
 LOG_BIGLINE = '------------------------------------------------------------------------------'
 LOG_SUBLINE = '      ------------------------------------------------------------------------'
@@ -362,7 +363,8 @@ class Fagalicious(Agent.Movies):
         #    2.  Metadata retrieved from website
         #        a. Tags                 : composed of Genres and cast (alphabetic order)
         #        b. Posters/Art
-        #        c. Summary
+        #        c. Trailers
+        #        d. Summary
 
         # 2a. Tags - Fagalicious stores the cast and genres as tags
         log(LOG_BIGLINE)
@@ -371,7 +373,7 @@ class Fagalicious(Agent.Movies):
         try:
             testStudio = FILMDICT['Studio'].lower().replace(' ', '')
             ignoreGenres = ['Raging Stallion', 'Trailers', 'Hot House', 'BelAmi', 'NakedSword', 'CutlersDen']
-            useGenres = ['bareback', 'big dicks', 'black studs', 'double penetration', 'hairy', 'daddy', 'hairy', 'interracial', 'muscle hunks', 'uncut', 'jocks', 'latino', 'gaycest', 'group']
+            useGenres = ['bareback', 'big dicks', 'black studs', 'creampie', 'daddy', 'double penetration', 'gaycest', 'group', 'hairy', 'interracial', 'jocks', 'latino', 'muscle hunks', 'twinks', 'uncut', 'watersports']
             htmltags = html.xpath('//ul/a[contains(@href, "https://fagalicious.com/tag/")]/text()')
             log('UPDATE:: %s Genres/Cast Tags Found: "%s"', len(htmltags), htmltags)
             for tag in htmltags:
@@ -456,7 +458,32 @@ class Fagalicious(Agent.Movies):
         except Exception as e:
             log('UPDATE:: Error getting %s: %s', imageType, e)
 
-        # 2c.   Summary
+        # 2c.   Extras/Trailers
+        '''
+        log(LOG_BIGLINE)
+        try:
+            extras = []
+            htmltrailers = html.xpath('//article//video-js')
+            log('UPDATE:: Trailers: %s', htmltrailers)
+            for htmltrailer in htmltrailers:
+                log('UPDATE:: htmlTrailer: %s', htmltrailer)
+                trailerUrl = htmltrailer.xpath('//source/@src')[0]
+                trailerType = htmltrailer.xpath('//source/@type')[0]
+                log('UPDATE:: Trailer url: %s - Type: %s', trailerUrl, trailerType)
+                trailerThumb = ''
+                try:
+                    trailerThumb = htmltrailer.xpath('./@poster')[0]
+                    log('UPDATE:: Trailer Thumb: %s', trailerThumb)
+                except Exception as e:
+                    log('UPDATE:: Error getting Trailer Thumb: %s', e)
+                if trailerType == "video/mp4":
+                    extras.append({'type' : 'trailer', 'extra' : TrailerObject (file=trailerUrl, title=metadata.title, thumb=trailerThumb)})
+            for extra in extras:
+                metadata.extras.add(extra['extra'])
+        except Exception as e:
+            log('UPDATE:: Error getting Trailers: %s', e)
+        '''
+        # 2d.   Summary
         log(LOG_BIGLINE)
         # synopsis
         try:
@@ -483,7 +510,9 @@ class Fagalicious(Agent.Movies):
         log(LOG_SUBLINE)
         summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
+        log('UPDATE:: Summary with Legend: %s', summary)
         metadata.summary = summary
+
 
         log(LOG_BIGLINE)
         log('UPDATE:: Finished Update Routine')

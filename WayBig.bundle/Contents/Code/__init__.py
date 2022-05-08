@@ -491,6 +491,7 @@ class WayBig(Agent.Movies):
         log(LOG_SUBLINE)
         summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
+        log('UPDATE:: Summary with Legend: %s', summary)
         metadata.summary = summary
 
         log(LOG_BIGLINE)

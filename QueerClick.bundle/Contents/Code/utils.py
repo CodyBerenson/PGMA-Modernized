@@ -25,6 +25,7 @@ General Functions found in all agents
     11 Mar 2022     #137 - Corrected creation of iafd url string as links now have https:\\iafd.com in them
     04 Apr 2022     #151 - Fixed: No Match when checking against No Duration on IAFD
     04 Apr 2022     #152 - Fixed: - in IAFD titles
+    24 Apr 2022     improved search for first in series of collection as many series do not have the number "1" after the title
     
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -1194,6 +1195,12 @@ def matchFilename(media):
             filmVars['CompareTitle'].append(SortAlphaChars(NormaliseComparisonString(filmVars['ShortTitle'])))
         filmVars['SearchTitle'] =  filmVars['ShortTitle']
     
+    # if search title ends with a "1" drop it... as many first in series omit the number
+    pattern = ur' 1$'
+    matched = re.search(pattern, filmVars['SearchTitle'])  # match against whole string
+    if matched:
+        filmVars['SearchTitle'] = filmVars['SearchTitle'][:matched.start()]
+
     # print out dictionary values / normalise unicode
     log('UTILS :: Film Dictionary Variables:')
     for key in sorted(filmVars.keys()):

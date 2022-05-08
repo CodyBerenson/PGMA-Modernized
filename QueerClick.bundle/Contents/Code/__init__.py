@@ -57,7 +57,7 @@ PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start
 # PLEX API /CROP Script/online image cropper
 load_file = Core.storage.load
 CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/QueerClick.bundle/Contents/Code/ImageCropper.vbs" "{1}" "{2}" "{3}" "{4}"'
-THUMBOR = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}"
+THUMBOR = Prefs['thumbor'] + "/{0}{1}x{2}/{3}"
 
 # URLS
 BASE_URL = 'https://www.queerclick.com'
@@ -403,8 +403,8 @@ class QueerClick(Agent.Movies):
         log(LOG_BIGLINE)
         imageType = 'Poster & Art'
         try:
-            htmlimages = html.xpath('.//a[@class="aimg"]/img/@data-lazy-src')
-            htmlimages = [x for x in htmlimages if 'data:image' not in x]
+            htmlimages = html.xpath('.//a[@class="aimg"]/img/@data-lazy-src|.//p/img/@data-lazy-src')
+            #htmlimages = [x for x in htmlimages if 'data:image' not in x]
             log('UPDATE:: %s Images Found: %s', len(htmlimages), htmlimages)
             for index, image in enumerate(htmlimages):
                 if index > 1:
@@ -424,7 +424,7 @@ class QueerClick(Agent.Movies):
         except Exception as e:
             log('UPDATE:: Error getting %s: %s', imageType, e)
 
-        # 2a.   Summary = IAFD Legend + Synopsis
+        # 2c.   Summary = IAFD Legend + Synopsis
         log(LOG_BIGLINE)
         # synopsis
         try:
@@ -446,6 +446,7 @@ class QueerClick(Agent.Movies):
         log(LOG_SUBLINE)
         summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
+        log('UPDATE:: Summary with Legend: %s', summary)
         metadata.summary = summary
 
         log(LOG_BIGLINE)
