@@ -25,6 +25,7 @@
     22 Aug 2021   2020.05.10.08    IAFD will be only searched if film found on agent Catalogue
     04 Feb 2022   2020.05.10.09    implemented change suggested by Cody: duration matching optional on IAFD matching
                                    Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
+    14 Mar 2022   2020.05.10.10    #141 - Fixed xpath for missing directors returned as html attributes - works with both old and new titles
 
 
 -----------------------------------------------------------------------------------------------------------------------------------
@@ -33,7 +34,7 @@ import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.05.10.09'
+VERSION_NO = '2020.05.10.10'
 PLUGIN_LOG_TITLE = 'GayWorld'
 
 # log section separators
@@ -289,7 +290,7 @@ class GayWorld(Agent.Movies):
         # 2a.   Directors
         log(LOG_BIGLINE)
         try:
-            htmldirectors = html.xpath('//strong[contains(.,"Director")]//following::text()[normalize-space()]')[0].replace(':', '').split(',')
+            htmldirectors = html.xpath('//strong[contains(.,"Director")]/following::text()[normalize-space()]')[0].replace(':', '').split(',')
             htmldirectors = ['{0}'.format(x.strip()) for x in htmldirectors if x.strip()]
             log('UPDATE:: Director List %s', htmldirectors)
             directorDict = utils.getDirectors(htmldirectors, FILMDICT)
@@ -308,7 +309,7 @@ class GayWorld(Agent.Movies):
         # 2b.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
         log(LOG_BIGLINE)
         try:
-            htmlcast = html.xpath('//strong[contains(.,"Actors")]//following::text()[normalize-space()]')[0].replace(':', '').split(',')
+            htmlcast = html.xpath('//strong[contains(.,"Actors")]/following::text()[normalize-space()]')[0].replace(':', '').split(',')
             log('UPDATE:: Cast List %s', htmlcast)
             castDict = utils.getCast(htmlcast, FILMDICT)
 
@@ -367,6 +368,7 @@ class GayWorld(Agent.Movies):
         log(LOG_SUBLINE)
         summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
+        log('UPDATE:: Summary with Legend: %s', summary)
         metadata.summary = summary
 
         log(LOG_BIGLINE)
