@@ -8,6 +8,8 @@
     15 Nov 2021   2021.11.15.01    Initial
     04 Feb 2022   2021.11.15.02    implemented change suggested by Cody: duration matching optional on IAFD matching
                                    Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
+    12 May 2022   2021.11.15.03    improved on synopsis retrieval, directors and cast
+                                   added code to retrieve Country information if present
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -15,7 +17,7 @@ import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2021.11.15.02'
+VERSION_NO = '2021.11.15.03'
 PLUGIN_LOG_TITLE = 'HFGPM'
 
 # log section separators
@@ -314,10 +316,30 @@ class HFGPM(Agent.Movies):
         except Exception as e:
             log('UPDATE:: Error getting Genres: %s', e)
 
-        # 2b.   Directors
+        # 2b.   Countries
         log(LOG_BIGLINE)
         try:
-            htmldirectors = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div/node()[((self::strong or self::b) and contains(.,"Director:"))]/following-sibling::text()[1]')[0]
+            htmlcountries = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div/node()[((self::strong or self::b) and (contains(.,"Country")))]/following-sibling::text()[1]')[0]
+            htmlcountries = htmlcountries.replace(': ', '')
+            htmlcountries = htmlcountries.split(',')
+            htmlcountries = [x.strip() for x in htmlcountries if x.strip()]
+            htmlcountries.sort()
+            log('UPDATE:: Countries List %s', htmlcountries)
+            metadata.countries.clear()
+            for country in htmlcountries:
+                metadata.countries.add(country)
+                # add country to collection
+                if COLCOUNTRY:
+                    metadata.collections.add(country)
+
+        except Exception as e:
+            log('UPDATE:: Error getting Countries: %s', e)
+
+        # 2c.   Directors
+        log(LOG_BIGLINE)
+        try:
+            htmldirectors = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div/node()[((self::strong or self::b) and contains(.,"Director"))]/following-sibling::text()[1]')[0]
+            htmldirectors = htmldirectors.replace(': ', '')
             htmldirectors = htmldirectors.split(',')
             htmldirectors = ['{0}'.format(x.strip()) for x in htmldirectors if x.strip()]
             log('UPDATE:: Director List %s', htmldirectors)
@@ -334,14 +356,21 @@ class HFGPM(Agent.Movies):
         except Exception as e:
             log('UPDATE:: Error getting Director(s): %s', e)
 
-        # 2c.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
+        # 2d.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
         log(LOG_BIGLINE)
-        try:
-            htmlcast = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div/node()[((self::strong or self::b) and (contains(.,"Cast:") or contains(.,"Stars:")))]/following-sibling::text()[1]')[0]
-            htmlcast = htmlcast.split(',') 
-            htmlcast = ['{0}'.format(x.strip()) for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
-            log('UPDATE:: Cast List %s', htmlcast)
-            
+        if type(FILMDICT['FilenameCast']) is list:
+            htmlcast = FILMDICT['FilenameCast'][:]
+        else:
+            try:
+                htmlcast = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div/node()[((self::strong or self::b) and (contains(.,"Cast") or contains(.,"Stars")))]/following-sibling::text()[1]')[0]
+                htmlcast = htmlcast.replace(': ', '')
+                htmlcast = htmlcast.split(',') 
+                htmlcast = ['{0}'.format(x.strip()) for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
+            except Exception as e:
+                log('UPDATE:: Error getting Cast: %s', e)
+        
+        if type(htmlcast) is list:
+            log('UPDATE:: Cast List %s', htmlcast)          
             castDict = utils.getCast(htmlcast, FILMDICT)
 
             # sort the dictionary and add key(Name)- value(Photo, Role) to metadata
@@ -354,11 +383,10 @@ class HFGPM(Agent.Movies):
                 # add cast name to collection
                 if COLCAST:
                     metadata.collections.add(key)
+        else:
+            log('UPDATE:: Error No Cast List Determined')
 
-        except Exception as e:
-            log('UPDATE:: Error getting Cast: %s', e)
-
-        # 2d.   Posters/Background Art
+        # 2e.   Posters/Background Art
         #       GEVI does not distinguish between poster and back ground images - we assume first image is poster and second is background
         #           if there is only 1 image - apply it to both
         log(LOG_BIGLINE)
@@ -383,29 +411,13 @@ class HFGPM(Agent.Movies):
         except Exception as e:
             log('UPDATE:: Error getting Poster/Art: %s', e)
 
-        # 2e.   Summary = Synopsis with IAFD Legend
+        # 2f.   Summary = Synopsis with IAFD Legend
         log(LOG_BIGLINE)
         try:
-            synopsis = ''
-            test_list = ['<Element a at', '<Element b at', '<Element div at', '<Element img at', '<Element noindex at', '<Element strong at']
-            #htmlsummary = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div[@id]/node()[not(self::strong or self::img or self::b or self::br or self::noindex or self::a)]/text()[normalize-space()]')
-            htmlsummary = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div[@id]/node()')
-            i = 0
-            while i < len(htmlsummary):
-                item = htmlsummary[i]
-                log('UPDATE:: Item Line Found: %s', item)
-                if [x for x in test_list if(x in str(item))]:
-                    i += 2
-                    continue
-                elif '<Element br at' in str(item):
-                    i += 1
-                    continue
-                elif  'single file' in str(item):
-                    break
-
-                synopsis = '{0}\n{1}'.format(synopsis, item)
-                i += 1
-
+            htmlsummary = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div[@id]/node()')[0]
+            htmlsummary = htmlsummary.xpath('./node()')
+            htmlsummary = [x for x in htmlsummary if 'ElementStringResult' in str(type(x))]
+            synopsis = max(htmlsummary, key=len).strip()
             log('UPDATE:: Synopsis Found: %s', synopsis)
             synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
         except Exception as e:
@@ -414,8 +426,11 @@ class HFGPM(Agent.Movies):
 
         # combine and update
         log(LOG_SUBLINE)
+        synopsis = FILMDICT['Synopsis'] if len(FILMDICT['Synopsis']) > len(synopsis) else synopsis
+        synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
         summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
+        log('UPDATE:: Summary with Legend: %s', summary)
         metadata.summary = summary
 
         log(LOG_BIGLINE)

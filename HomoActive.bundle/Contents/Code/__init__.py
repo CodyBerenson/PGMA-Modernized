@@ -105,7 +105,7 @@ class HomoActive(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
         ''' Prepare Title for search query '''
-        self.log('AGNT  :: Original Search Query        : {0}'.format(myString))
+        log('AGNT  :: Original Search Query        : {0}'.format(myString))
 
         myString = myString.strip().lower()
         myString = myString.replace(' -', ':').replace(ur'\u2013', '-').replace(ur'\u2014', '-').replace('& ', '')
@@ -115,8 +115,8 @@ class HomoActive(Agent.Movies):
 
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string 
         myString = myString.replace('%25', '%').replace('*', '')
-        self.log('AGNT  :: Returned Search Query        : {0}'.format(myString))
-        self.log(LOG_BIGLINE)
+        log('AGNT  :: Returned Search Query        : {0}'.format(myString))
+        log(LOG_BIGLINE)
 
         return myString
 
@@ -144,8 +144,8 @@ class HomoActive(Agent.Movies):
 
         # Finds the entire media enclosure <DIV> elements then steps through them
         titleList = HTML.ElementFromURL(searchQuery, sleep=DELAY).xpath('//div[@class="item"]')
-        self.log('SEARCH:: Titles Found %s', len(titleList))
-        self.log(LOG_BIGLINE)
+        log('SEARCH:: Titles Found %s', len(titleList))
+        log(LOG_BIGLINE)
 
         for title in titleList:
             # Site Title
@@ -153,11 +153,11 @@ class HomoActive(Agent.Movies):
                 siteTitle = title.xpath('./a/@title')[0]
                 siteTitle = re.sub(ur' (dvd|download).*$', '', siteTitle, flags=re.IGNORECASE)
                 siteTitle = siteTitle.split('(')[0].strip()
-                self.matchTitle(siteTitle, FILMDICT)
-                self.log(LOG_BIGLINE)
+                utils.matchTitle(siteTitle, FILMDICT)
+                log(LOG_BIGLINE)
             except Exception as e:
-                self.log('SEARCH:: Error getting Site Title: %s', e)
-                self.log(LOG_SUBLINE)
+                log('SEARCH:: Error getting Site Title: %s', e)
+                log(LOG_SUBLINE)
                 continue
 
             # Site Title URL
@@ -165,46 +165,46 @@ class HomoActive(Agent.Movies):
                 siteURL = title.xpath('./a/@href')[0]
                 siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
                 FILMDICT['SiteURL'] = siteURL
-                self.log('SEARCH:: Site Title url                %s', siteURL)
-                self.log(LOG_BIGLINE)
+                log('SEARCH:: Site Title url                %s', siteURL)
+                log(LOG_BIGLINE)
             except Exception as e:
-                self.log('SEARCH:: Error getting Site Title Url: %s', e)
-                self.log(LOG_SUBLINE)
+                log('SEARCH:: Error getting Site Title Url: %s', e)
+                log(LOG_SUBLINE)
                 continue
 
             # Access Site URL for Studio Name information
             try:
-                self.log('SEARCH:: Reading Site URL page         %s', siteURL)
+                log('SEARCH:: Reading Site URL page         %s', siteURL)
                 html = HTML.ElementFromURL(siteURL, sleep=DELAY)
-                self.log(LOG_BIGLINE)
+                log(LOG_BIGLINE)
             except Exception as e:
-                self.log('SEARCH:: Error reading Site URL page: %s', e)
-                self.log(LOG_SUBLINE)
+                log('SEARCH:: Error reading Site URL page: %s', e)
+                log(LOG_SUBLINE)
                 continue
 
             # Studio Name
             try:
                 siteStudio = html.xpath('//div[@class="product-name"]/span/dd/a/text()')[0]
-                self.matchStudio(siteStudio, FILMDICT)
-                self.log(LOG_BIGLINE)
+                utils.matchStudio(siteStudio, FILMDICT)
+                log(LOG_BIGLINE)
             except Exception as e:
-                self.log('SEARCH:: Error getting Site Studio: %s', e)
-                self.log(LOG_SUBLINE)
+                log('SEARCH:: Error getting Site Studio: %s', e)
+                log(LOG_SUBLINE)
                 continue
 
             # Site Release Date
             try:
                 siteReleaseDate = html.xpath('//dt[text()="Release Date:"]/following-sibling::dd[1]/text()[normalize-space()]')[0].strip()
                 try:
-                    siteReleaseDate = self.matchReleaseDate(siteReleaseDate, FILMDICT)
-                    self.log(LOG_BIGLINE)
+                    siteReleaseDate = utils.matchReleaseDate(siteReleaseDate, FILMDICT)
+                    log(LOG_BIGLINE)
                 except Exception as e:
-                    self.log('SEARCH:: Error getting Site URL Release Date: %s', e)
-                    self.log(LOG_SUBLINE)
+                    log('SEARCH:: Error getting Site URL Release Date: %s', e)
+                    log(LOG_SUBLINE)
                     continue
             except:
-                self.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
-                self.log(LOG_BIGLINE)
+                log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
+                log(LOG_BIGLINE)
 
             # Duration - # Access Site URL for Film Duration
             if MATCHSITEDURATION:
@@ -236,53 +236,16 @@ class HomoActive(Agent.Movies):
 
         # Fetch HTML.
         FILMDICT = json.loads(metadata.id)
-        log('UPDATE:: Film Dictionary Variables:')
-        for key in sorted(FILMDICT.keys()):
-            log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
+
+        utils.printFilmInformation(FILMDICT)
         log(LOG_BIGLINE)
 
         html = HTML.ElementFromURL(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
 
-        #  The following bits of metadata need to be established and used to update the movie on plex
-        #    1.  Metadata that is set by Agent as default
-        #        a. Studio               : From studio group of filename - no need to process this as above
-        #        b. Title                : From title group of filename - no need to process this as is used to find it on website
-        #        c. Tag line             : Corresponds to the url of movie
-        #        d. Originally Available : set from metadata.id (search result)
-        #        e. Content Rating       : Always X
-        #        f. Content Rating Age   : Always 18
-        #        g. Collection Info      : From title group of filename 
+        utils.setDefaultMetadata(metadata, FILMDICT)
+        log(LOG_BIGLINE)
 
-        # 1a.   Set Studio
-        metadata.studio = FILMDICT['Studio']
-        self.log('UPDATE:: Studio: %s' , metadata.studio)
-
-        # 1b.   Set Title
-        metadata.title = FILMDICT['Title']
-        self.log('UPDATE:: Title: %s' , metadata.title)
-
-        # 1c/d. Set Tagline/Originally Available from metadata.id
-        metadata.tagline = FILMDICT['SiteURL']
-        metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-        metadata.year = metadata.originally_available_at.year
-        self.log('UPDATE:: Tagline: %s', metadata.tagline)
-        self.log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
-
-        # 1e/f. Set Content Rating to Adult/18 years
-        metadata.content_rating = 'X'
-        metadata.content_rating_age = 18
-        self.log('UPDATE:: Content Rating - Content Rating Age: X - 18')
-
-        # 1g. Collection
-        if COLCLEAR:
-            metadata.collections.clear()
-
-        collections = FILMDICT['Collection']
-        for collection in collections:
-            metadata.collections.add(collection)
-        self.log('UPDATE:: Collection Set From filename: %s', collections)
-
-        #    2.  Metadata retrieved from website
+        #    Metadata retrieved from website
         #        a. Country
         #        b. Directors            : List of Drectors (alphabetic order)
         #        c. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
@@ -290,12 +253,12 @@ class HomoActive(Agent.Movies):
         #        e. Summary
 
         # 2a.   Country
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
         try:
             htmlcountries = html.xpath('//dt[text()="Country:"]/following-sibling::dd[1]/text()[normalize-space()]')
             htmlcountries = [x.strip() for x in htmlcountries if x.strip()]
             htmlcountries.sort()
-            self.log('UPDATE:: Countries List %s', htmlcountries)
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Countries List'), htmlcountries))
             metadata.countries.clear()
             for country in htmlcountries:
                 metadata.countries.add(country)
@@ -304,14 +267,14 @@ class HomoActive(Agent.Movies):
                     metadata.collections.add(country)
 
         except Exception as e:
-            self.log('UPDATE:: Error getting Countries: %s', e)
+            log('UPDATE:: Error getting Countries: %s', e)
 
         # 2b.   Directors
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
         try:
             htmldirectors = html.xpath('//dt[text()="Director:"]/following-sibling::dd[1]/text()[normalize-space()]')
             htmldirectors = ['{0}'.format(x.strip()) for x in htmldirectors if x.strip()]
-            log('UPDATE:: Director List %s', htmldirectors)
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Director(s)'), htmldirectors))
             directorDict = utils.getDirectors(htmldirectors, FILMDICT)
             metadata.directors.clear()
             for key in sorted(directorDict):
@@ -326,10 +289,19 @@ class HomoActive(Agent.Movies):
             log('UPDATE:: Error getting Director(s): %s', e)
 
         # 2c.   Cast: get thumbnails from IAFD if missing as they are right dimensions for plex cast list
-        self.log(LOG_BIGLINE)
-        try:
-            htmlcast = html.xpath('//dt[text()="Actors:"]/following-sibling::dd[1]/a/text()')
-            log('UPDATE:: Cast List %s', htmlcast)
+        log(LOG_BIGLINE)
+        if type(FILMDICT['FilenameCast']) is list:
+            htmlcast = FILMDICT['FilenameCast'][:]
+        else:
+            try:
+                htmlcast = html.xpath('//dt[text()="Actors:"]/following-sibling::dd[1]/a/text()')
+                if type(htmlcast) is list and htmlcast:
+                    htmlcast = list(set(htmlcast))
+            except Exception as e:
+                log('UPDATE:: Error getting Cast: %s', e)
+
+        if type(htmlcast) is list and htmlcast:
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Cast'), htmlcast))
             castDict = utils.getCast(htmlcast, FILMDICT)
 
             # sort the dictionary and add key(Name)- value(Photo, Role) to metadata
@@ -342,45 +314,46 @@ class HomoActive(Agent.Movies):
                 # add cast name to collection
                 if COLCAST:
                     metadata.collections.add(key)
-
-        except Exception as e:
-            log('UPDATE:: Error getting Cast: %s', e)
+        else:
+            log('UPDATE:: Error No Cast List Determined')
 
         # 2d.   Posters/Art
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
         try:
             htmlimages = html.xpath('//img[@class="gallery-image"]/@src')
             image = htmlimages[0]
-            self.log('UPDATE:: Poster Image Found: %s', image)
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Poster Image'), image))
             #  set poster then only keep it
             metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.posters.validate_keys([image])
 
             image = htmlimages[1]
-            self.log('UPDATE:: Art Image Found: %s', image)
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Art Image'), image))
             metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.art.validate_keys([image])
 
         except Exception as e:
-            self.log('UPDATE:: Error getting Poster/Art: %s', e)
+            log('UPDATE:: Error getting Poster/Art: %s', e)
 
         # 2e.   Summary = IAFD Legend + Synopsis
-        self.log(LOG_BIGLINE)
+        log(LOG_BIGLINE)
         # synopsis
         try:
             synopsis = html.xpath('//div[@class="description"]/div[@class="std"]/text()')
             synopsis = " ".join(synopsis)
             synopsis = synopsis.replace('\n', '').replace('\r', '').strip()
-            self.log('UPDATE:: Synopsis Found: %s', synopsis)
-            synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Synopsis'), synopsis))
         except Exception as e:
             synopsis = ''
             log('UPDATE:: Error getting Synopsis: %s', e)
 
         # combine and update
         log(LOG_SUBLINE)
+        synopsis = FILMDICT['Synopsis'] if len(FILMDICT['Synopsis']) > len(synopsis) else synopsis
+        synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
         summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
+        log('UPDATE:: Summary with Legend: %s', summary)
         metadata.summary = summary
 
         log(LOG_BIGLINE)

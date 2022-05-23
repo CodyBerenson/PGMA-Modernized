@@ -25,7 +25,12 @@ General Functions found in all agents
     11 Mar 2022     #137 - Corrected creation of iafd url string as links now have https:\\iafd.com in them
     04 Apr 2022     #151 - Fixed: No Match when checking against No Duration on IAFD
     04 Apr 2022     #152 - Fixed: - in IAFD titles
-    
+    24 Apr 2022     improved search for first in series of collection as many series do not have the number "1" after the title
+    13 May 2022     #162: duration matching had an error in the code - corrected
+                    #137: Dual studio matching corrected
+                    improved logging clarity
+                    impoved cast matching - if a film is all male, female cast will not be scrapped
+                    new code to strip Roman Numeral Suffices on IAFD Titles to increase matching opportunities
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, re, subprocess, unicodedata
@@ -45,31 +50,31 @@ scraper = None
 # -------------------------------------------------------------------------------------------------------------------------------
 def getCast(agntCastList, FILMDICT):
     ''' Process and match cast list against IAFD '''
-    # if cast list is in name 
-    if type(FILMDICT['FilenameCast']) is list:
-        agntCastList = FILMDICT['FilenameCast'][:]
-    else:
-        # clean up the Cast List make a copy then clear
-        agntCastList = [x.split('(')[0].strip() if '(' in x else x.strip() for x in agntCastList]
-        agntCastList = [String.StripDiacritics(x) for x in agntCastList]
-        agntCastList = [x for x in agntCastList if x]
-        log('UTILS :: Agent Cast List - Original    : %s', agntCastList)
-        excludeList = [string for string in agntCastList if [substr for substr in agntCastList if substr in string and substr != string]]
-        if excludeList:
-            agntCastList = [x for x in agntCastList if x not in excludeList]
-            log('UTILS :: Agent Cast List - Exclude     : %s', excludeList)
-            log('UTILS :: Agent Cast List - Result      : %s', agntCastList)
+
+    if not agntCastList and not FILMDICT['Cast']: # nowt to do
+        raise
+
+    # clean up the Cast List make a copy then clear
+    agntCastList = [x.split('(')[0].strip() if '(' in x else x.strip() for x in agntCastList]
+    agntCastList = [String.StripDiacritics(x) for x in agntCastList]
+    agntCastList = [x for x in agntCastList if x]
+    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Agent Cast List'), agntCastList))
+
+    excludeList = [string for string in agntCastList if [substr for substr in agntCastList if substr in string and substr != string]]
+    if excludeList:
+        agntCastList = [x for x in agntCastList if x not in excludeList]
+        log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Exclude'), excludeList))
+        log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Result'), agntCastList))
 
     # strip all non alphabetic characters from cast names / aliases so as to compare them to the list obtained from the website e.g. J.T. Sloan will render as jtsloan
     castDict = FILMDICT['Cast']
-    log('UTILS :: IAFD Cast List                : %s', castDict.keys())
+    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('IAFD Cast List'), sorted(castDict.keys())))
 
     IAFDCastList = [(re.sub(r'[\W\d_]', '', k).strip().lower(), re.sub(r'[\W\d_]', '', v['Alias']).strip().lower()) for k, v in castDict.items()] # list of tuples [name, alias]
-    log('UTILS :: IAFD Cast List Normalised     : %s', IAFDCastList)
 
     # remove entries from the website cast list which have been found on IAFD leaving unmatched cast
     unmatchedCastList = [x for x in agntCastList if re.sub(r'[\W\d_]', '', x).strip().lower() not in (item for namealias in IAFDCastList for item in namealias)]
-    log('UTILS :: IAFD Unmatched Cast List      : %s', unmatchedCastList)
+    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Unmatched Cast List'), unmatchedCastList))
     log(LOG_SUBLINE)
 
     # search IAFD for specific cast and return matched cast
@@ -79,40 +84,42 @@ def getCast(agntCastList, FILMDICT):
     if matchedCastDict:
         castDict.update(matchedCastDict)
 
-    log(LOG_SUBLINE)
-
     return castDict
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def getDirectors(agntDirectorList, FILMDICT):
     ''' Process and match director list against IAFD'''
+
+    if not agntDirectorList and not FILMDICT['Directors']: # nowt to do
+        raise
+
     # clean up the Director List 
     agntDirectorList = [x.split('(')[0].strip() if '(' in x else x.strip() for x in agntDirectorList]
     agntDirectorList = [String.StripDiacritics(x) for x in agntDirectorList]
     agntDirectorList = [x for x in agntDirectorList if x]
-    log('UTILS :: Agent Director List - Original: %s', agntDirectorList)
+    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Agent Director List'), agntDirectorList))
+
     excludeList = [string for string in agntDirectorList if [substr for substr in agntDirectorList if substr in string and substr != string]]
     if excludeList:
         agntDirectorList = [x for x in agntDirectorList if x not in excludeList]
-        log('UTILS :: Agent Director List - Exclude : %s', excludeList)
-        log('UTILS :: Agent Director List - Result  : %s', agntDirectorList)
+        log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Exclude'), excludeList))
+        log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Result'), agntDirectorList))
 
     # strip all non alphabetic characters from director names / aliases so as to compare them to the list obtained from the website e.g. J.T. Sloan will render as jtsloan
     directorDict = FILMDICT['Directors']
-    log('UTILS :: IAFD Director List            : %s', directorDict.keys())
+    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('IAFD Director List'), sorted(directorDict.keys())))
 
     IAFDDirectorList = [(re.sub(r'[\W\d_]', '', k).strip().lower(), v) for k, v in directorDict.items()] # list of tuples [name, alias]
-    log('UTILS :: IAFD Director List Normalised : %s', IAFDDirectorList)
 
     # remove entries from the website cast list which have been found on IAFD leaving unmatched director
     unmatchedDirectorList = [x for x in agntDirectorList if re.sub(r'[\W\d_]', '', x).strip().lower() not in (item for namealias in IAFDDirectorList for item in namealias)]
-    log('UTILS :: IAFD Unmatched Director List  : %s', unmatchedDirectorList)
+    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Unmatched Director List'), unmatchedDirectorList))
     log(LOG_SUBLINE)
 
     # search IAFD for specific director and return matched directors
     matchedDirectorDict = matchDirectors(unmatchedDirectorList, FILMDICT)
 
-    # update the Cast dictionary
+    # update the Director dictionary
     if matchedDirectorDict:
         directorDict.update(matchedDirectorDict)
 
@@ -180,6 +187,8 @@ def getFilmImages(imageType, imageURL, whRatio):
 # -------------------------------------------------------------------------------------------------------------------------------
 def getFilmOnIAFD(FILMDICT):
     ''' check IAFD web site for better quality thumbnails per movie'''
+    FILMDICT['AllFemale'] = ''
+    FILMDICT['AllMale'] = 'Yes' # default to yes as this is usually used on gay websites.
     FILMDICT['Cast'] = {}
     FILMDICT['Comments'] = ''
     FILMDICT['Directors'] = {}
@@ -187,6 +196,9 @@ def getFilmOnIAFD(FILMDICT):
     FILMDICT['IAFDFilmURL'] = ''
     FILMDICT['Scenes'] = ''
     FILMDICT['Synopsis'] = ''
+
+    # some agent websites don't monitor this, so default to No
+    FILMDICT['Compilation'] = 'No' if 'Compilation' not in FILMDICT else FILMDICT['Compilation']
 
     # prepare IAFD Title and Search String
     FILMDICT['IAFDTitle'] = makeASCII(FILMDICT['ShortTitle']).replace(' - ', ': ').replace('- ', ': ')       # iafd needs colons in place to search correctly
@@ -211,7 +223,7 @@ def getFilmOnIAFD(FILMDICT):
     matched = re.search(pattern, FILMDICT['IAFDTitle'], re.IGNORECASE)  # match against whole string
     if matched:
         FILMDICT['IAFDTitle'] = FILMDICT['IAFDTitle'][matched.end():]
-        tempCompare = SortAlphaChars(NormaliseComparisonString(FILMDICT['IAFDTitle']))
+        tempCompare = sortAlphaChars(NormaliseComparisonString(FILMDICT['IAFDTitle']))
         if tempCompare not in FILMDICT['IAFDCompareTitle']:
             FILMDICT['IAFDCompareTitle'].append(tempCompare)
 
@@ -223,6 +235,9 @@ def getFilmOnIAFD(FILMDICT):
     FILMDICT['IAFDSearchTitle'] = FILMDICT['IAFDSearchTitle'].replace('%25', '%').replace('*', '')
 
     # search for Film Title on IAFD
+    log(LOG_BIGLINE)
+    log('UTILS :: *** Find [%s] on IAFD ***', FILMDICT['Title'])
+    log(LOG_BIGLINE)
     try:
         html = getURLElement(IAFD_SEARCH_URL.format(FILMDICT['IAFDSearchTitle']), UseAdditionalResults=True)
 
@@ -230,64 +245,51 @@ def getFilmOnIAFD(FILMDICT):
         filmList = []
         if FILMDICT['Year']:
             FILMDICT['Year'] = int(FILMDICT['Year'])
-            log ('UTILS :: XPath string [%s]', '//table[@id="titleresult"]/tbody/tr/td[2][.>="{0}" and .<="{1}"]/ancestor::tr'.format(FILMDICT['Year'] - 1, FILMDICT['Year'] + 1))
             filmList = html.xpath('//table[@id="titleresult"]/tbody/tr/td[2][.>="{0}" and .<="{1}"]/ancestor::tr'.format(FILMDICT['Year'] - 1, FILMDICT['Year'] + 1))
-            log ('UTILS :: [{0}] Films found on IAFD between the years [{1}] and [{2}]'.format(len(filmList), FILMDICT['Year'] - 1, FILMDICT['Year'] + 1))
+            log('UTILS :: Films found on IAFD           {0} between the years [{1}] and [{2}]'.format(len(filmList), FILMDICT['Year'] - 1, FILMDICT['Year'] + 1))
 
         if not filmList:
             filmList = html.xpath('//table[@id="titleresult"]/tbody/tr')
-            log('UTILS :: [{0}] Films found on IAFD'.format(len(filmList)))
-
-        log(LOG_BIGLINE)
+            log('UTILS :: Films found on IAFD           {0}'.format(len(filmList)))
 
         for film in filmList:
             # Site Title and Site AKA
+            log(LOG_BIGLINE)
             try:
                 iafdTitle = film.xpath('./td[1]/a/text()')[0].strip()
+                # IAFD sometimes adds (I), (II), (III) to differentiate scenes from full movies - strip these out before matching - assume a max of 19
+                pattern = ' \(X{0,1}(?:V?I{0,3}|I[VX])\)$'
+                matched = re.search(pattern, iafdTitle)  # match against whole string
+                if matched:
+                    iafdTitle = re.sub(pattern, '', iafdTitle).strip()
                 matchTitle(iafdTitle, FILMDICT)
-                log(LOG_BIGLINE)
             except Exception as e:
+                log('UTILS :: Error getting IAFD Title: %s', e)
                 try:
-                    log('UTILS :: Error getting IAFD Title: %s', e)
-
                     iafdAKA = film.xpath('./td[4]/text()')[0].strip()
+                    pattern = ' \(X{0,1}(?:V?I{0,3}|I[VX])\)$'
+                    matched = re.search(pattern, iafdAKA)  # match against whole string
+                    if matched:
+                        iafdAKA = re.sub(pattern, '', iafdAKA).strip()
                     matchTitle(iafdAKA, FILMDICT)
-                    log(LOG_BIGLINE)
                 except Exception as e:
                     log('UTILS :: Error getting IAFD AKA Title: %s', e)
-                    log(LOG_SUBLINE)
                     continue
 
             # Film URL
+            log(LOG_BIGLINE)
             try:
                 iafdfilmURL = film.xpath('./td[1]/a/@href')[0].replace('+/', '/').replace('-.', '.')
                 if IAFD_BASE not in iafdfilmURL:
                     iafdfilmURL = '{0}{1}'.format(IAFD_BASE, iafdfilmURL) if iafdfilmURL[0] == '/' else '{0}/{1}'.format(IAFD_BASE, iafdfilmURL)
-                log('UTILS :: Site Title url                %s', iafdfilmURL)
                 html = getURLElement(iafdfilmURL, UseAdditionalResults=False)
-                log(LOG_BIGLINE)
             except Exception as e:
                 log('UTILS :: Error: IAFD URL Studio: %s', e)
                 log(LOG_SUBLINE)
                 continue
 
-            # Film Duration
-            if MATCHIAFDDURATION:
-                try:
-                    iafdDuration = html.xpath('//p[@class="bioheading" and text()="Minutes"]//following-sibling::p[1]/text()')[0].strip()
-                    if type(iafdDuration) == int or type(iafdDuration) == float:
-                        matchDuration(iafdDuration, FILMDICT)
-                    else:
-                        log('UTILS :: Error: IAFD Duration not Numeric: %s', iafdDuration)
-                    log(LOG_BIGLINE)
-                except Exception as e:
-                    log('UTILS :: Error: IAFD Duration: %s', e)
-                    log(LOG_SUBLINE)
-                    continue
-            else:
-                log('UTILS :: Skipping: IAFD Duration Retrieval')
-
             # Film Studio and Distributor
+            log(LOG_BIGLINE)
             studioList = []
             try:
                 siteStudio = html.xpath('//p[@class="bioheading" and text()="Studio"]//following-sibling::p[1]/a/text()')[0].strip()
@@ -309,24 +311,64 @@ def getFilmOnIAFD(FILMDICT):
                     studioMatch = True
                     break           # break out of loop if it matches
                 except Exception as e:
-                    log('UTILS :: Error: %s', e)
+                    log('UTILS :: Error matching IAFD Studio: %s', e)
+                    log(LOG_SUBLINE)
                     continue
 
             if not studioMatch:
-                log('UTILS :: Error getting Site Studio')
+                log('UTILS :: Error getting IAFD Studio')
                 log(LOG_SUBLINE)
                 continue
 
+            # Film Duration
+            log(LOG_BIGLINE)
+            if MATCHIAFDDURATION:
+                try:
+                    iafdDuration = html.xpath('//p[@class="bioheading" and text()="Minutes"]//following-sibling::p[1]/text()')[0].strip()
+                    if re.match(r'^[0-9]*$', iafdDuration):   # IAFD stores duration in whole minutes, regex match
+                        matchDuration(iafdDuration, FILMDICT)
+                    else:
+                        log('UTILS :: Warning: No IAFD Duration declared: %s', iafdDuration)
+                except Exception as e:
+                    log('UTILS :: Error: IAFD Duration: %s', e)
+                    log(LOG_SUBLINE)
+                    continue
+            else:
+                log('UTILS :: Skipping: IAFD Duration Retrieval')
+
             # if we get here we have found a film match
+            log(LOG_BIGLINE)
             FILMDICT['FoundOnIAFD'] = 'Yes'
+            log('UTILS :: Found on IAFD:                %s', FILMDICT['FoundOnIAFD'])
+
+            log(LOG_BIGLINE)
+            # url address of film
             FILMDICT['IAFDFilmURL'] = iafdfilmURL
+            log('UTILS :: IAFD Film URL:                %s', FILMDICT['IAFDFilmURL'])
 
             # check if film is a compilation
             log(LOG_BIGLINE)
             try:
                 FILMDICT['Compilation'] = html.xpath('//p[@class="bioheading" and text()="Compilation"]//following-sibling::p[1]/text()')[0].strip()
+                log('UTILS :: IAFD: Film Compilation?:      %s', FILMDICT['Compilation'])
             except Exception as e:
                 log('UTILS :: Error Finding IAFD Compilation Information: %s', e)
+
+            # check if film has an all male cast
+            log(LOG_BIGLINE)
+            try:
+                FILMDICT['AllMale'] = html.xpath('//p[@class="bioheading" and text()="All-Male"]//following-sibling::p[1]/text()')[0].strip()
+                log('UTILS :: IAFD: All Male Cast?:         %s', FILMDICT['AllMale'])
+            except Exception as e:
+                log('UTILS :: Error Finding All Male Cast: %s', e)
+
+            # check if film has an all female cast
+            log(LOG_BIGLINE)
+            try:
+                FILMDICT['AllFemale'] = html.xpath('//p[@class="bioheading" and text()="All-Female"]//following-sibling::p[1]/text()')[0].strip()
+                log('UTILS :: IAFD: All Female Cast?:       %s', FILMDICT['AllFemale'])
+            except Exception as e:
+                log('UTILS :: Error Finding All Female Cast: %s', e)
 
             # get Film Cast info
             log(LOG_BIGLINE)
@@ -345,18 +387,22 @@ def getFilmOnIAFD(FILMDICT):
             # synopsis
             log(LOG_BIGLINE)
             try:
-                FILMDICT['Synopsis'] = html.xpath('//div[@id="synopsis"]/div/ul/li//text()')[0].strip()
-                log('UTILS :: Film Synopsis: %s', FILMDICT['Synopsis'])
+                synopsis = html.xpath('//div[@id="synopsis"]/div/ul/li//text()')[0] # will error if no synopsis
+                htmlsynopsis = html.xpath('//div[@id="synopsis"]/div/ul/li//text()')
+                for synopsisNo, synopsis in enumerate(htmlsynopsis):
+                    log('UTILS :: Film Synopsis:                %s', synopsis) if synopsisNo == 0 else log('UTILS ::                               %s', synopsis)
+                FILMDICT['Synopsis'] = "\n".join(htmlsynopsis)               
             except Exception as e:
                 log('UTILS :: Error getting IAFD Synopsis: %s', e)
 
             # get Scene Breakdown
             log(LOG_BIGLINE)
             try:
-                scene = html.xpath('//div[@id="sceneinfo"]/ul/li//text()')[0] # will error if no scenebreakdown
+                scene = html.xpath('//div[@id="sceneinfo"]/ul/li//text()')[0] # will error if no scene breakdown
                 htmlscenes = html.xpath('//div[@id="sceneinfo"]/ul/li//text()[normalize-space()]')
-                FILMDICT['Scenes'] = "##".join(htmlscenes)
-                log('UTILS :: Film Scenes: %s', FILMDICT['Scenes'])
+                for sceneNo, scene in enumerate(htmlscenes):
+                    log('UTILS :: Film Scenes:                  %s', scene) if sceneNo == 0 else log('UTILS ::                               %s', scene)
+                FILMDICT['Scenes'] = "##".join(htmlscenes)               
             except Exception as e:
                 log('UTILS :: Error getting IAFD Scene Breakdown: %s', e)
 
@@ -371,11 +417,10 @@ def getFilmOnIAFD(FILMDICT):
                 for sceneNo, movie in zip(listEven, listOdd):
                     comments += '{0} -- {1}##'.format(sceneNo, movie)
                 FILMDICT['Comments'] = comments
-                log('UTILS :: Film Comments: %s', FILMDICT['Comments'])
+                log('UTILS :: Film Comments:                %s', FILMDICT['Comments'])
             except Exception as e:
                 log('UTILS :: Error getting IAFD Comments: %s', e)
 
-            log(LOG_BIGLINE)
             break
     except Exception as e:
         log('UTILS :: Error: IAFD Film Search Failure, %s', e)
@@ -419,7 +464,7 @@ def getHTTPRequest(url, **kwargs):
 
     HTTPRequest = None
     try:
-        log('UTILS :: CloudScraper Request          %s', url)
+        log('UTILS :: CloudScraper Request:         %s', url)
         if scraper is None:
             scraper = cloudscraper.CloudScraper()
             scraper.headers.update(headers)
@@ -445,48 +490,34 @@ def getRecordedCast(html):
     filmCast = {}
     try:
         castList = html.xpath('//div[@class[contains(.,"castbox")]]/p')
-        log('UTILS :: %s Cast on IAFD', len(castList))
+        log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Cast on IAFD'), len(castList)))
         for cast in castList:
-            try:
-                castName = cast.xpath('./a/text()[normalize-space()]')[0].strip()
-            except:
-                log('UTILS :: Error: Getting Cast Name')
-                raise
-
-            try:
-                castURL = IAFD_BASE + cast.xpath('./a/@href')[0].strip()
-            except:
-                log('UTILS :: Error: Getting Cast URL')
-                raise
-
-            try:
-                castPhoto = cast.xpath('./a/img/@src')[0].strip()
-                castPhoto = '' if 'nophoto' in castPhoto or 'th_iafd_ad' in castPhoto else castPhoto
-            except:
-                log('UTILS :: Error: Getting Cast Photo')
-                raise
-
+            castName = cast.xpath('./a/text()[normalize-space()]')[0].strip()
+            castURL = IAFD_BASE + cast.xpath('./a/@href')[0].strip()
+            castPhoto = cast.xpath('./a/img/@src')[0].strip()
+            castPhoto = '' if 'nophoto' in castPhoto or 'th_iafd_ad' in castPhoto else castPhoto
+            
+            # cast roles are sometimes not filled in
             try:
                 castRole = cast.xpath('./text()[normalize-space()]')
                 castRole = ' '.join(castRole).strip()
             except:
-                log('UTILS :: Error: Getting Cast Role')
-                raise
+                castRole = ''
 
+            # cast alias may be missing
             try:
                 castAlias = cast.xpath('./i/text()')[0].split(':')[1].replace(')', '').strip()
             except:
-                log('UTILS :: Error: Getting Cast Alias')
                 castAlias = ''
 
             castRole = castRole if castRole else 'AKA: {0}'.format(castAlias) if castAlias else IAFD_FOUND
 
             # log cast details
-            log('UTILS :: Cast Name:                   \t%s', castName)
-            log('UTILS :: Cast Alias:                  \t%s', castAlias)
-            log('UTILS :: Cast URL:                    \t%s', castURL)
-            log('UTILS :: Cast Photo:                  \t%s', castPhoto)
-            log('UTILS :: Cast Role:                   \t%s', castRole)
+            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Cast Name'), castName))
+            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Cast Alias'), castAlias if castAlias else 'No Cast Alias Recorded'))
+            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Cast URL'), castURL))
+            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Cast Photo'), castPhoto))
+            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Cast Role'), castRole))
 
             # Assign values to dictionary
             myDict = {}
@@ -509,7 +540,7 @@ def getRecordedDirectors(html):
     filmDirectors = {}
     try:
         directorList = html.xpath('//p[@class="bioheading" and text()="Directors"]//following-sibling::p[1]/a')
-        log('UTILS :: %s Directors on IAFD', len(directorList))
+        log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Directors on IAFD'), len(directorList)))
         for director in directorList:
             directorName = director.xpath('./text()')[0].split(' as ')[0]
             directorURL = director.xpath('./@href')[0]
@@ -529,10 +560,10 @@ def getRecordedDirectors(html):
             except Exception as e:
                 log('UTILS :: Error getting Director Page: %s', e)
 
-            log('UTILS :: Director Name:               \t%s', directorName)
-            log('UTILS :: Director Alias:              \t%s', directorAliasList)
-            log('UTILS :: Director URL:                \t%s', directorURL)
-            log('UTILS :: Director Photo:              \t%s', directorPhoto)
+            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Director Name'), directorName))
+            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Director Alias'), directorAliasList if directorAliasList else 'No Director Alias Recorded'))
+            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Director URL'), directorURL))
+            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Director Photo'), directorPhoto))
             log(LOG_SUBLINE)
 
             # Assign values to dictionary
@@ -570,7 +601,7 @@ def getURLElement(myString, UseAdditionalResults):
                         html = ''
                         log('UTILS :: Failed to read Additional Search Results: %s', e)
             except Exception as e:
-                log('UTILS :: No Additional Search Results: %s', e)
+                pass
     except Exception as e:
         html = ''
         msg = '< Failed to read IAFD URL: {0} - Processing Abandoned >'.format(e)
@@ -584,30 +615,63 @@ def getURLElement(myString, UseAdditionalResults):
 def logHeaders(header, media, lang):
     ''' list header of search and update functions '''
     log(LOG_BIGLINE)
-    log('%s:: Version                      : v.%s', header, VERSION_NO)
-    log('%s:: Python                       : %s %s', header, platform.python_version(), platform.python_build())
-    log('%s:: Platform                     : %s - %s %s', header, platform.machine(), platform.system(), platform.release())
+    log('%s:: Version:                      v.%s', header, VERSION_NO)
+    log('%s:: Python:                       %s %s', header, platform.python_version(), platform.python_build())
+    log('%s:: Platform:                     %s - %s %s', header, platform.machine(), platform.system(), platform.release())
     log('%s:: Preferences:', header)
-    log('%s::  > Cast Legend Before Summary: %s', header, PREFIXLEGEND)
-    log('%s::  > Clear Previous Collections: %s - %s', header, COLCLEAR, type(COLCLEAR))
+    log('%s::  > Legend Before Summary:     %s', header, PREFIXLEGEND)
+    log('%s::  > Initialise Collections:    %s', header, COLCLEAR)
     log('%s::  > Collection Gathering', header)
-    log('%s::      > Cast                  : %s - %s', header, COLCAST, type(COLCAST))
-    log('%s::      > Director(s)           : %s - %s', header, COLDIRECTOR, type(COLDIRECTOR))
-    log('%s::      > Studio                : %s - %s', header, COLSTUDIO, type(COLSTUDIO))
-    log('%s::      > Film Title            : %s - %s', header, COLTITLE, type(COLTITLE))
-    log('%s::      > Genres                : %s - %s', header, COLGENRE, type(COLGENRE))
-    log('%s::  > Match IAFD Duration       : %s', header, MATCHIAFDDURATION)
-    log('%s::  > Match Site Duration       : %s', header, MATCHSITEDURATION)
-    log('%s::  > Duration Difference       : ±%s Minutes', header, DURATIONDX)
-    log('%s::  > Language Detection        : %s', header, DETECT)
-    log('%s::  > Library:Site Language     : (%s:%s)', header, lang, SITE_LANGUAGE)
-    log('%s::  > Network Request Delay     : %s Seconds', header, DELAY)
-    
-    log('%s:: Media Title                  : %s', header, media.title)
-    log('%s:: File Path                    : %s', header, media.items[0].parts[0].file)
+    log('%s::      > Cast:                  %s', header, COLCAST)
+    log('%s::      > Director(s):           %s', header, COLDIRECTOR)
+    log('%s::      > Studio:                %s', header, COLSTUDIO)
+    log('%s::      > Film Title:            %s', header, COLTITLE)
+    log('%s::      > Genres:                %s', header, COLGENRE)
+    log('%s::  > Match IAFD Duration:       %s', header, MATCHIAFDDURATION)
+    log('%s::  > Match Site Duration:       %s', header, MATCHSITEDURATION)
+    log('%s::  > Duration Dx                ±%s Minutes', header, DURATIONDX)
+    log('%s::  > Language Detection:        %s', header, DETECT)
+    log('%s::  > Library:Site Language:     (%s:%s)', header, lang, SITE_LANGUAGE)
+    log('%s::  > Network Request Delay:     %s Seconds', header, DELAY)    
+    log('%s:: Media Title:                  %s', header, media.title)
+    log('%s:: File Path:                    %s', header, media.items[0].parts[0].file)
     log(LOG_BIGLINE)
 
 # -------------------------------------------------------------------------------------------------------------------------------
+def makeASCII(myString):
+    ''' standardise single quotes, double quotes and accented characters '''
+
+    # standardise single quotes
+    singleQuotes = ['`', '‘', '’']
+    pattern = ur'[{0}]'.format(''.join(singleQuotes))
+    myString = re.sub(pattern, "'", myString)
+
+    # standardise double quotes
+    doubleQuotes = ['“', '”']
+    pattern = ur'[{0}]'.format(''.join(doubleQuotes))
+    myString = re.sub(pattern, '"', myString)
+
+    # convert to unicode
+    myString = u'{0}'.format(myString)
+    asciiString = ''
+    for i, char in enumerate(myString):
+        description = unicodedata.name(char)
+        cutoff = description.find(' WITH ')
+        if cutoff != -1:
+            description = description[:cutoff]
+            try:
+                char = unicodedata.lookup(description)
+                asciiString += char
+            except KeyError:
+                pass  # removing "WITH ..." produced an invalid name  
+        else:
+            asciiString += char
+
+    asciiString = unidecode(asciiString)
+
+    return asciiString
+
+# ----------------------------------------------------------------------------------------------------------------------------------
 def matchCast(agntCastList, FILMDICT):
     ''' check IAFD web site for individual cast'''
     matchedCastDict = {}
@@ -615,11 +679,9 @@ def matchCast(agntCastList, FILMDICT):
     if FILMDICT['Year']:
         FILMDICT['Year'] = int(FILMDICT['Year'])
 
-    useFullCareer = True if FILMDICT['Year'] else False  
-
     for agntCast in agntCastList:
         compareAgntCast = re.sub(r'[\W\d_]', '', agntCast).strip().lower()
-        log('UTILS :: Unmatched Cast Name %s', agntCast)
+        log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Unmatched Cast Name'), agntCast))
 
         # compare against IAFD Cast List - retrieved from the film's url page
         matchedName = False
@@ -632,25 +694,25 @@ def matchCast(agntCastList, FILMDICT):
             # 1st full match against Cast Name
             matchedName = False
             if compareAgntCast == IAFDCompareName:
-                log('UTILS :: Matched with IAFD Cast:      \tFull Match - Cast Name: %s', agntCast)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Matched with IAFD Cast: Full Match - Cast Name'), agntCast))
                 matchedName = True
                 break
 
             # 2nd full match against Cast Alias
             if compareAgntCast == IAFDCompareAlias:
-                log('UTILS :: Matched with IAFD Cast:      \tFull Match - Cast Alias: %s', agntCast)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Matched with IAFD Cast: Full Match - Cast Alias'), agntCast))
                 matchedName = True
                 break
 
             # 3rd partial match against Cast Name
             if compareAgntCast in IAFDCompareName:
-                log('UTILS :: Matched with IAFD Cast:      \tPartial Match - Cast Name: %s', agntCast)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Matched with IAFD Cast: Partial Match - Cast Name'), agntCast))
                 matchedName = True
                 break
 
             # 4th partial match against Cast Alias
             if compareAgntCast in IAFDCompareAlias:
-                log('UTILS :: Matched with IAFD Cast:      \tPartial Match - Cast Alias: %s', agntCast)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Matched with IAFD Cast: Partial Match - Cast Alias'), agntCast))
                 matchedName = True
                 break
 
@@ -658,18 +720,17 @@ def matchCast(agntCastList, FILMDICT):
             levDistance = len(agntCast.split()) + 1 if len(agntCast.split()) > 1 else 1 # Set Lehvenstein Distance - one change/word+1 of cast names or set to 1
             testName = IAFDName if levDistance > 1 else IAFDName.split()[0] if IAFDName else ''
             testAlias = IAFDAlias if levDistance > 1 else IAFDAlias.split()[0] if IAFDAlias else ''
-            testNameType = 'Full Names' if levDistance > 1 else 'First Name' 
+            testNameType = 'Full Names' if levDistance > 1 else 'Forename'
 
             # 5th Lehvenstein Match against Cast Name
             levScore = String.LevenshteinDistance(agntCast, testName)
             matchedName = levScore <= levDistance
             if matchedName:
-                log('UTILS :: Levenshtein Match:           \tUse %s on IAFD', testNameType)
-                log('UTILS ::                              \tIAFD Cast Name  : %s', testName)
-                log('UTILS ::                              \tAgent Cast Name : %s', agntCast)
-                log('UTILS ::                              \tScore:Distance  : {%s:%s}', levScore, levDistance)
-                log('UTILS ::                              \tMatched         : %s', matchedName)
-                log(LOG_SUBLINE)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Levenshtein Match'), testNameType))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  IAFD Cast Name'), testName))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Agent Cast Name'), agntCast))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Score:Distance'), '{0}:{1}'.format(levScore, levDistance)))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Matched'), matchedName))
                 break
 
             # 6th Lehvenstein Match against Cast Alias
@@ -677,12 +738,11 @@ def matchCast(agntCastList, FILMDICT):
                 levScore = String.LevenshteinDistance(agntCast, testAlias)
                 matchedName = levScore <= levDistance
                 if matchedName:
-                    log('UTILS :: Levenshtein Match:           \tUse %s on IAFD', testNameType)
-                    log('UTILS ::                              \tIAFD Cast Alias : %s', testAlias)
-                    log('UTILS ::                              \tAgent Cast Name : %s', agntCast)
-                    log('UTILS ::                              \tScore:Distance  : {%s:%s}', levScore, levDistance)
-                    log('UTILS ::                              \tMatched         : %s', matchedName)
-                    log(LOG_SUBLINE)
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Levenshtein Match'), testNameType))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  IAFD Cast Alias'), testAlias))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Agent Cast Name'), agntCast))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Score:Distance'), '{0}:{1}'.format(levScore, levDistance)))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Matched'), matchedName))
                     break
 
             # 7th Soundex Matching on Cast Name
@@ -690,11 +750,11 @@ def matchCast(agntCastList, FILMDICT):
             soundAgent = soundex(agntCast)
             matchedName = soundIAFD == soundAgent
             if matchedName:
-                log('UTILS :: SoundEx Match:               \tUse %s on IAFD', testNameType)
-                log('UTILS ::                              \tIAFD Cast Name   : %s', testName)
-                log('UTILS ::                              \tAgent Cast Name  : %s', agntCast)
-                log('UTILS ::                              \tSound Scores I:A :{%s:%s}', soundIAFD, soundAgent)
-                log('UTILS ::                              \tMatched          : %s', matchedName)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('SoundEx Match'), testNameType))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  IAFD Cast Name'), testName))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Agent Cast Name'), agntCast))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Score:Distance'), '{0}:{1}'.format(soundIAFD, soundAgent)))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Matched'), matchedName))
                 break
 
             # 8th Soundex Matching on Cast Alias
@@ -703,11 +763,11 @@ def matchCast(agntCastList, FILMDICT):
                 soundAgent = soundex(agntCast)
                 matchedName = soundIAFD == soundAgent
                 if matchedName:
-                    log('UTILS :: SoundEx Match:               \tUse %s on IAFD', testNameType)
-                    log('UTILS ::                              \tIAFD Cast Alias  : %s', testAlias)
-                    log('UTILS ::                              \tAgent Cast Name  : %s', agntCast)
-                    log('UTILS ::                              \tSound Scores I:A :{%s:%s}', soundIAFD, soundAgent)
-                    log('UTILS ::                              \tMatched          : %s', matchedName)
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('SoundEx Match'), testNameType))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  IAFD Cast Alias'), testAlias))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Agent Cast Name'), agntCast))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Score:Distance'), '{0}:{1}'.format(soundIAFD, soundAgent)))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Matched'), matchedName))
                     break
 
         if matchedName: # we have a match, on to the next cast
@@ -723,50 +783,44 @@ def matchCast(agntCastList, FILMDICT):
             # will appear first in the list because he has an alias that matches the search name. we need to reorder so that those whose main name matches
             # the search name are listed first
             # xpath to get matching Cast Main Name and Alias: start with male cast, then include female actresses (bi films)
-            for i in range(2):
-                if i == 0 and useFullCareer:
-                    filter = 'Year'
-                    useFullCareer = True
-                    xPathMatchMainMale = '//table[@id="tblMal"]/tbody/tr[td[2]/a[(contains(@href, "/perfid={0}") or (.) = "{1}" or translate(.,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")="{2}")] and {3}>=td[4] and {3}<=td[5]]//ancestor::tr'.format(compareAgntCast, agntCast, agntCastLower, FILMDICT['Year'])
-                    xPathMatchAliasMale = '//table[@id="tblMal"]/tbody/tr[contains(td[3], "{0}") and {1}>=td[4] and {1}<=td[5]]//ancestor::tr'.format(agntCast, FILMDICT['Year'])
-                    xPathMatchMainFemale = '//table[@id="tblFem"]/tbody/tr[td[2]/a[(contains(@href, "/perfid={0}") or (.) = "{1}" or translate(.,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")="{2}")] and {3}>=td[4] and {3}<=td[5]]//ancestor::tr'.format(compareAgntCast, agntCast, agntCastLower, FILMDICT['Year'])
-                    xPathMatchAliasFemale = '//table[@id="tblFem"]/tbody/tr[contains(td[3], "{0}") and {1}>=td[4] and {1}<=td[5]]//ancestor::tr'.format(agntCast, FILMDICT['Year'])
-                else:
-                    # some agents mislabel compilations, thus cast won't be found by the Film Year
-                    filter = 'Name'
-                    useFullCareer = False
-                    xPathMatchMainMale = '//table[@id="tblMal"]/tbody/tr[td[2]/a[(contains(@href, "/perfid={0}") or (.) = "{1}" or translate(.,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")="{2}")]]//ancestor::tr'.format(compareAgntCast, agntCast, agntCastLower)
-                    xPathMatchAliasMale = '//table[@id="tblMal"]/tbody/tr[contains(td[3], "{0}")]//ancestor::tr'.format(agntCast) 
-                    xPathMatchMainFemale = '//table[@id="tblFem"]/tbody/tr[td[2]/a[(contains(@href, "/perfid={0}") or (.) = "{1}" or translate(.,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")="{2}")]]//ancestor::tr'.format(compareAgntCast, agntCast, agntCastLower)
-                    xPathMatchAliasFemale = '//table[@id="tblFem"]/tbody/tr[contains(td[3], "{0}")]//ancestor::tr'.format(agntCast) 
+            xPathMatchMainMale = '//table[@id="tblMal"]/tbody/tr[td[2]/a[(contains(@href, "/perfid={0}") or (.) = "{1}" or translate(.,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")="{2}")]]//ancestor::tr'.format(compareAgntCast, agntCast, agntCastLower)
+            xPathMatchAliasMale = '//table[@id="tblMal"]/tbody/tr[contains(td[3], "{0}")]//ancestor::tr'.format(agntCast) 
+            xPathMatchMainFemale = '//table[@id="tblFem"]/tbody/tr[td[2]/a[(contains(@href, "/perfid={0}") or (.) = "{1}" or translate(.,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")="{2}")]]//ancestor::tr'.format(compareAgntCast, agntCast, agntCastLower)
+            xPathMatchAliasFemale = '//table[@id="tblFem"]/tbody/tr[contains(td[3], "{0}")]//ancestor::tr'.format(agntCast) 
 
-                combinedList = []
-                for xPath in [xPathMatchMainMale, xPathMatchAliasMale, xPathMatchMainFemale, xPathMatchAliasFemale]:
-                    try:
-                        mainList = html.xpath(xPath)
-                    except:
-                        log('UTILS :: Error: Bad Main Name xPath: %s', xPath)
-                        mainList = []
+            combinedList = []
+            if FILMDICT['AllMale'] == 'Yes':
+                xpathList = [xPathMatchMainMale, xPathMatchAliasMale]
+            elif FILMDICT['AllFemale'] == 'Yes':
+                xpathList = [xPathMatchMainFemale, xPathMatchAliasFemale]
+            else:
+                xpathList = [xPathMatchMainMale, xPathMatchAliasMale, xPathMatchMainFemale, xPathMatchAliasFemale]
 
-                    combinedList.extend(mainList)
+            for xPath in xpathList:
+                try:
+                    mainList = html.xpath(xPath)
+                except:
+                    log('UTILS :: Error: Bad Main Name xPath: %s', xPath)
+                    mainList = []
 
-                castList = [j for x, j in enumerate(combinedList) if j not in combinedList[:x]]
-                castFound = len(castList)
-                log('UTILS :: %s Filter: %s\t[%s] Cast found named %s on Agent Website %s', filter, 'Career Match   ' if useFullCareer else 'No Career Match', castFound, agntCast, '<Skipping: too many found>' if castFound > 13 else '')
-                if (i == 0 and castFound > 0) or castFound > 13:
-                    break
+                combinedList.extend(mainList)
 
+            castList = [j for x, j in enumerate(combinedList) if j not in combinedList[:x]]
+            castFound = len(castList)
+            searchResult = '{0} found {1}'.format(castFound, ', <Skipping: too many found>' if castFound > 13 else '')
+            log('UTILS :: {0: <29} {1}'.format('Search Result', searchResult))
+            
             if castFound == 0 or castFound > 13:    #skip cast
                 log(LOG_SUBLINE)
                 continue
 
+            log(LOG_BIGLINE)
             for cast in castList:
                 # get cast details and compare to Agent cast
                 try:
                     castName = cast.xpath('./td[2]/a/text()[normalize-space()]')[0]
                     compareCastName = re.sub(r'[\W\d_]', '', castName).strip().lower()
-                    log('UTILS :: Cast Name:                   \t%s / %s', castName, compareCastName)
-
+                    log('UTILS :: {0: <29} {1}'.format('Cast Name', '{0} / {1}'.format(castName, compareCastName)))
                 except Exception as e:
                     log('UTILS :: Error: Could not read Cast Name: %s', e)
                     continue   # next cast with
@@ -789,19 +843,26 @@ def matchCast(agntCastList, FILMDICT):
                 except:
                     endCareer = 0
 
+                matchedUsing = ''
+
                 # match iafd row with Agent Cast entry
                 matchedCast = True if compareAgntCast == compareCastName else False
+                matchedUsing = 'Cast Name' if matchedCast else matchedUsing
 
                 if not matchedCast and castAliasList:
                     matchedItem = [i for (i, x) in enumerate(compareCastAliasList) if x == compareAgntCast]
                     matchedCast = True if matchedItem else False
+                    matchedUsing = 'Cast Alias' if matchedCast else matchedUsing
 
-                # only perform career checks if title is not a compilation and we have not filtered the search results by the Film Year
-                if not matchedCast and FILMDICT['Compilation'] == "No" and useFullCareer:
+                # Check Career - if we have a match - this can only be done if the film is not a compilation and we have a Year
+                # only do this if we have more than one actor returned
+                if castFound > 1 and matchedCast and FILMDICT['Compilation'] == "No" and FILMDICT['Year']:
                     matchedCast = (startCareer <= FILMDICT['Year'] <= endCareer)
+                    matchedUsing = 'Career' if matchedCast else matchedUsing
 
                 if not matchedCast:
                     log('UTILS :: Error: Could not match Cast: %s', agntCast)
+                    log(LOG_SUBLINE)
                     continue # to next cast in the returned iafd search cast list
 
                 # now check if any processed IAFD Cast (FILMDICT) have an alias that matches with this cast
@@ -815,7 +876,7 @@ def matchCast(agntCastList, FILMDICT):
                     checkCompareAlias = value['CompareAlias']
                     if checkCompareAlias in compareCastAliasList:
                         matchedCastWithIAFD = True
-                        log('UTILS :: Skipping: Recorded Cast Name: %s AKA %s also known by this name: %s', checkName, checkAlias, castName)
+                        log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Skipping: Recorded Cast Name'), '{0} AKA {1} also known by this name: {2}'.format(checkName, checkAlias, castName)))
                         matchedCastDict.pop(agntCast)
                         break
 
@@ -828,12 +889,12 @@ def matchCast(agntCastList, FILMDICT):
                 castPhoto = '' if 'nophoto' in castPhoto or 'th_iafd_ad' in castPhoto else castPhoto.replace('thumbs/th_', '')
                 castRole = IAFD_FOUND  # default to found
 
-                log('UTILS :: Cast Alias:                  \t%s', castAliasList)
-                log('UTILS :: Start Career:                \t%s', startCareer)
-                log('UTILS :: End Career:                  \t%s', endCareer)
-                log('UTILS :: Cast URL:                    \t%s', castURL)
-                log('UTILS :: Cast Photo:                  \t%s', castPhoto)
-                log('UTILS :: Cast Role:                   \t%s', castRole)
+                log('UTILS :: {0: <29} {1}'.format('Cast Alias', castAliasList))
+                log('UTILS :: {0: <29} {1}'.format('Career', '{0} - {1}'.format(startCareer, endCareer)))
+                log('UTILS :: {0: <29} {1}'.format('Cast URL', castURL))
+                log('UTILS :: {0: <29} {1}'.format('Cast Photo', castPhoto))
+                log('UTILS :: {0: <29} {1}'.format('Cast Role', castRole))
+                log('UTILS :: {0: <29} {1}'.format('Matched Using', matchedUsing))
 
                 # Assign found values to dictionary
                 myDict = {}
@@ -861,13 +922,8 @@ def matchDirectors(agntDirectorList, FILMDICT):
     if FILMDICT['Year']:
         FILMDICT['Year'] = int(FILMDICT['Year'])
 
-    useFullCareer = True if FILMDICT['Year'] else False  
-
-    log('UTILS :: TEST Unmatched Directors %s', agntDirectorList)
     for agntDirector in agntDirectorList:
         compareAgntDirector = re.sub(r'[\W\d_]', '', agntDirector).strip().lower()
-
-        log('UTILS :: Unmatched Director Name %s', agntDirector)
 
         # compare against IAFD Director List - retrieved from the film's url page
         matchedName = False
@@ -880,31 +936,31 @@ def matchDirectors(agntDirectorList, FILMDICT):
             # 1st full match against director name
             matchedName = False
             if compareAgntDirector == IAFDCompareName:
-                log('UTILS :: Matched with IAFD Director:  \tFull Match - Director Name: %s', agntDirector)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Matched with IAFD Director: Full Match - Director Name'), agntDirector))
                 matchedName = True
                 break
 
             # 2nd full match against director alias
             if [x for x in IAFDCompareAlias if x == compareAgntDirector]:
-                log('UTILS :: Matched with IAFD Director:  \tFull Match - Director Alias: %s', agntDirector)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Matched with IAFD Director: Full Match - Director Alias'), agntDirector))
                 matchedName = True
                 break
 
             # 3rd partial match against director name
             if compareAgntDirector in IAFDCompareName:
-                log('UTILS :: Matched with IAFD Director:  \tPartial Match - Director Name: %s', agntDirector)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Matched with IAFD Director: Partial Match - Director Name'), agntDirector))
                 matchedName = True
                 break
 
             # 4th partial match against director alias
             if compareAgntDirector in IAFDCompareAlias:
-                log('UTILS :: Matched with IAFD Director:  \tPartial Match - Director Alias: %s', agntDirector)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Matched with IAFD Director: Partial Match - Director Alias'), agntDirector))
                 matchedName = True
                 break
 
             # Lehvensten and Soundex Matching
             levDistance = len(agntDirector.split()) + 1 if len(agntDirector.split()) > 1 else 1 # Set Lehvenstein Distance - one change/word+1 of cast names or set to 1
-            testNameType = 'Full Names' if levDistance > 1 else 'First Name' 
+            testNameType = 'Full Names' if levDistance > 1 else 'Forename' 
             testName = IAFDName if levDistance > 1 else IAFDName.split()[0] if IAFDName else ''
             if IAFDAlias is list:
                 testAlias = [x if levDistance > 1 else x.split()[0] for x in IAFDAlias]
@@ -915,12 +971,11 @@ def matchDirectors(agntDirectorList, FILMDICT):
             levScore = String.LevenshteinDistance(agntDirector, testName)
             matchedName = levScore <= levDistance
             if matchedName:
-                log('UTILS :: Levenshtein Match:           \tUse %s on IAFD', testNameType)
-                log('UTILS ::                              \tIAFD Cast Name  : %s', testName)
-                log('UTILS ::                              \tAgent Cast Name : %s', agntDirector)
-                log('UTILS ::                              \tScore:Distance  : {%s:%s}', levScore, levDistance)
-                log('UTILS ::                              \tMatched         : %s', matchedName)
-                log(LOG_SUBLINE)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Levenshtein Match'), testNameType))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  IAFD Director Name'), testName))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Agent Director Name'), agntDirector))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Score:Distance'), '{0}:{1}'.format(levScore, levDistance)))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Matched'), matchedName))
                 break
 
             # 6th Lehvenstein Match against Director Alias
@@ -933,25 +988,25 @@ def matchDirectors(agntDirectorList, FILMDICT):
                             break
                 else:
                     matchedName = levScore <= levDistance
+                
                 if matchedName:
-                    log('UTILS :: Levenshtein Match:           \tUse %s on IAFD', testNameType)
-                    log('UTILS ::                              \tIAFD Director Alias : %s', testAlias)
-                    log('UTILS ::                              \tAgent Director Name : %s', agntDirector)
-                    log('UTILS ::                              \tScore:Distance      : {%s:%s}', levScore, levDistance)
-                    log('UTILS ::                              \tMatched             : %s', matchedName)
-                    log(LOG_SUBLINE)
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Levenshtein Match'), testNameType))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  IAFD Director Alias'), testAlias))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Agent Director Name'), agntDirector))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Score:Distance'), '{0}:{1}'.format(levScore, levDistance)))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Matched'), matchedName))
                     break
 
-            # 7th Soundex Matching on Cast Name
+            # 7th Soundex Matching on Director Name
             soundIAFD = [soundex(x) for x in testName] if type(testName) is list else soundex(testName)
             soundAgent = soundex(agntDirector)
             matchedName = True if soundAgent in soundIAFD else False
             if matchedName:
-                log('UTILS :: SoundEx Match:               \tUse %s on IAFD', testNameType)
-                log('UTILS ::                              \tIAFD Director Name   : %s', testName)
-                log('UTILS ::                              \tAgent Director Name  : %s', agntDirector)
-                log('UTILS ::                              \tSound Scores I:A     :{%s:%s}', soundIAFD, soundAgent)
-                log('UTILS ::                              \tMatched              : %s', matchedName)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('SoundEx Match'), testNameType))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  IAFD Director Name'), testName))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Agent Director Name'), agntDirector))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Score:Distance'), '{0}:{1}'.format(soundIAFD, soundAgent)))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Matched'), matchedName))
                 break
 
             # 8th Soundex Matching on Director Alias
@@ -960,11 +1015,11 @@ def matchDirectors(agntDirectorList, FILMDICT):
                 soundAgent = soundex(agntDirector)
                 matchedName = True if soundAgent in soundIAFD else False
                 if matchedName:
-                    log('UTILS :: SoundEx Match:               \tUse %s on IAFD', testNameType)
-                    log('UTILS ::                              \tIAFD Director Alias : %s', testAlias)
-                    log('UTILS ::                              \tAgent Director Name : %s', agntDirector)
-                    log('UTILS ::                              \tSound Scores I:A    :{%s:%s}', soundIAFD, soundAgent)
-                    log('UTILS ::                              \tMatched             : %s', matchedName)
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('SoundEx Match'), testNameType))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  IAFD Director Alias'), testAlias))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Agent Director Name'), agntDirector))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Score:Distance'), '{0}:{1}'.format(soundIAFD, soundAgent)))
+                    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('  Matched'), matchedName))
                     break
 
         if matchedName: # we have a match, on to the next director
@@ -995,17 +1050,17 @@ def matchDirectors(agntDirectorList, FILMDICT):
             combinedList = mainList + aliasList
             directorList = [i for x, i in enumerate(combinedList) if i not in combinedList[:x]]
             directorsFound = len(directorList)
-            log('UTILS :: [%s] Director Found named %s on IAFD %s', directorsFound, agntDirector, '[Skipping: too many found]' if directorsFound > 5 else '')
+            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Search Result'), '{0}{1}'.format(directorsFound, ', [Skipping: too many found]' if directorsFound > 5 else '')))
             if directorsFound > 5:
+                log(LOG_SUBLINE)
                 continue
 
+            log(LOG_BIGLINE)
             for director in directorList:
                 # get director details and compare to Agent director
                 try:
                     directorName = director.xpath('./td[2]/a/text()[normalize-space()]')[0]
                     compareDirectorName = re.sub(r'[\W\d_]', '', directorName).strip().lower()
-                    log('UTILS :: Director:                    \t%s / %s', directorName, compareDirectorName)
-
                 except Exception as e:
                     log('UTILS :: Error: Could not read Director Name: %s', e)
                     continue   # next director
@@ -1017,33 +1072,37 @@ def matchDirectors(agntDirectorList, FILMDICT):
                 except:
                     directorAliasList = []
                     compareDirectorAliasList = []
-                    log('UTILS :: Error: Could not read Director Alias')
 
                 try:
                     startCareer = int(director.xpath('./td[4]/text()[normalize-space()]')[0]) # set start of career
                 except:
                     startCareer = 0
-                    log('UTILS :: Error: Could not read Director Start Career')
 
                 try:
                     endCareer = int(director.xpath('./td[5]/text()[normalize-space()]')[0])   # set end of career
                 except:
                     endCareer = 0
-                    log('UTILS :: Error: Could not read Director End Career')
+
+                matchedUsing = ''
 
                 # match iafd row with Agent Director entry
                 matchedDirector = True if compareAgntDirector == compareDirectorName else False
+                matchedUsing = 'Director Name' if matchedDirector else matchedUsing
 
                 if not matchedDirector and directorAliasList:
                     matchedItem = [i for (i, x) in enumerate(compareDirectorAliasList) if x == compareAgntDirector]
                     matchedDirector = True if matchedItem else False
+                    matchedUsing = 'Director Alias' if matchedDirector else matchedUsing
 
-                # only perform career checks if title is not a compilation and we have not filtered the search results by the Film Year
-                if not matchedDirector and FILMDICT['Compilation'] == "No" and useFullCareer:
+                # Check Career - if we have a match - this can only be done if we have a Year
+                # only do this if we have more than one director returned
+                if directorsFound > 1 and matchedDirector and FILMDICT['Year']:
                     matchedDirector = (startCareer <= FILMDICT['Year'] <= endCareer)
+                    matchedUsing = 'Career' if matchedDirector else matchedUsing
 
                 if not matchedDirector:
                     log('UTILS :: Error: Could not match Director: %s', agntDirector)
+                    log(LOG_SUBLINE)
                     continue # to next director in the returned iafd search director list
 
                 # now check if any processed IAFD Directors (FILMDICT) have an alias that matches with this director
@@ -1057,7 +1116,7 @@ def matchDirectors(agntDirectorList, FILMDICT):
                     checkCompareAlias = value['CompareAlias']
                     if checkCompareAlias in compareDirectorAliasList:
                         matchedDirectorWithIAFD = True
-                        log('UTILS :: Skipping: Recorded Director Name: %s AKA %s also known by this name: %s', checkName, checkAlias, directorName)
+                        log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Skipping: Recorded Director Name'), '{0} AKA {1} also known by this name: {2}'.format(checkName, checkAlias, directorName)))
                         matchedDirectorDict.pop(agntDirector)
                         break
 
@@ -1069,11 +1128,12 @@ def matchDirectors(agntDirectorList, FILMDICT):
                 directorPhoto = director.xpath('./td[1]/a/img/@src')[0] # director name on agent website - retrieve picture
                 directorPhoto = '' if 'th_iafd_ad.gif' in directorPhoto else directorPhoto.replace('thumbs/th_', '')
 
-                log('UTILS :: Alias:                       \t%s', directorAliasList)
-                log('UTILS :: Start Career:                \t%s', startCareer)
-                log('UTILS :: End Career:                  \t%s', endCareer)
-                log('UTILS :: Director URL:                \t%s', directorURL)
-                log('UTILS :: Director Photo:              \t%s', directorPhoto)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Director'), '{0} / {1}'.format(directorName, compareDirectorName)))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Alias'), directorAliasList  if directorAliasList else 'No Director Alias Recorded'))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Start Career'), startCareer if startCareer > 0 else 'N/A'))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('End Career'), endCareer if endCareer > 0 else 'N/A'))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Director URL'), directorURL))
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Director Photo'), directorPhoto))
 
                 # Assign values to dictionary
                 myDict = {}
@@ -1083,7 +1143,6 @@ def matchDirectors(agntDirectorList, FILMDICT):
                 myDict['CompareAlias'] = compareDirectorAliasList
                 matchedDirectorDict[agntDirector] = myDict
 
-                log(LOG_SUBLINE)
                 break   # break out to next director in agent director list
 
         except Exception as e:
@@ -1122,29 +1181,29 @@ def matchFilename(media):
 
     groups = matched.groupdict()
     log('UTILS :: File Name REGEX Matched Variables:')
-    log('UTILS :: {0: <29}: {1}'.format('Studio', groups['fnSTUDIO']))
-    log('UTILS :: {0: <29}: {1}'.format('Title', groups['fnTITLE']))
-    log('UTILS :: {0: <29}: {1}'.format('Year', groups['fnYEAR']))
-    log('UTILS :: {0: <29}: {1}'.format('Cast', groups['fnCAST']))
-    log('UTILS :: {0: <29}: {1}'.format('Stack', groups['fnSTACK']))
+    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Studio'), groups['fnSTUDIO']))
+    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Title'), groups['fnTITLE']))
+    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Year'), groups['fnYEAR']))
+    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Cast'), groups['fnCAST']))
+    log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Stack'), groups['fnSTACK']))
     log(LOG_SUBLINE)
 
     filmVars['Format'] = '(Studio) - Title' if groups['fnYEAR'] is None else '(Studio) - Title (Year)'
     filmVars['Studio'] = groups['fnSTUDIO'].split(';')[0].strip()
     filmVars['CompareStudio'] = NormaliseComparisonString(filmVars['Studio'])
-    filmVars['IAFDStudio'] = groups['fnSTUDIO'].split(';')[0].strip() if ';' in groups['fnSTUDIO'] else ''
+    filmVars['IAFDStudio'] = groups['fnSTUDIO'].split(';')[1].strip() if ';' in groups['fnSTUDIO'] else ''
     filmVars['CompareIAFDStudio'] = NormaliseComparisonString(filmVars['IAFDStudio']) if filmVars['IAFDStudio'] else ''
 
     filmVars['Title'] =  groups['fnTITLE']
     filmVars['SearchTitle'] = filmVars['Title']
     filmVars['ShortTitle'] = filmVars['Title']
-    filmVars['CompareTitle'] = [SortAlphaChars(NormaliseComparisonString(filmVars['ShortTitle']))]
+    filmVars['CompareTitle'] = [sortAlphaChars(NormaliseComparisonString(filmVars['ShortTitle']))]
 
     # if film starts with a determinate, strip the detrminate and add the title to the comparison list
     pattern = ur'^(The |An |A )'
     matched = re.search(pattern, filmVars['ShortTitle'], re.IGNORECASE)  # match against whole string
     if matched:
-        filmVars['CompareTitle'].append(SortAlphaChars(NormaliseComparisonString(re.sub(pattern, '', filmVars['ShortTitle'], flags=re.IGNORECASE))))
+        filmVars['CompareTitle'].append(sortAlphaChars(NormaliseComparisonString(re.sub(pattern, '', filmVars['ShortTitle'], flags=re.IGNORECASE))))
 
     filmVars['IAFDTitle'] =  makeASCII(filmVars['Title'])
     filmVars['IAFDCompareTitle'] = filmVars['CompareTitle']
@@ -1191,14 +1250,17 @@ def matchFilename(media):
         pattern = ur'[' + re.escape(''.join(['.', '!', '%', '?'])) + ']+$'
         filmVars['ShortTitle'] = re.sub(pattern, '', ' '.join(splitFilmTitle).strip())                                          # strip punctuations at end of string
         if filmVars['ShortTitle'] not in filmVars['CompareTitle']:
-            filmVars['CompareTitle'].append(SortAlphaChars(NormaliseComparisonString(filmVars['ShortTitle'])))
+            filmVars['CompareTitle'].append(sortAlphaChars(NormaliseComparisonString(filmVars['ShortTitle'])))
         filmVars['SearchTitle'] =  filmVars['ShortTitle']
     
+    # if search title ends with a "1" drop it... as many first in series omit the number
+    pattern = ur' 1$'
+    matched = re.search(pattern, filmVars['SearchTitle'])  # match against whole string
+    if matched:
+        filmVars['SearchTitle'] = filmVars['SearchTitle'][:matched.start()]
+
     # print out dictionary values / normalise unicode
-    log('UTILS :: Film Dictionary Variables:')
-    for key in sorted(filmVars.keys()):
-        filmVars[key] = list(dict.fromkeys(filmVars[key])) if type(filmVars[key]) is list else filmVars[key]
-        log('UTILS :: {0: <29}: {1}'.format(key, filmVars[key]))
+    printFilmInformation(filmVars)
 
     return filmVars
 
@@ -1293,7 +1355,7 @@ def matchTitle(siteTitle, FILMDICT):
         pattern = re.compile(re.escape(amendedShortTitle), re.IGNORECASE)
         amendedSiteTitle = '{0}{1}'.format(re.sub(pattern, '', amendedSiteTitle).strip(), amendedShortTitle) 
 
-    sortedSiteTitle = SortAlphaChars(amendedSiteTitle)
+    sortedSiteTitle = sortAlphaChars(amendedSiteTitle)
     testTitle = 'Passed' if sortedSiteTitle in FILMDICT['CompareTitle'] else 'Passed (IAFD)' if sortedSiteTitle in FILMDICT['IAFDCompareTitle'] else 'Failed'
 
     log('UTILS :: Site Title                    %s', siteTitle)
@@ -1351,41 +1413,59 @@ def NormaliseComparisonString(myString):
     return myString
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-def makeASCII(myString):
-    ''' standardise single quotes, double quotes and accented characters '''
-
-    # standardise single quotes
-    singleQuotes = ['`', '‘', '’']
-    pattern = ur'[{0}]'.format(''.join(singleQuotes))
-    myString = re.sub(pattern, "'", myString)
-
-    # standardise double quotes
-    doubleQuotes = ['“', '”']
-    pattern = ur'[{0}]'.format(''.join(doubleQuotes))
-    myString = re.sub(pattern, '"', myString)
-
-    # convert to unicode
-    myString = u'{0}'.format(myString)
-    asciiString = ''
-    for i, char in enumerate(myString):
-        description = unicodedata.name(char)
-        cutoff = description.find(' WITH ')
-        if cutoff != -1:
-            description = description[:cutoff]
-            try:
-                char = unicodedata.lookup(description)
-                asciiString += char
-            except KeyError:
-                pass  # removing "WITH ..." produced an invalid name  
-        else:
-            asciiString += char
-
-    asciiString = unidecode(asciiString)
-
-    return asciiString
+def printFilmInformation(myDictionary):
+    # print out dictionary values / normalise unicode
+    log('UTILS :: Film Dictionary Variables:')
+    for key in sorted(myDictionary.keys()):
+        myDictionary[key] = list(dict.fromkeys(myDictionary[key])) if type(myDictionary[key]) is list else myDictionary[key]
+        log('UTILS :: {0: <29} {1}'.format('{0}:'.format(key), myDictionary[key]))
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-def SortAlphaChars(myString):
+def setDefaultMetadata(metadata, FILMDICT):
+    '''
+    The following bits of metadata need to be established and used to update the movie on plex
+      1.  Metadata that is set by Agent as default
+          a. Studio               : From studio group of filename - no need to process this as above
+          b. Title                : From title group of filename - no need to process this as is used to find it on website
+          c. Tag line             : Corresponds to the url of movie
+          d. Originally Available : set from metadata.id (search result)
+          e. Content Rating       : Always X
+          f. Content Rating Age   : Always 18
+          g. Collection Info      : From title group of filename 
+    '''
+    # 1a.   Set Studio
+    metadata.studio = FILMDICT['Studio']
+    log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Studio'), metadata.studio))
+
+    # 1b.   Set Title
+    metadata.title = FILMDICT['Title']
+    log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Title'), metadata.title))
+
+    # 1c/d. Set Tagline/Originally Available from metadata.id
+    metadata.tagline = FILMDICT['SiteURL']
+    log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Tagline'), metadata.tagline))
+
+    if FILMDICT['Year']:
+        metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
+        metadata.year = metadata.originally_available_at.year
+        log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Original Available Date'), metadata.originally_available_at))
+
+    # 1e/f. Set Content Rating to Adult/18 years
+    metadata.content_rating = 'X'
+    metadata.content_rating_age = 18
+    log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Content: Rating - Age'), 'X - 18'))
+
+    # 1g. Collection
+    if COLCLEAR:
+        metadata.collections.clear()
+
+    collections = FILMDICT['Collection']
+    for collection in collections:
+        metadata.collections.add(collection)
+    log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Collection from filename'), collections))
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+def sortAlphaChars(myString):
     numbers = re.sub('[^0-9]','', myString)
     letters = re.sub('[0-9]','', myString)
     myString = '{0}{1}'.format(numbers, ''.join(sorted(letters)))
@@ -1431,20 +1511,20 @@ def TranslateString(myString, siteLanguage, plexLibLanguageCode, detectLanguage)
         log('UTILS :: Run Translation: [Skip] - Library Language: [%s]', 'No Language' if plexLibLanguageCode == 'xn' else 'Unknown')
     elif myString:
         dictLanguages = {'af' : 'afrikaans', 'sq' : 'albanian', 'ar' : 'arabic', 'hy' : 'armenian', 'az' : 'azerbaijani', 'eu' : 'basque', 'be' : 'belarusian', 'bn' : 'bengali', 'bs' : 'bosnian', 
-                            'bg' : 'bulgarian', 'ca' : 'catalan', 'ceb' : 'cebuano', 'ny' : 'chichewa', 'zh-cn' : 'chinese simplified', 'zh-tw' : 'chinese traditional', 'zh-cn' : '#chinese simplified', 
-                            'zh-tw' : '#chinese traditional', 'hr' : 'croatian', 'cs' : 'czech', 'da' : 'danish', 'nl' : 'dutch', 'en' : 'english', 'eo' : 'esperanto', 'et' : 'estonian', 
-                            'tl' : 'filipino', 'fi' : 'finnish', 'fr' : 'french', 'gl' : 'galician', 'ka' : 'georgian', 'de' : 'german', 'el' : 'greek', 'gu' : 'gujarati', 'ht' : 'haitian creole', 
-                            'ha' : 'hausa', 'iw' : 'hebrew', 'hi' : 'hindi', 'hmn' : 'hmong', 'hu' : 'hungarian', 'is' : 'icelandic', 'ig' : 'igbo', 'id' : 'indonesian', 'ga' : 'irish', 
-                            'it' : 'italian', 'ja' : 'japanese', 'jw' : 'javanese', 'kn' : 'kannada', 'kk' : 'kazakh', 'km' : 'khmer', 'ko' : 'korean', 'lo' : 'lao', 'la' : 'latin', 'lv' : 'latvian', 
-                            'lt' : 'lithuanian', 'mk' : 'macedonian', 'mg' : 'malagasy', 'ms' : 'malay', 'ml' : 'malayalam', 'mt' : 'maltese', 'mi' : 'maori', 'mr' : 'marathi', 'mn' : 'mongolian', 
-                            'my' : 'myanmar (burmese)', 'ne' : 'nepali', 'no' : 'norwegian', 'fa' : 'persian', 'pl' : 'polish', 'pt' : 'portuguese', 'ma' : 'punjabi', 'ro' : 'romanian', 'ru' : 'russian', 
-                            'sr' : 'serbian', 'st' : 'sesotho', 'si' : 'sinhala', 'sk' : 'slovak', 'sl' : 'slovenian', 'so' : 'somali', 'es' : 'spanish', 'su' : 'sudanese', 'sw' : 'swahili', 'sv' : 'swedish', 
-                            'tg' : 'tajik', 'ta' : 'tamil', 'te' : 'telugu', 'th' : 'thai', 'tr' : 'turkish', 'uk' : 'ukrainian', 'ur' : 'urdu', 'uz' : 'uzbek', 'vi' : 'vietnamese', 'cy' : 'welsh', 'yi' : 'yiddish', 'yo' : 'yoruba', 'zu' : 'zulu'}
+                         'bg' : 'bulgarian', 'ca' : 'catalan', 'ceb' : 'cebuano', 'ny' : 'chichewa', 'zh-cn' : 'chinese simplified', 'zh-tw' : 'chinese traditional', 'zh-cn' : '#chinese simplified', 
+                         'zh-tw' : '#chinese traditional', 'hr' : 'croatian', 'cs' : 'czech', 'da' : 'danish', 'nl' : 'dutch', 'en' : 'english', 'eo' : 'esperanto', 'et' : 'estonian', 
+                         'tl' : 'filipino', 'fi' : 'finnish', 'fr' : 'french', 'gl' : 'galician', 'ka' : 'georgian', 'de' : 'german', 'el' : 'greek', 'gu' : 'gujarati', 'ht' : 'haitian creole', 
+                         'ha' : 'hausa', 'iw' : 'hebrew', 'hi' : 'hindi', 'hmn' : 'hmong', 'hu' : 'hungarian', 'is' : 'icelandic', 'ig' : 'igbo', 'id' : 'indonesian', 'ga' : 'irish', 
+                         'it' : 'italian', 'ja' : 'japanese', 'jw' : 'javanese', 'kn' : 'kannada', 'kk' : 'kazakh', 'km' : 'khmer', 'ko' : 'korean', 'lo' : 'lao', 'la' : 'latin', 'lv' : 'latvian', 
+                         'lt' : 'lithuanian', 'mk' : 'macedonian', 'mg' : 'malagasy', 'ms' : 'malay', 'ml' : 'malayalam', 'mt' : 'maltese', 'mi' : 'maori', 'mr' : 'marathi', 'mn' : 'mongolian', 
+                         'my' : 'myanmar (burmese)', 'ne' : 'nepali', 'no' : 'norwegian', 'fa' : 'persian', 'pl' : 'polish', 'pt' : 'portuguese', 'ma' : 'punjabi', 'ro' : 'romanian', 'ru' : 'russian', 
+                         'sr' : 'serbian', 'st' : 'sesotho', 'si' : 'sinhala', 'sk' : 'slovak', 'sl' : 'slovenian', 'so' : 'somali', 'es' : 'spanish', 'su' : 'sudanese', 'sw' : 'swahili', 'sv' : 'swedish', 
+                         'tg' : 'tajik', 'ta' : 'tamil', 'te' : 'telugu', 'th' : 'thai', 'tr' : 'turkish', 'uk' : 'ukrainian', 'ur' : 'urdu', 'uz' : 'uzbek', 'vi' : 'vietnamese', 'cy' : 'welsh', 'yi' : 'yiddish', 'yo' : 'yoruba', 'zu' : 'zulu'}
         language = dictLanguages.get(plexLibLanguageCode)
 
         translator = GoogleTranslator()
         runTranslation = 'Yes' if plexLibLanguageCode != siteLanguage else 'No'
-        msg = 'Run Translation: [{0}] - Site Language: [{1}] to Library Language: [{2}]'.format(runTranslation, dictLanguages.get(siteLanguage), language)
+        msg = '[{0}] - Site Language: [{1}] to Library Language: [{2}]'.format(runTranslation, dictLanguages.get(siteLanguage), language)
         if detectLanguage and runTranslation == 'No':
             try:
                 detectString = re.findall(ur'.*?[.!?]', myString)[:4]   # take first 4 sentences of string to detect language
@@ -1452,13 +1532,13 @@ def TranslateString(myString, siteLanguage, plexLibLanguageCode, detectLanguage)
                 if detectString:
                     detectedTextLanguage = translator.detect(detectString)
                     runTranslation = 'Yes' if language != detectedTextLanguage else 'No'
-                    msg = 'Run Translation: [{0}] - Detected Language: [{1}] to Library Language: [{2}]'.format(runTranslation, detectedTextLanguage, language)
+                    msg = '[{0}] - Detected Language: [{1}] to Library Language: [{2}]'.format(runTranslation, detectedTextLanguage, language)
                 else:
-                    msg = 'Run Translation: [{0}] - Not enough available text to detect language'.format(runTranslation)
+                    msg = '[{0}] - Not enough available text to detect language'.format(runTranslation)
             except Exception as e:
                 log('UTILS :: Error Detecting Text Language: %s', e)
 
-        log('UTILS :: %s', msg)
+        log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Run Translation'), msg))
 
         if runTranslation == 'Yes':
             if language is not None:
@@ -1469,7 +1549,7 @@ def TranslateString(myString, siteLanguage, plexLibLanguageCode, detectLanguage)
                 except Exception as e:
                     log('UTILS :: Error Translating Text: %s', e)
             else:
-                log('UTILS :: Translation Skipped: Language Code [%s] not recognised', plexLibLanguageCode)
+                log('UTILS :: {0: <29} {1}'.format('{0}:'.format('Translation Skipped'), '{0}'.format(plexLibLanguageCode)))
 
     myString = myString if myString else ' ' # return single space to initialise metadata summary field
     return myString

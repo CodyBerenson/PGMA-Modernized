@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>CFBundleDevelopmentRegion</key>
+        <string>English</string>
+        <key>CFBundleExecutable</key>
+        <string>SimplyAdult</string>
+        <key>CFBundleIdentifier</key>
+        <string>com.plexapp.agents.SimplyAdult</string>
+        <key>CFBundleInfoDictionaryVersion</key>
+        <string>6.0</string>
+        <key>CFBundleShortVersionString</key>
+        <string>1.0</string>
+        <key>CFBundleSignature</key>
+        <string>????</string>
+        <key>CFBundleVersion</key>
+        <string>1.0</string>
+        <key>PlexFrameworkVersion</key>
+        <string>2</string>
+        <key>PlexPluginClass</key>
+        <string>Agent</string>
+        <key>PlexPluginMode</key>
+        <string>AlwaysOn</string>
+        <key>PlexPluginCodePolicy</key>
+        <string>Elevated</string>
+        <key>PlexAgentAttributionText</key>
+        <string>
+            <![CDATA[
+                Simply Adult [IAFD] (v2021-11-28)<br/>
+                <br/>
+                is an agent to scrape related metadata from Simply Adult and Actor thumbnails from IAFD<br/>
+                If gay adult content is your thing, it's highly recommended that you give them a look!<br/>
+                This agent is completely unafilliated with with either website in any way.<br/>
+                If you have problems neither of them will help you.
+            ]]>
+        </string>
+    </dict>
+</plist>

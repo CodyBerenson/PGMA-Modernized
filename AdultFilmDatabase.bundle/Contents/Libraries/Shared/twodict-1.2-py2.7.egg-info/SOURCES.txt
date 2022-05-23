@@ -1,0 +1,10 @@
+LICENSE
+MANIFEST.in
+README.md
+setup.py
+test_twodict.py
+twodict.py
+twodict.egg-info/PKG-INFO
+twodict.egg-info/SOURCES.txt
+twodict.egg-info/dependency_links.txt
+twodict.egg-info/top_level.txt

@@ -15,7 +15,11 @@
     04 Feb 2022   2019.12.25.34    implemented change suggested by Cody: duration matching optional on IAFD matching
                                    Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
     21 Mar 2022   2019.12.25.35    #147: Implemented simple fix by fivedays555, to add website to Agents Header Referer
-
+    13 May 2022   2019.12.25.36    Use IAFD Synopsis if present and Site's missing
+                                   - corrected code as if no actors were listed on the site, it would not take those added to the filename on disk   
+                                   - #162: duration matching had an error in the code - corrected and enhanced
+                                   - improved logging
+                                   - fixed error if no cast recorded on GEVI
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import json, re
@@ -23,7 +27,7 @@ from datetime import datetime
 from helpers import clear_posters, clear_art
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.34'
+VERSION_NO = '2019.12.25.36'
 PLUGIN_LOG_TITLE = 'GEVI'
 
 # log section separators
@@ -101,7 +105,7 @@ class GEVI(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
         ''' Prepare Title for search query '''
-        log('AGNT  :: Original Search Query        : {0}'.format(myString))
+        log('AGNT  :: Original Search Query:        {0}'.format(myString))
 
         # convert to lower case and trim
         myString = myString.lower().strip()
@@ -115,16 +119,12 @@ class GEVI(Agent.Movies):
                 foundHonorific = True
 
         if foundHonorific:
-            log('AGNT  :: Search Query:: [{0}] after removing one of these {1}'.format(myString, honorifics))
-        else:
-            log('AGNT  :: Search Query:: [{0}] found none of these {0}'.format(myString, honorifics))
+            log('AGNT  :: Search Query:                 Removed these {0}'.format(honorifics))
 
         # replace & with and
         if ' & ' in myString:
             myString = myString.replace(' & ', ' and ')
-            log('AGNT  :: Search Query:: [{0}] after replacing " & "'.format(myString))
-        else:
-            log('AGNT  :: Search Query:: [{0}] found no " & "'.format(myString))
+            log('AGNT  :: Search Query:                 Replaced " & "')
 
         # replace following with null
         nullChars = ["'", ',', '!', '\.', '#'] # to be replaced with null
@@ -132,9 +132,8 @@ class GEVI(Agent.Movies):
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             myString = re.sub(pattern, '', myString)
-            log('AGNT  :: Search Query:: [{0}] after removing one of these {1}'.format(myString, pattern))
-        else:
-            log('AGNT  :: Search Query:: [{0}] found none of these {0}'.format(myString, pattern))
+            log('AGNT  :: Original Search Query:         {0}'.format(myString))
+            log('AGNT  :: Search Query:                 Removed these {0}'.format(pattern))
 
         # replace following with space
         spaceChars = ["@", '\-', ur'\u2013', ur'\u2014', '\(', '\)']  # to be replaced with space
@@ -142,9 +141,7 @@ class GEVI(Agent.Movies):
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             myString = re.sub(pattern, ' ', myString)
-            log('AGNT  :: Search Query:: [{0}] after removing one of these {1}'.format(myString, pattern))
-        else:
-            log('AGNT  :: Search Query:: [{0}] found none of these {0}'.format(myString, pattern))
+            log('AGNT  :: Search Query:                 Removed these {0}'.format(pattern))
 
         # examine first word
         # remove if indefinite word in french, english, portuguese, spanish, german
@@ -160,9 +157,7 @@ class GEVI(Agent.Movies):
         if matched:
             myWords.remove(myWords[0])
             myString = ' '.join(myWords)
-            log("AGNT  :: Search Query:: [{0}] after dropping first word [{1}]".format(myString, myWords[0]))
-        else:
-            log('AGNT  :: Search Query:: [{0}] drop not attempted. First word was not an indefinite article'.format(myString))
+            log('AGNT  :: Search Query:                 Dropped First Word {0}'.format(myWords[0]))
 
         # examine first word in string for numbers
         myWords = myString.split()
@@ -173,11 +168,7 @@ class GEVI(Agent.Movies):
             if numPos > 0:
                 myWords[0] = myWords[0][:numPos]
                 myString = ' '.join(myWords)
-                log('AGNT  :: Search Query:: [{0}] after splitting at position <{1}> first word had one of these {2}'.format(myString, numPos, pattern))
-            else:
-                log('AGNT  :: Search Query:: [{0}] split not attempted as first charater of word [{1}] is a number'.format(myString, myWords[0][0]))
-        else:
-            log('AGNT  :: Search Query:: [{0}] split not attempted. First word had none of these {1}'.format(myString, pattern))
+                log('AGNT  :: Search Query:                 Split at position <{0}>, First word had a number'.format(numPos))
 
         # examine subsequent words in string for numbers and '&'
         myWords = myString.split()
@@ -186,9 +177,7 @@ class GEVI(Agent.Movies):
         if matched:
             numPos = matched.start() + len(myWords[0])
             myString = myString[:numPos]
-            log('AGNT  :: Search Query:: [{0}] after splitting at position <{1}> subsequent words have some of these {2}'.format(myString, numPos, pattern))
-        else:
-            log('AGNT  :: Search Query:: [{0}] split not attempted. Subsequent words have none of these {1}'.format(myString, pattern))
+            log('AGNT  :: Search Query:                 Split at position <{0}>, Subsequent words had some of these'.format(numPos, pattern))
 
         # remove continuous spaces in string
         myString = ' '.join(myString.split())
@@ -202,10 +191,25 @@ class GEVI(Agent.Movies):
         # GEVI uses a maximum of 24 characters when searching
         myString = myString[:24].strip()
         myString = myString if myString[-1] != '%' else myString[:23]
-        log('AGNT  :: Returned Search Query        : {0}'.format(myString))
+        log('AGNT  :: Returned Search Query:        {0}'.format(myString))
         log(LOG_BIGLINE)
 
         return myString
+
+    # -------------------------------------------------------------------------------------------------------------------------------
+    def DropGenre(self, myString):
+        ''' Remove unwanted genres '''
+        dropGenre = {'3d' : '', '4k' : '', 'awards' : '', 'character' : '', 'content' : '', 'creator' : '', 'definition' : '', 'exclusive' : '', 'feature' : '',
+                     'gay' : '', 'gayvn' : '', 'hd' : '', 'high' : '', 'international' : '', 'language' : '', 'locale' : '', 'movies' : '', 'new' : '', 'plot' : '', 
+                     'prebooks' : '', 'release' : '', 'sale' : '', 'settings' : '', 'streaming ' : '', 'ultra' : '', 'video' : '', 'website' : '', 'xbiz' : ''}
+        
+        dropped = False
+        for word in myString.lower().split():
+            if word in dropGenre:
+                dropped = True
+                break
+
+        return dropped
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
@@ -321,7 +325,7 @@ class GEVI(Agent.Movies):
                             break
 
                     if not foundStudio:
-                        log('SEARCH:: Error No Matching Site Studio')
+                        log('SEARCH:: Error matching Site Studio')
                         log(LOG_SUBLINE)
                         continue
 
@@ -375,53 +379,51 @@ class GEVI(Agent.Movies):
 
                 # GEVI usually sets its Genre to General Hardcore rather than having a more robust system like other websites, however it stores links to the film on the other websites
                 # Check AEBN/GayDVDEmpire/GayHotMovies Links and take genre information from them: Store them as 'Genres'Key in FILMDICT
-                FilmLinks = {}
-                ignoreGenres = ['4k ultra hd', 'character', 'exclusive', 'feature', 'gay', 'hd movies', 'high definition', 'language', 'locale', 'movies', 'new release', 'plot', 'sale downloads', 'sale rentals', 'sale streaming', 'sale', 'settings', 'streaming video', 'website']
                 genres = {}
+                doneGayDVDEmpire = False # sometimes there are 2 links to GayDVDEmpire - for VOD and DVD, we only need to process one
                 try:
                     webURLs = html.xpath('//td[contains(text(),"this production at")]/a/@href')
                     for webURL in webURLs:
-                        if webURL not in FilmLinks:        # links are sometimes duplicated in GEVI
-                            FilmLinks[webURL] = ''
-                            fhtml = HTML.ElementFromURL(webURL, sleep=DELAY)
-                            if 'aebn' in webURL:
-                                fhtmlgenres = fhtml.xpath('//span[@class="dts-image-display-name"]/text()')
-                                fhtmlgenres = [x.strip() for x in fhtmlgenres if x.strip()]
-                                log('SEARCH:: AEBN Genres                   %s', fhtmlgenres)
-                                for genre in fhtmlgenres:
-                                    if anyOf(x in genre.lower() for x in ignoreGenres):
-                                        continue
-                                    if genre not in genres:
-                                        genres[genre] = ''
-                                    if 'compilation' in genre.lower():
-                                        FILMDICT['Compilation'] = 'Compilation'
-                            elif 'gayhotmovies' in webURL:
-                                fhtmlgenres = fhtml.xpath('//a[contains(@href,"https://www.gayhotmovies.com/category/")]/@title')
-                                fhtmlgenres = [x.strip() for x in fhtmlgenres if x.strip()]
-                                log('SEARCH:: GayHotMovies Genres           %s', fhtmlgenres)
-                                for genre in fhtmlgenres:
-                                    if anyOf(x in genre.lower() for x in ignoreGenres):
-                                        continue
-                                    elif 'international' in genre.lower():
-                                        continue
-                                    else:
-                                        genre = genre.replace('Bareback ->', 'Bareback ')
-                                        genre = genre.split('->')[-1]
-                                    if genre not in genres:
-                                        genres[genre] = ''
-                                    if 'compilation' in genre.lower():
-                                        FILMDICT['Compilation'] = 'Compilation'
-                            elif 'gaydvdempire' in webURL:
-                                fhtmlgenres = fhtml.xpath('//ul[@class="list-unstyled m-b-2"]//a[@label="Category"]/text()[normalize-space()]')
-                                fhtmlgenres = [x.strip() for x in fhtmlgenres if x.strip()]
-                                log('SEARCH:: GayDVDEmpire Genres           %s', fhtmlgenres)
-                                for genre in fhtmlgenres:
-                                    if anyOf(x in genre.lower() for x in ignoreGenres):
-                                        continue
-                                    if genre not in genres:
-                                        genres[genre] = ''
-                                    if 'compilation' in genre.lower():
-                                        FILMDICT['Compilation'] = 'Compilation'
+                        fhtml = HTML.ElementFromURL(webURL, sleep=DELAY)
+                        if 'aebn' in webURL:
+                            fhtmlgenres = fhtml.xpath('//span[@class="dts-image-display-name"]/text()')
+                            fhtmlgenres = [x.strip() for x in fhtmlgenres if x.strip()]
+                            log('SEARCH:: AEBN Genres                   %s', fhtmlgenres)
+                            for genre in fhtmlgenres:
+                                if self.DropGenre(genre):
+                                    continue
+                                if genre not in genres:
+                                    genres[genre] = ''
+                                if 'compilation' in genre.lower():
+                                    FILMDICT['Compilation'] = 'Compilation'
+                        elif 'gayhotmovies' in webURL:
+                            fhtmlgenres = fhtml.xpath('//a[contains(@href,"https://www.gayhotmovies.com/category/")]/@title')
+                            fhtmlgenres = [x.strip() for x in fhtmlgenres if x.strip()]
+                            log('SEARCH:: GayHotMovies Genres           %s', fhtmlgenres)
+                            for genre in fhtmlgenres:
+                                if self.DropGenre(genre):
+                                    continue
+                                elif 'Bareback' in genre:
+                                    genre = 'Bareback '
+                                elif '->' in genre:
+                                    genre = genre.split('->')[-1]
+
+                                if genre not in genres:
+                                    genres[genre] = ''
+                                if 'compilation' in genre.lower():
+                                    FILMDICT['Compilation'] = 'Compilation'
+                        elif 'gaydvdempire' in webURL and not doneGayDVDEmpire:
+                            doneGayDVDEmpire = True
+                            fhtmlgenres = fhtml.xpath('//ul[@class="list-unstyled m-b-2"]//a[@label="Category"]/text()[normalize-space()]')
+                            fhtmlgenres = [x.strip() for x in fhtmlgenres if x.strip()]
+                            log('SEARCH:: GayDVDEmpire Genres           %s', fhtmlgenres)
+                            for genre in fhtmlgenres:
+                                if self.DropGenre(genre):
+                                    continue
+                                if genre not in genres:
+                                    genres[genre] = ''
+                                if 'compilation' in genre.lower():
+                                    FILMDICT['Compilation'] = 'Compilation'
 
                 except Exception as e:
                     log('SEARCH:: Error getting View Production Links: %s', e)
@@ -429,7 +431,7 @@ class GEVI(Agent.Movies):
                 
                 finally:
                     FILMDICT['Genres'] = {key.strip(): value for key, value in genres.items()}
-                    log('SEARCH:: Genres Found                  %s', genres)
+                    log('SEARCH:: Genres Found                  %s', sorted(genres.keys()))
 
                 # we should have a match on studio, title and year now. Find corresponding film on IAFD
                 log('SEARCH:: Check for Film on IAFD:')
@@ -448,54 +450,16 @@ class GEVI(Agent.Movies):
 
         # Fetch HTML.
         FILMDICT = json.loads(metadata.id)
-        log('UPDATE:: Film Dictionary Variables:')
-        for key in sorted(FILMDICT.keys()):
-            log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
+
+        utils.printFilmInformation(FILMDICT)
         log(LOG_BIGLINE)
 
         html = HTML.ElementFromURL(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
 
-        #  The following bits of metadata need to be established and used to update the movie on plex
-        #    1.  Metadata that is set by Agent as default
-        #        a. Studio               : From studio group of filename - no need to process this as above
-        #        b. Title                : From title group of filename - no need to process this as is used to find it on website
-        #        c. Tag line             : Corresponds to the url of movie
-        #        d. Originally Available : set from metadata.id (search result)
-        #        e. Content Rating       : Always X
-        #        f. Content Rating Age   : Always 18
-        #        g. Collection Info      : From title group of filename 
+        utils.setDefaultMetadata(metadata, FILMDICT)
+        log(LOG_BIGLINE)
 
-        # 1a.   Set Studio
-        metadata.studio = FILMDICT['Studio']
-        log('UPDATE:: Studio: %s' , metadata.studio)
-
-        # 1b.   Set Title
-        metadata.title = FILMDICT['Title']
-        log('UPDATE:: Title: %s' , metadata.title)
-
-        # 1c/d. Set Tagline/Originally Available from metadata.id
-        metadata.tagline = FILMDICT['SiteURL']
-        log('UPDATE:: Tagline: %s', metadata.tagline)
-        if FILMDICT['Year']:
-            metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-            metadata.year = metadata.originally_available_at.year
-            log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
-
-        # 1e/f. Set Content Rating to Adult/18 years
-        metadata.content_rating = 'X'
-        metadata.content_rating_age = 18
-        log('UPDATE:: Content Rating - Content Rating Age: X - 18')
-
-        # 1g. Collection
-        if COLCLEAR:
-            metadata.collections.clear()
-
-        collections = FILMDICT['Collection']
-        for collection in collections:
-            metadata.collections.add(collection)
-        log('UPDATE:: Collection Set From filename: %s', collections)
-
-        #    2.  Metadata retrieved from website
+        #    Metadata retrieved from website
         #        a. Genre                : Alphabetic order
         #        b. Countries            : Alphabetic order
         #        c. Rating
@@ -511,8 +475,8 @@ class GEVI(Agent.Movies):
             htmlgenres = html.xpath('//td[contains(text(),"category")]//following-sibling::td[1]/text()')[0]            # add GEVI categories to genres
             try:
                 htmlbodyTypes = html.xpath('//td[contains(text(),"body types")]//following-sibling::td[1]/text()')[0]   # add GEVI body type to genres
-                log('UPDATE:: Body Types Found: %s', htmlbodyTypes)
                 htmlbodyTypes = htmlbodyTypes.replace('Hvy', 'Heavy')
+                log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Body Types'), htmlbodyTypes))
                 htmlgenres = htmlgenres + ',' + htmlbodyTypes
             except Exception as e:
                 log('UPDATE:: Error getting Body Types: %s', e)
@@ -525,7 +489,7 @@ class GEVI(Agent.Movies):
 
             # reset htmlgenres to be a list containing keys of the genre dictionary and delete duplicated genres for example bear/bears - should leave only bears
             htmlgenres = list(genres.keys())
-            log('UPDATE:: %s Genres Found: %s', len(htmlgenres), htmlgenres)
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Genres Found'), len(htmlgenres)))
 
             copygenres = htmlgenres[:]
             for index, genre in enumerate(htmlgenres):
@@ -535,7 +499,7 @@ class GEVI(Agent.Movies):
 
             htmlgenres = [x.strip() for x in htmlgenres if x.strip()]   # trim and remove null elements
             htmlgenres.sort()
-            log('UPDATE:: %s Filtered and Sorted Genres: %s', len(htmlgenres), htmlgenres)
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Genres'), htmlgenres))
 
             metadata.genres.clear()
             for genre in htmlgenres:
@@ -552,7 +516,7 @@ class GEVI(Agent.Movies):
         try:
             rating = html.xpath('//td[contains(text(),"rating out of 4")]//following-sibling::td[1]/text()')[0].strip()
             rating = rating.count('*') * 2.5
-            log('UPDATE:: Film Rating %s', rating)
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Film Rating'), rating))
             metadata.rating = rating
 
         except Exception as e:
@@ -565,7 +529,7 @@ class GEVI(Agent.Movies):
             htmlcountries = html.xpath('//td[contains(text(),"location")]//following-sibling::td[1]/text()')
             htmlcountries = [x.strip() for x in htmlcountries if x.strip()]
             htmlcountries.sort()
-            log('UPDATE:: Countries List %s', htmlcountries)
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Countries List'), htmlcountries))
             metadata.countries.clear()
             for country in htmlcountries:
                 metadata.countries.add(country)
@@ -579,9 +543,9 @@ class GEVI(Agent.Movies):
         # 2d.   Directors
         log(LOG_BIGLINE)
         try:
-            htmldirectors = html.xpath('//td[@class="pd"]/a[contains(@href, "/director/")]/text()')
-            htmldirectors = ['{0}'.format(x.strip()) for x in htmldirectors if x.strip()]
-            log('UPDATE:: Director List %s', htmldirectors)
+            htmldirectors = html.xpath('//a[contains(@href, "/director/")]/text()')
+            htmldirectors = list(set(htmldirectors))
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Director(s)'), htmldirectors))
             directorDict = utils.getDirectors(htmldirectors, FILMDICT)
             metadata.directors.clear()
             for key in sorted(directorDict):
@@ -597,9 +561,18 @@ class GEVI(Agent.Movies):
 
         # 2e.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
         log(LOG_BIGLINE)
-        try:
-            htmlcast = html.xpath('//td[@class="pd"]/a[contains(@href, "/performer/")]//text()')
-            log('UPDATE:: Cast List %s', htmlcast)
+        if type(FILMDICT['FilenameCast']) is list:
+            htmlcast = FILMDICT['FilenameCast'][:]
+        else:
+            try:
+                htmlcast = html.xpath('//a[contains(@href, "/performer/")]//text()')
+                if type(htmlcast) is list and htmlcast:
+                    htmlcast = list(set(htmlcast))
+            except Exception as e:
+                log('UPDATE:: Error getting Cast: %s', e)
+
+        if type(htmlcast) is list and htmlcast:
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Cast'), htmlcast))
             castDict = utils.getCast(htmlcast, FILMDICT)
 
             # sort the dictionary and add key(Name)- value(Photo, Role) to metadata
@@ -612,9 +585,8 @@ class GEVI(Agent.Movies):
                 # add cast name to collection
                 if COLCAST:
                     metadata.collections.add(key)
-
-        except Exception as e:
-            log('UPDATE:: Error getting Cast: %s', e)
+        else:
+            log('UPDATE:: Error No Cast List Determined')
 
         # 2f.   Posters/Background Art
         #       GEVI does not distinguish between poster and back ground images - we assume first image is poster and second is background
@@ -627,13 +599,13 @@ class GEVI(Agent.Movies):
                 htmlimages.append(htmlimages[0])
 
             image = htmlimages[0]
-            log('UPDATE:: Poster Image Found: [1] - %s', image)
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Poster Image'), image))
             clear_posters(metadata)
             metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.posters.validate_keys([image])
 
             image = htmlimages[1]
-            log('UPDATE:: Art Image Found: [2] - %s', image)
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Art Image'), image))
             clear_art(metadata)
             metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
             metadata.art.validate_keys([image])
@@ -648,7 +620,7 @@ class GEVI(Agent.Movies):
         try:
             htmllegend = html.xpath('//td[@class="sfn"]//text()')
             legend = ''.join(htmllegend).replace('\n', '').replace('=', ':').replace(';', '').strip()
-            log('UPDATE:: Legend: %s', legend if legend else 'None Found')
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Legend'), legend if legend else 'None Found'))
         except Exception as e:
             legend = ''
             log('UPDATE:: Error getting Legend: %s', e)
@@ -657,33 +629,32 @@ class GEVI(Agent.Movies):
         log(LOG_SUBLINE)
         try:
             htmlscenes = html.xpath('//td[@class="scene"]')
-            log('UPDATE:: Possible Number of Scenes [%s]', len(htmlscenes))
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Possible Number of Scenes'), len(htmlscenes)))
 
             metadata.reviews.clear()
             sceneCount = 0 # avoid enumerating the number of scenes as some films have empty scenes
             for count, scene in enumerate(htmlscenes, start=1):
-                log('UPDATE:: Scene No %s', count)
+                log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Scene No'), count))
                 try:
                     try:
                         reviewSource = scene.xpath('./span[@class="plist"]//text()[normalize-space()]')
                         reviewSource = ''.join(reviewSource).strip()
                         reviewSource = re.sub(' \(.*?\)', '', reviewSource)    # GEVI sometimes has the studio in brackets after the cast name
-                        log('UPDATE:: Scene Title: %s', reviewSource)
                     except:
-                        log('UPDATE:: No Scene Title')
                         reviewSource = ''
+                    log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Scene Title'), reviewSource if reviewSource else 'None'))
 
                     try:
                         reviewText = scene.xpath('./span[@style]//text()[normalize-space()]')
                         reviewText = ''.join(reviewText).strip()
-                        log('UPDATE:: Scene Text: %s', reviewText)
                     except:
-                        log('UPDATE:: No Scene Writing')
                         reviewText = ''
+                    log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Scene Text'), reviewText if reviewText else 'None'))
 
                     # if no title and no scene write up
                     if not reviewSource and not reviewText:
                         continue
+
                     sceneCount += 1
 
                     newReview = metadata.reviews.new()
@@ -715,22 +686,22 @@ class GEVI(Agent.Movies):
             htmlpromo = html.xpath('//td[contains(text(),"promo/")]//following-sibling::td//span[@style]/text()[following::br]')
             for item in htmlpromo:
                 synopsis = '{0}\n{1}'.format(synopsis, item)
-            log('UPDATE:: Synopsis Found: %s', synopsis)
-            synopsis = synopsis.replace('\n', ' ')
+            log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Synopsis'), synopsis))
 
             regex = r'View this scene at.*|found in compilation.*|see also.*|^\d+\.$'
             pattern = re.compile(regex, re.IGNORECASE | re.MULTILINE)
             synopsis = re.sub(pattern, '', synopsis)
-            synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
         except Exception as e:
             synopsis = ''
             log('UPDATE:: Error getting Synopsis: %s', e)
 
         # combine and update
         log(LOG_SUBLINE)
+        synopsis = FILMDICT['Synopsis'] if len(FILMDICT['Synopsis']) > len(synopsis) else synopsis
+        synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
         summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
-        log('UPDATE:: Summary with Legend: %s', summary)
+        log('UPDATE:: {0: <29} {1}'.format('{0}:'.format('Summary with Legend'), summary))
         metadata.summary = summary
 
         log(LOG_BIGLINE)
