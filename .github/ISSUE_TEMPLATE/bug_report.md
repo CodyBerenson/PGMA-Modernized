@@ -1,35 +1,29 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Create a report to help us improve.  Mandatory information must be provided or the issue may be closed without being reviewed or resolved 
 title: "[BUG]: "
 labels: bug
 assignees: ''
 
 ---
+# Mandatory #
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+## Describe the bug: ## 
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+## Specific Agent(s) Causing the Issue: ##
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+## Index Site URL(s) Attempting to Match: ##
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.  Redact ALL nudity and inappropriate content.  
+## Log Attached: ##
 
-**Log**
-Attach the log.  If you're unsure where the log is, please visit the Usage Guide.
+# Optional #
 
-**Desktop (please complete the following information):**
+## Screenshot(s) with all nudity redacted: ##
+
+## Additional Context: ##
+
+## Desktop (please complete the following information): ##
  - OS: [e.g. iOS]
  - Browser [e.g. chrome, safari]
  - Version [e.g. 22]
 
-**Additional context**
-Add any other context about the problem here.
