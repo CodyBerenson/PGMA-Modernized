@@ -32,16 +32,25 @@
                                    tags with colons in them are excluded from cast list
     08 Mar 2022   2019.08.12.34    Solved Reopened issue #123
                                    tags with colons in them are excluded from cast list
+    15 Jul 2022   2019.08.12.35    Solved xPath change for Site entries - noticed by Cody
+                                   - updated utils.py to latest version to use new routines.
 ---------------------------------------------------------------------------------------------------------------
 '''
 import json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.22.34'
-PLUGIN_LOG_TITLE = 'WayBig'
-LOG_BIGLINE = '------------------------------------------------------------------------------'
-LOG_SUBLINE = '      ------------------------------------------------------------------------'
+VERSION_NO = '2019.12.22.35'
+AGENT = 'WayBig'
+
+# Plex System Variables/Methods
+PlexSupportPath = Core.app_support_path
+PlexLoadFile = Core.storage.load
+
+# log section separators
+LOG_BIGLINE = '---------------------------------------------------------------------------------'
+LOG_SUBLINE = '      ---------------------------------------------------------------------------'
+LOG_ASTLINE = '*********************************************************************************'
 
 # Preferences
 COLCAST = Prefs['castcollection']                   # add cast to collection
@@ -50,7 +59,7 @@ COLCOUNTRY = Prefs['countrycollection']             # add country to collection
 COLDIRECTOR = Prefs['directorcollection']           # add director to collection
 COLGENRE = Prefs['genrecollection']                 # add genres to collection
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
-COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
+COLSERIES = Prefs['seriescollection']               # add series to collection
 DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
@@ -59,7 +68,6 @@ MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duratio
 PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 
 # PLEX API /CROP Script/online image cropper
-load_file = Core.storage.load
 CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/BestExclusivePorn.bundle/Contents/Code/ImageCropper.vbs" "{1}" "{2}" "{3}" "{4}"'
 THUMBOR = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}"
 
@@ -68,13 +76,16 @@ BASE_URL = 'https://www.waybig.com'
 BASE_SEARCH_URL = BASE_URL + '/blog/index.php?s={0}'
 
 # dictionary holding film variables
-FILMDICT = {}   
+FILMDICT = {}
 
 # Date Formats used by website
 DATEFORMAT = '%B %d, %Y'
 
 # Website Language
 SITE_LANGUAGE = 'en'
+# ----------------------------------------------------------------------------------------------------------------------------------
+# imports placed here to use previously declared variables
+import utils
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def Start():
@@ -84,7 +95,7 @@ def Start():
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def ValidatePrefs():
-    ''' validate changed user preferences '''
+    ''' Validate Changed Preferences '''
     pass
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -94,18 +105,6 @@ def anyOf(iterable):
         if element:
             return element
     return None
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-def log(message, *args):
-    ''' log messages '''
-    if re.search('ERROR', message, re.IGNORECASE):
-        Log.Error(PLUGIN_LOG_TITLE + ' - ' + message, *args)
-    else:
-        Log.Info(PLUGIN_LOG_TITLE + '  - ' + message, *args)
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-# imports placed here to use previously declared variables
-import utils
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 class WayBig(Agent.Movies):
@@ -120,7 +119,7 @@ class WayBig(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
         '''  clean search string before searching on WayBig '''
-        log('AGNT  :: Original Search Query        : {0}'.format(myString))
+        utils.log('AGENT :: {0:<29} {1}'.format('Original Search Query', myString))
 
         myString = myString.lower().strip()
 
@@ -128,8 +127,7 @@ class WayBig(Agent.Movies):
         if '- ' in myString:
             myString = myString.replace(' - ', ': ')
             myString = myString.replace('- ', ': ')
-            log('AGNT  :: Search Query:: Replaced Minus-Dash sequence with Colon')
-            
+            utils.log('AGENT :: Search Query:: Replaced Minus-Dash sequence with Colon')
 
         # replace curly apostrophes with straight as strip diacritics will remove these
         quoteChars = [ur'‘', ur'’', ur'\u2018', ur'\u2019']
@@ -138,8 +136,8 @@ class WayBig(Agent.Movies):
         if matched:
             myString = re.sub(pattern, "'", myString)
             myString = ' '.join(myString.split())   # remove continous white space
-            log('AGNT  :: Search Query:: Replaced characters in string. Found one of these {0}'.format(quoteChars))
-            log('AGNT  :: Amended Search Query [{0}]'.format(myString))
+            utils.log('AGENT :: Search Query:: Replaced characters in string. Found one of these {0}'.format(quoteChars))
+            utils.log('AGENT :: Amended Search Query [{0}]'.format(myString))
 
         # WayBig seems to fail to find Titles which have invalid chars in them, split at first incident and take first split, just to search but not compare
         # the back tick is added to the list as users who can not include quotes in their filenames can use these to replace them without changing the scrappers code
@@ -150,15 +148,15 @@ class WayBig(Agent.Movies):
             matched = re.search(pattern, word) # match against first word
             if matched:
                 myWords.remove(myWords[count])
-                log('AGNT  :: Search Query:: Dropped word {0} "{1}". Found one of these {2} characters'.format(count, word, badChars))
+                utils.log('AGENT :: Search Query:: Dropped word {0} "{1}". Found one of these {2} characters'.format(count, word, badChars))
                 myString = ' '.join(myWords)
-                log('AGNT  :: Amended Search Query [{0}]'.format(myString))
+                utils.log('AGENT :: Amended Search Query [{0}]'.format(myString))
 
         # string can not be longer than 50 characters
         if len(myString) > 50:
             lastSpace = myString[:50].rfind(' ')
             myString = myString[:lastSpace]
-            log('AGNT  :: Search Query:: Query length trimmed > 50 Characters')
+            utils.log('AGENT :: Search Query:: Query length trimmed > 50 Characters')
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())
@@ -166,8 +164,8 @@ class WayBig(Agent.Movies):
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string
         myString = myString.replace('%25', '%').replace('*', '')
 
-        log('AGNT  :: Returned Search Query        : {0}'.format(myString))
-        log(LOG_BIGLINE)
+        utils.log('AGENT :: {0:<29} {1}'.format('Returned Search Query', myString))
+        utils.log(LOG_BIGLINE)
 
         return myString
 
@@ -175,18 +173,28 @@ class WayBig(Agent.Movies):
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
+            utils.log('SEARCH:: {0:<29} {1}'.format('Error: Missing Media Item File', 'QUIT'))
             return
 
-        utils.logHeaders('SEARCH', media, lang)
+        #clear-cache directive
+        if media.name == "clear-cache":  
+            HTTP.ClearCache()
+            results.Append(MetadataSearchResult(id='clear-cache', name='Plex web cache cleared', year=media.year, lang=lang, score=0))
+            utils.log('SEARCH:: {0:<29} {1}'.format('Warning: Clear Cache Directive Encountered', 'QUIT'))
+            return
+
+        utils.logHeader('SEARCH', media, lang)
 
         # Check filename format
         try:
             FILMDICT = utils.matchFilename(media)
+            FILMDICT['lang'] = lang
+            FILMDICT['Agent'] = AGENT
         except Exception as e:
-            log('SEARCH:: Error: %s', e)
+            utils.log('SEARCH:: Error: %s', e)
             return
 
-        log(LOG_BIGLINE)
+        utils.log(LOG_BIGLINE)
 
         # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
@@ -194,192 +202,172 @@ class WayBig(Agent.Movies):
         searchQuery = BASE_SEARCH_URL.format(searchTitle)
 
         # strip studio name from title to use in comparison
-        log('SEARCH:: Search Title: %s', searchTitle)
+        utils.log('SEARCH:: Search Title: %s', searchTitle)
         regex = ur'^{0} |at {0}$'.format(re.escape(FILMDICT['CompareStudio']))
         pattern = re.compile(regex, re.IGNORECASE)
         compareTitle = re.sub(pattern, '', searchTitle)
         compareTitle = utils.NormaliseComparisonString(compareTitle)
 
-        log('SEARCH:: Search Title: %s', searchTitle)
+        utils.log('SEARCH:: Search Title: %s', searchTitle)
 
         morePages = True
         while morePages:
-            log('SEARCH:: Search Query: %s', searchQuery)
+            utils.log('SEARCH:: Search Query: %s', searchQuery)
             try:
                 html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
             except Exception as e:
-                log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+                utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
                 return
 
             try:
                 searchQuery = html.xpath('//div[@class="nav-links"]/a[@class="next page-numbers"]/@href')[0]
-                log('SEARCH:: Next Page Search Query: %s', searchQuery)
+                utils.log('SEARCH:: Next Page Search Query: %s', searchQuery)
                 pageNumber = int(html.xpath('//div[@class="nav-links"]/span[@class="page-numbers current"]/text()[normalize-space()]')[0])
                 morePages = True if pageNumber <= 10 else False
             except:
                 searchQuery = ''
-                log('SEARCH:: No More Pages Found')
+                utils.log('SEARCH:: No More Pages Found')
                 pageNumber = 1
                 morePages = False
 
             titleList = html.xpath('.//div[@class="row"]/div[@class="content-col col"]/article')
-            log('SEARCH:: Result Page No: %s, Titles Found %s', pageNumber, len(titleList))
-            log(LOG_BIGLINE)
-
-            for title in titleList:
+            titleListLength = len(titleList)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(titleListLength, pageNumber)))
+            utils.log(LOG_BIGLINE)
+            for idx, title in enumerate(titleList, start=1):
+                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', '{0} of {1} for {2} - {3}'.format(idx, titleListLength, FILMDICT['Studio'], FILMDICT['Title'])))
                 # Site Entry
+                utils.log(LOG_BIGLINE)
                 try:
-                    siteEntry = title.xpath('./a/h2[@class="entry-title"]/text()')[0].strip()
-                    log('SEARCH:: Site Entry:                   %s', siteEntry)
+                    siteEntry = title.xpath('./a/*[@class="entry-title"]/text()')[0].strip()
+                    utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', siteEntry))
                     # prepare the Site Entry
                     singleQuotes = ["`", "‘", "’"]
                     pattern = ur'[{0}]'.format(''.join(singleQuotes))
                     siteEntry = re.sub(pattern, "'", siteEntry)
-                    log('SEARCH:: xxx %s', siteEntry)
                     # the siteEntry usual has the format Studio: Title
                     siteEntry = siteEntry.lower()
                     if ' at ' in siteEntry and ': ' in siteEntry and (siteEntry.endswith("'") or siteEntry.endswith('"')):       # err 123
-                        log('SEARCH:: Matched " at ", ": " and %s ends with apostrophe in Site entry', re.match(siteEntry, '[\'"]$'))
+                        utils.log('SEARCH:: Matched " at ", ": " and %s ends with apostrophe in Site entry', re.match(siteEntry, '[\'"]$'))
                         siteStudio, siteTitle = siteEntry.split(': ', 1)
                     elif ' at ' in siteEntry:
-                        log('SEARCH:: Matched " at " in Site entry')
+                        utils.log('SEARCH:: Matched " at " in Site entry')
                         siteTitle, siteStudio = siteEntry.rsplit(' at ', 1)
                     elif ': ' in siteEntry:
-                        log('SEARCH:: Matched ": " Site entry')
+                        utils.log('SEARCH:: Matched ": " Site entry')
                         siteStudio, siteTitle = siteEntry.split(': ', 1)
                         # none standard titles
                     elif ' on ' in siteEntry:
-                        log('SEARCH:: Matched " on " in Site entry')
+                        utils.log('SEARCH:: Matched " on " in Site entry')
                         siteTitle, siteStudio = siteEntry.rsplit(' on ', 1)
                     elif '? ' in siteEntry:
-                        log('SEARCH:: Matched "? " in Site entry')
+                        utils.log('SEARCH:: Matched "? " in Site entry')
                         siteStudio, siteTitle = siteEntry.split('? ', 1)
                     elif ', ' in siteEntry:
-                        log('SEARCH:: Matched ", " in Site entry')
+                        utils.log('SEARCH:: Matched ", " in Site entry')
                         siteStudio, siteTitle = siteEntry.split(', ', 1)
                     elif FILMDICT['Studio'].lower() in siteEntry:       # in case the film title is mssing a separator between the studio and clip name
-                        log('SEARCH:: Warning: Site Entry did not have a clear separator to separate Studio from Title')
+                        utils.log('SEARCH:: Warning: Site Entry did not have a clear separator to separate Studio from Title')
                         siteStudio = FILMDICT['Studio'].lower()
                         siteTitle = FILMDICT['Title'].lower() if FILMDICT['Title'].lower() in siteEntry else ''
                     else:
-                        log('SEARCH:: Error determining Site Studio and Title from Site Entry')
-                        log(LOG_SUBLINE)
+                        utils.log('SEARCH:: Error determining Site Studio and Title from Site Entry')
+                        utils.log(LOG_SUBLINE)
                         continue
 
-                    log(LOG_BIGLINE)
-
                 except Exception as e:
-                    log('SEARCH:: Error getting Site Entry: %s', e)
-                    log(LOG_SUBLINE)
+                    utils.log('SEARCH:: Error getting Site Entry: %s', e)
+                    utils.log(LOG_SUBLINE)
                     continue
 
                 # Site Title
+                utils.log(LOG_BIGLINE)
                 try:
                     utils.matchTitle(siteTitle, FILMDICT)
-                    log(LOG_BIGLINE)
                 except Exception as e:
-                    log('SEARCH:: Error getting Site Title: %s', e)
-                    log(LOG_SUBLINE)
+                    utils.log('SEARCH:: Error getting Site Title: %s', e)
+                    utils.log(LOG_SUBLINE)
                     continue
 
                 # Studio Name
+                utils.log(LOG_BIGLINE)
                 try:
                     utils.matchStudio(siteStudio, FILMDICT)
-                    log(LOG_BIGLINE)
                 except Exception as e:
-                    log('SEARCH:: Error getting Site Studio: %s', e)
-                    log(LOG_SUBLINE)
+                    utils.log('SEARCH:: Error getting Site Studio: %s', e)
+                    utils.log(LOG_SUBLINE)
                     continue
 
                 # Site Title URL
+                utils.log(LOG_BIGLINE)
                 try:
                     siteURL = title.xpath('./a[@rel="bookmark"]/@href')[0]
                     siteURL = ('' if BASE_URL in siteURL else BASE_URL) + siteURL
                     FILMDICT['SiteURL'] = siteURL
-                    log('SEARCH:: Site Title url                %s', siteURL)
-                    log(LOG_BIGLINE)
+                    utils.log('SEARCH:: {0:<29} {1}'.format('Site Title URL', siteURL))
                 except Exception as e:
-                    log('SEARCH:: Error getting Site Title Url: %s', e)
-                    log(LOG_SUBLINE)
+                    utils.log('SEARCH:: Error getting Site Title Url: %s', e)
+                    utils.log(LOG_SUBLINE)
                     continue
 
                 # Site Release Date
+                utils.log(LOG_BIGLINE)
                 try:
                     siteReleaseDate = title.xpath('./div/span[@class="meta-date"]/strong/text()[normalize-space()]')[0]
+                    utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Release Date', siteReleaseDate))
                     try:
+                        siteReleaseDate = datetime.strptime(siteReleaseDate, DATEFORMAT)
                         siteReleaseDate = utils.matchReleaseDate(siteReleaseDate, FILMDICT)
-                        log(LOG_BIGLINE)
                     except Exception as e:
-                        log('SEARCH:: Error getting Site URL Release Date: %s', e)
-                        log(LOG_SUBLINE)
+                        utils.log('SEARCH:: Error getting Site URL Release Date: %s', e)
+                        utils.log(LOG_SUBLINE)
                         continue
                 except:
-                    log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
-                    log(LOG_BIGLINE)
+                    utils.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
 
                 # we should have a match on studio, title and year now. Find corresponding film on IAFD
-                log('SEARCH:: Check for Film on IAFD:')
+                utils.log(LOG_BIGLINE)
+                utils.log('SEARCH:: Check for Film on IAFD:')
                 utils.getFilmOnIAFD(FILMDICT)
 
-                results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
-                log(LOG_BIGLINE)
-                log('SEARCH:: Finished Search Routine')
-                log(LOG_BIGLINE)
+                FILMDICT['id'] = media.id
+                myID = json.dumps(FILMDICT, default=utils.jsonDumper)
+                results.Append(MetadataSearchResult(id=myID, name=FILMDICT['Title'], score=100, lang=lang))
+                utils.logFooter('SEARCH', FILMDICT)
                 return
+
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
-        utils.logHeaders('UPDATE', media, lang)
+        utils.logHeader('UPDATE', media, lang)
 
-        # Fetch HTML.
-        FILMDICT = json.loads(metadata.id)
-        log('UPDATE:: Film Dictionary Variables:')
-        for key in sorted(FILMDICT.keys()):
-            log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
-        log(LOG_BIGLINE)
+        utils.log('UPDATE:: Convert Date Time & Set Objects:')
+        FILMDICT = json.loads(metadata.id, object_hook=utils.jsonLoader)
+        utils.log(LOG_BIGLINE)
 
-        html = HTML.ElementFromURL(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
+        utils.printFilmInformation(FILMDICT)
+        utils.log(LOG_BIGLINE)
 
-        #  The following bits of metadata need to be established and used to update the movie on plex
-        #    1.  Metadata that is set by Agent as default
-        #        a. Studio               : From studio group of filename - no need to process this as above
-        #        b. Title                : From title group of filename - no need to process this as is used to find it on website
-        #        c. Tag line             : Corresponds to the url of movie
-        #        d. Originally Available : set from metadata.id (search result)
-        #        e. Content Rating       : Always X
-        #        f. Content Rating Age   : Always 18
-        #        g. Collection Info      : From title group of filename 
+        # Fetch HTML. - if this fails abandon the update!!!!
+        try:
+            webURL = FILMDICT['SiteURL']
+            html = HTML.ElementFromURL(webURL, timeout=60, errors='ignore', sleep=DELAY)
+        except Exception as e:
+            utils.log('UPDATE:: Error - Failed to Load Film Title Page; Abandon Update Process: %s', e)
+            return
 
-        # 1a.   Set Studio
-        metadata.studio = FILMDICT['Studio']
-        log('UPDATE:: Studio: %s' , metadata.studio)
-
-        # 1b.   Set Title
-        metadata.title = FILMDICT['Title']
-        log('UPDATE:: Title: %s' , metadata.title)
-
-        # 1c/d. Set Tagline/Originally Available from metadata.id
-        metadata.tagline = FILMDICT['SiteURL']
-        metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-        metadata.year = metadata.originally_available_at.year
-        log('UPDATE:: Tagline: %s', metadata.tagline)
-        log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
-
-        # 1e/f. Set Content Rating to Adult/18 years
-        metadata.content_rating = 'X'
-        metadata.content_rating_age = 18
-        log('UPDATE:: Content Rating - Content Rating Age: X - 18')
-
-        # 1g. Collection
-        if COLCLEAR:
-            metadata.collections.clear()
-
-        collections = FILMDICT['Collection']
-        for collection in collections:
-            metadata.collections.add(collection)
-
-        log('UPDATE:: Collection Set From filename: %s', collections)
+        # The following bits of metadata need to be established and used to update the movie on plex
+        #   1.  Metadata that is set by Agent as default
+        #       a. Studio               : From studio group of filename - no need to process this as above
+        #       b. Title                : From title group of filename - no need to process this as is used to find it on website
+        #       c. Tag line             : Corresponds to the url of film
+        #       d. Originally Available : set from metadata.id (search result)
+        #       e. Content Rating       : Always X
+        #       f. Content Rating Age   : Always 18
+        #       g. Collection Info      : From title group of filename 
+        metadata = utils.setDefaultMetadata(metadata, FILMDICT)
+        utils.log(LOG_BIGLINE)
 
         #    2.  Metadata retrieved from website
         #        a.   Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
@@ -387,7 +375,7 @@ class WayBig(Agent.Movies):
         #        c.   Summary
 
         # 2a. Tags - Waybigs stores the cast as tags
-        log(LOG_BIGLINE)
+        utils.log(LOG_BIGLINE)
         castList = []
         try:
             ignoreCast = ['British', 'Furry', 'Hairy', 'Hawaiian', 'Solo', 'U.K', 'United Kingdom']
@@ -420,13 +408,13 @@ class WayBig(Agent.Movies):
                 castList.append(cast)
 
         except Exception as e:
-            log('UPDATE:: Error getting Cast: No Tags Found, Get Cast from Film Title: %s', e)
+            utils.log('UPDATE:: Error getting Cast: No Tags Found, Get Cast from Film Title: %s', e)
             pattern = u'([A-Z]\w+(?=[\s\-][A-Z])(?:[\s\-][A-Z]\w*)+)'
             matches = re.findall(pattern, FILMDICT['Title'])  # match against Film title
-            log('UPDATE:: Matches:: {0}'.format(matches))
+            utils.log('UPDATE:: Matches:: {0}'.format(matches))
             if matches:
                 for count, castname in enumerate(matches, 1):
-                    log('UPDATE:: {0}. Found Possible Cast Name: {1}'.format(count, castname))
+                    utils.log('UPDATE:: {0}. Found Possible Cast Name: {1}'.format(count, castname))
                     if castname:
                         castList.append(castname)
 
@@ -444,16 +432,16 @@ class WayBig(Agent.Movies):
                     metadata.collections.add(key)
 
         except Exception as e:
-            log('UPDATE:: Error getting Cast: %s', e)
+            utils.log('UPDATE:: Error getting Cast: %s', e)
 
         # 2c.   Posters/Art - First Image set to Poster, next to Art
-        log(LOG_BIGLINE)
+        utils.log(LOG_BIGLINE)
         imageType = 'Poster & Art'
         try:
             htmlimages = html.xpath('//a[@target="_self" or @target="_blank"]/img[(@height or @width) and @alt and contains(@src, "zing.waybig.com/reviews")]/@src')
             if len(htmlimages) == 1:
                 htmlimages.append(htmlimages[0])
-            log('UPDATE:: %s Images Found: %s', len(htmlimages), htmlimages)
+            utils.log('UPDATE:: %s Images Found: %s', len(htmlimages), htmlimages)
             for index, image in enumerate(htmlimages):
                 image = image.replace('.webp', '.jpg')      # change extension of url image
                 if index > 1:
@@ -465,13 +453,13 @@ class WayBig(Agent.Movies):
                     #  clean up and only keep the posters we have added
                     metadata.posters[pic] = Proxy.Media(picContent, sort_order=1)
                     metadata.posters.validate_keys([pic])
-                    log(LOG_SUBLINE)
+                    utils.log(LOG_SUBLINE)
                 else:               # processing art
                     metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
                     metadata.art.validate_keys([pic])
 
         except Exception as e:
-            log('UPDATE:: Error getting %s: %s', imageType, e)
+            utils.log('UPDATE:: Error getting %s: %s', imageType, e)
 
         # 2a.   Summary = IAFD Legend + Synopsis
         # synopsis
@@ -480,20 +468,21 @@ class WayBig(Agent.Movies):
             htmlsynopsis = html.xpath('//div[@class="entry-content"]/p[not(descendant::script) and not(contains(., "Watch as"))]')
             for item in htmlsynopsis:
                 synopsis = '{0}{1}\n'.format(synopsis, item.text_content())
-            log('UPDATE:: Synopsis Found: %s', synopsis)
+            utils.log('UPDATE:: Synopsis Found: %s', synopsis)
             pattern = re.compile(r'Watch.*at.*', re.IGNORECASE)
             synopsis = re.sub(pattern, '', synopsis)
             synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
         except Exception as e:
-            log('UPDATE:: Error getting Synopsis: %s', e)
+            utils.log('UPDATE:: Error getting Synopsis: %s', e)
 
         # combine and update
-        log(LOG_SUBLINE)
+        utils.log(LOG_SUBLINE)
         summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
         summary = summary.replace('\n\n', '\n')
-        log('UPDATE:: Summary with Legend: %s', summary)
+        utils.log('UPDATE:: Summary with Legend: %s', summary)
         metadata.summary = summary
 
-        log(LOG_BIGLINE)
-        log('UPDATE:: Finished Update Routine')
-        log(LOG_BIGLINE)
+        utils.log(LOG_ASTLINE)
+        utils.log('UPDATE:: %s', 'Finished Update Routine'.center(72))
+        utils.log(LOG_ASTLINE)
+        return

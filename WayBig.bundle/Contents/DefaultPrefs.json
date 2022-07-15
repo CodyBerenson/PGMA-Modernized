@@ -50,7 +50,7 @@
         "default": "false"
     },
     {
-        "id": "titlecollection",
+        "id": "seriescollection",
         "label": "Create Collections based on Film Series",
         "type": "bool",
         "default": "false"
