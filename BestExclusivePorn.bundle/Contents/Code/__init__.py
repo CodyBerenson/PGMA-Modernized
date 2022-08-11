@@ -35,9 +35,12 @@ from datetime import datetime
 
 # Version / Log Title
 VERSION_NO = '2020.08.09.14'
-PLUGIN_LOG_TITLE = 'BestExclusivePorn'
-LOG_BIGLINE = '------------------------------------------------------------------------------'
-LOG_SUBLINE = '      ------------------------------------------------------------------------'
+AGENT = 'BestExclusivePorn'
+
+# log section separators
+LOG_BIGLINE = '---------------------------------------------------------------------------------'
+LOG_SUBLINE = '      ---------------------------------------------------------------------------'
+LOG_ASTLINE = '*********************************************************************************'
 
 # Preferences
 COLCAST = Prefs['castcollection']                   # add cast to collection
@@ -46,7 +49,7 @@ COLCOUNTRY = Prefs['countrycollection']             # add country to collection
 COLDIRECTOR = Prefs['directorcollection']           # add director to collection
 COLGENRE = Prefs['genrecollection']                 # add genres to collection
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
-COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
+COLSERIES = Prefs['seriescollection']               # add series to collection
 DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
@@ -55,7 +58,7 @@ MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duratio
 PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 
 # PLEX API /CROP Script/online image cropper
-load_file = Core.storage.load
+PlexLoadFile = Core.storage.load
 CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/BestExclusivePorn.bundle/Contents/Code/ImageCropper.vbs" "{1}" "{2}" "{3}" "{4}"'
 THUMBOR = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}"
 
@@ -95,9 +98,9 @@ def anyOf(iterable):
 def log(message, *args):
     ''' log messages '''
     if re.search('ERROR', message, re.IGNORECASE):
-        Log.Error(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+        Log.Error(AGENT + ' - ' + message, *args)
     else:
-        Log.Info(PLUGIN_LOG_TITLE + '  - ' + message, *args)
+        Log.Info(AGENT + '  - ' + message, *args)
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # imports placed here to use previously declared variables
@@ -254,7 +257,7 @@ class BestExclusivePorn(Agent.Movies):
                 try:
                     siteReleaseDate = title.xpath('./div[@class="post-info-top"]/span[@class="post-info-date"]/a[@rel="bookmark"]/text()')[0].strip()
                     try:
-                        siteReleaseDate = utils.matchReleaseDate(siteReleaseDate, FILMDICT)
+                        siteReleaseDate = utils.matchReleaseDate(siteReleaseDate, FILMDICT, DATEFORMAT)
                         log(LOG_BIGLINE)
                     except Exception as e:
                         log('SEARCH:: Error getting Site URL Release Date: %s', e)
@@ -269,9 +272,9 @@ class BestExclusivePorn(Agent.Movies):
                 utils.getFilmOnIAFD(FILMDICT)
 
                 results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
-                log(LOG_BIGLINE)
-                log('SEARCH:: Finished Search Routine')
-                log(LOG_BIGLINE)
+                utils.log(LOG_ASTLINE)
+                utils.log('SEARCH:: %s', 'Finished Search Routine'.center(72))
+                utils.log(LOG_ASTLINE)
                 return
 
     # -------------------------------------------------------------------------------------------------------------------------------
@@ -450,6 +453,6 @@ class BestExclusivePorn(Agent.Movies):
         log('UPDATE:: Summary with Legend: %s', summary)
         metadata.summary = summary
 
-        log(LOG_BIGLINE)
-        log('UPDATE:: Finished Update Routine')
-        log(LOG_BIGLINE)
+        utils.log(LOG_ASTLINE)
+        utils.log('UPDATE:: %s', 'Finished Update Routine'.center(72))
+        utils.log(LOG_ASTLINE)
