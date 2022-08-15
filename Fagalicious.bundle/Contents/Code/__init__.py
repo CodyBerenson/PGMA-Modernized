@@ -44,12 +44,9 @@ from datetime import datetime
 
 # Version / Log Title
 VERSION_NO = '2020.01.18.28'
-AGENT = 'Fagalicious'
-
-# log section separators
-LOG_BIGLINE = '---------------------------------------------------------------------------------'
-LOG_SUBLINE = '      ---------------------------------------------------------------------------'
-LOG_ASTLINE = '*********************************************************************************'
+PLUGIN_LOG_TITLE = 'Fagalicious'
+LOG_BIGLINE = '------------------------------------------------------------------------------'
+LOG_SUBLINE = '      ------------------------------------------------------------------------'
 
 # Preferences
 COLCAST = Prefs['castcollection']                   # add cast to collection
@@ -58,7 +55,7 @@ COLCOUNTRY = Prefs['countrycollection']             # add country to collection
 COLDIRECTOR = Prefs['directorcollection']           # add director to collection
 COLGENRE = Prefs['genrecollection']                 # add genres to collection
 COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
-COLSERIES = Prefs['seriescollection']               # add series to collection
+COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
 DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
@@ -67,7 +64,7 @@ MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duratio
 PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 
 # PLEX API /CROP Script/online image cropper
-PlexLoadFile = Core.storage.load
+load_file = Core.storage.load
 CROPPER = r'CScript.exe "{0}/Plex Media Server/Plug-ins/Fagalicious.bundle/Contents/Code/ImageCropper.vbs" "{1}" "{2}" "{3}" "{4}"'
 THUMBOR = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}"
 
@@ -107,9 +104,9 @@ def anyOf(iterable):
 def log(message, *args):
     ''' log messages '''
     if re.search('ERROR', message, re.IGNORECASE):
-        Log.Error(AGENT + ' - ' + message, *args)
+        Log.Error(PLUGIN_LOG_TITLE + ' - ' + message, *args)
     else:
-        Log.Info(AGENT + '  - ' + message, *args)
+        Log.Info(PLUGIN_LOG_TITLE + '  - ' + message, *args)
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # imports placed here to use previously declared variables
@@ -289,7 +286,7 @@ class Fagalicious(Agent.Movies):
                     siteReleaseDate = title.xpath('.//li[@class="meta-date"]/a/text()')[0]
                     log('SEARCH:: Site Release Date: %s', siteReleaseDate)
                     try:
-                        siteReleaseDate = utils.matchReleaseDate(siteReleaseDate, FILMDICT, DATEFORMAT)
+                        siteReleaseDate = utils.matchReleaseDate(siteReleaseDate, FILMDICT)
                         log(LOG_BIGLINE)
                     except Exception as e:
                         log('SEARCH:: Error getting Site URL Release Date: %s', e)
@@ -304,9 +301,9 @@ class Fagalicious(Agent.Movies):
                 utils.getFilmOnIAFD(FILMDICT)
 
                 results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
-                utils.log(LOG_ASTLINE)
-                utils.log('SEARCH:: %s', 'Finished Search Routine'.center(72))
-                utils.log(LOG_ASTLINE)
+                log(LOG_BIGLINE)
+                log('SEARCH:: Finished Search Routine')
+                log(LOG_BIGLINE)
                 return
 
     # -------------------------------------------------------------------------------------------------------------------------------
@@ -517,6 +514,6 @@ class Fagalicious(Agent.Movies):
         metadata.summary = summary
 
 
-        utils.log(LOG_ASTLINE)
-        utils.log('UPDATE:: %s', 'Finished Update Routine'.center(72))
-        utils.log(LOG_ASTLINE)
+        log(LOG_BIGLINE)
+        log('UPDATE:: Finished Update Routine')
+        log(LOG_BIGLINE)
