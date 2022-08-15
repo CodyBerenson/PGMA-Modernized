@@ -235,11 +235,9 @@ class WayBig(Agent.Movies):
             utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(titleListLength, pageNumber)))
             utils.log(LOG_BIGLINE)
             for idx, title in enumerate(titleList, start=1):
-                myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
-                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', '{0} of {1} for {2} - {3} {4}'.format(idx, titleListLength, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
-                utils.log(LOG_BIGLINE)
-
+                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', '{0} of {1} for {2} - {3}'.format(idx, titleListLength, FILMDICT['Studio'], FILMDICT['Title'])))
                 # Site Entry
+                utils.log(LOG_BIGLINE)
                 try:
                     siteEntry = title.xpath('./a/*[@class="entry-title"]/text()')[0].strip()
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', siteEntry))
@@ -337,6 +335,7 @@ class WayBig(Agent.Movies):
                 results.Append(MetadataSearchResult(id=myID, name=FILMDICT['Title'], score=100, lang=lang))
                 utils.logFooter('SEARCH', FILMDICT)
                 return
+
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
