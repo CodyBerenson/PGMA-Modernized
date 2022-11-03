@@ -14,7 +14,7 @@
     },
     {
         "id": "matchsiteduration",
-        "label": "Match against Site's recorded film/scene length, Note: IAFDs entry is always matched",
+        "label": "Match against Site's recorded film/scene length",
         "type": "bool",
         "default": "false"
     },
@@ -27,9 +27,15 @@
     },
     {
         "id": "detect",
-        "label": "Determine source language before attempting translation? TICK if film summaries are in different languages",
+        "label": "Determine source language before attempting translation? TICK if film summaries are not in library language",
         "type": "bool",
         "default": "false"
+    },
+    {
+        "id": "usebackgroundart",
+        "label": "Use Background Art",
+        "type": "bool",
+        "default": "true"
     },
     {
         "id": "prefixlegend",
@@ -38,8 +44,8 @@
         "default": "true"
     },
     {
-        "id": "clearcollections",
-        "label": "Clear previously set Collections",
+        "id": "resetmeta",
+        "label": "Clear previously set metadata",
         "type": "bool",
         "default": "false"
     },
@@ -80,9 +86,15 @@
         "default": "false"
     },
     {
+        "id": "groupcollections",
+        "label": "Group Collections by Adding Prefixes: |a| - Actors, |c| - Country, |d| - Directors, |g| - Genres, |s| - Studios",
+        "type": "bool",
+        "default": "true"
+    },
+    {
         "id": "thumbor",
         "label": "Web Address of Thumbor: A smart imaging service. It enables on-demand onlines cropping, resizing and flipping of images",
         "type": "text",
-        "default": "http://34.125.125.171:8888/unsafe"
+        "default": "http://34.127.127.212:8888/unsafe"
     }
 ]

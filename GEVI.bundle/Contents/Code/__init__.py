@@ -65,7 +65,6 @@ MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duratio
 PLEXTOKEN = Prefs['plextoken']                      # Plex token from View XML of any library item
 PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
 RESETMETA = Prefs['resetmeta']                      # clear previously set metadata
-SERIESWITHSTUDIO = Prefs['serieswithstudio']        # ensure that series collection posters follow their studio
 THUMBOR = Prefs['thumbor']                          # Thumbor Image manipulation URL
 USEBACKGROUNDART = Prefs['usebackgroundart']        # Use background art
 
@@ -133,17 +132,6 @@ class GEVI(Agent.Movies):
         # convert to lower case and trim
         myString = myString.lower().strip()
 
-        # replace honorifics in string with null
-        foundHonorific = False
-        honorifics = ['mr.', 'sgt.', 'lt.', 'gen.', 'cpt.']
-        for honorific in honorifics:
-            if honorific in myString:
-                myString = myString.replace(honorific, '')
-                foundHonorific = True
-
-        if foundHonorific:
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Honorific(s)', honorifics)))
-
         # replace & with and
         myString = myString.replace(' & ', ' ').replace(' and ', ' ')
         utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Replaced ampersands & " and " with ', 'Space')))
@@ -169,43 +157,27 @@ class GEVI(Agent.Movies):
             myString = re.sub(pattern, ' ', myString)
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Pattern', pattern)))
 
-        # examine first word
-        # remove if indefinite word in french, english, portuguese, spanish, german
-        myWords = myString.split()
-        eng = ['a', 'an', 'the']
-        fre = ['un', 'une', 'des', 'le', 'la', 'les', "l'"]
-        prt = ['um', 'uma', 'uns', 'umas', 'o', 'a', 'os', 'as']
-        esp = ['un', 'una', 'unos', 'unas', 'el', 'la', 'los', 'las']
-        ger = ['ein', 'eine', 'eines', 'einen', 'einem', 'einer', 'das', 'die', 'der', 'dem', 'den', 'des']
-        regexes = eng + fre + prt + esp + ger
-        pattern = r'|'.join(r'\b{0}\b'.format(regex) for regex in regexes)
-        matched = re.search(pattern, myWords[0], re.IGNORECASE)  # match against first word
+        # examine first word in string for numbers - only if an indefinite has not been determined i.e skip stuff like <The 1980S>
+        pattern = r'[0-9]'
+        matched = re.search(pattern, myWords[0])  # match against whole word
         if matched:
-            myWords.remove(myWords[0])
-            myString = ' '.join(myWords)
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Indefinite 1st Word', myWords[0])))
+            numPos = matched.start()
+            if numPos > 0:
+                myWord = myWords[0]
+                myWords[0] = myWords[0][:numPos]
+                myString = ' '.join(myWords)
+                utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Split 1st Word at', numPos, myWord)))
 
-        else:   # examine first word in string for numbers - only if an indefinite has not been determined i.e skip stuff like <The 1980S>
-            pattern = r'[0-9]'
-            matched = re.search(pattern, myWords[0])  # match against whole word
-            if matched:
-                numPos = matched.start()
-                if numPos > 0:
-                    myWord = myWords[0]
-                    myWords[0] = myWords[0][:numPos]
-                    myString = ' '.join(myWords)
-                    utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Split 1st Word at', numPos, myWord)))
-
-            # if length of search string is less than 6 characters - change search from starting with to containing - determined by adding ~~
-            if len(myString) < 6:
-                myString = '{0}~~'.format(myString)
-                utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Changed Search Type', 'Appended ~~')))
+        # if length of search string is less than 6 characters - change search from starting with to containing - determined by adding ~~
+        if len(myString) < 6:
+            myString = '{0}~~'.format(myString)
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Changed Search Type', 'Appended ~~')))
 
         utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Post 1st Word Analysis', myString)))
 
-        # examine subsequent words in string for numbers and '&'
+        # examine subsequent words in string for numbers
         myWords = myString.split()
-        pattern = r'[0-9&]'
+        pattern = r'[0-9]'
         matched = re.search(pattern, ' '.join(myWords[1:]))  # match against whole string
         if matched:
             numPos = matched.start() + len(myWords[0])
@@ -269,16 +241,19 @@ class GEVI(Agent.Movies):
                 break
 
             searchTitle = self.CleanSearchString(searchTitle)
-
             morePages = True
             while morePages:
-                searchQuery = BASE_SEARCH_URL.format(startRecord, searchTitle, 'containing' if '%7E%7E' in searchTitle else 'starting+with')    # ~~ = %7E%7E after URLEncoding
+                searchType = 'containing' if '%7E%7E' in searchTitle else 'starting+with'           # ~~ = %7E%7E after URLEncoding
+                if searchType == 'containing':
+                    searchTitle = searchTitle.replace('%7E%7E', '')
+
+                searchQuery = BASE_SEARCH_URL.format(startRecord, searchTitle, searchType)
                 utils.log('SEARCH:: Search Query: %s', searchQuery)
                 try:
                     JSon = JSON.ObjectFromURL(searchQuery, timeout=20, sleep=DELAY)
                     filmsList = JSon.get('data', '')
                     if not filmsList:
-                        raise Exception('< No Film Titles >')   # out of WHILE loop
+                        raise Exception('< No Film Titles! >')   # out of WHILE loop
 
                     filmsFound = JSon.get('recordsFiltered', len(filmsList))
                     morePages = True if startRecord <= filmsFound else False

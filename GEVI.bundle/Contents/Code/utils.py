@@ -62,8 +62,9 @@ IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
 BISEXUAL = u'\U000026A5'           # ⚥ - bisexual films
 HOMOSEXUAL =  u'\U000026A5'        # ⚣ - gay films
 HETEROSEXUAL = u'\U000026A4'       # ⚤ - straight films
-NOBREAK_HYPHEN = u'\U00002011'           # Non Breaking Hyphen
-NOBREAK_SPACE = u'\U000000A0'           # Non Breaking Space
+NOBREAK_HYPHEN = u'\U00002011'     # Non Breaking Hyphen
+NOBREAK_SPACE = u'\U000000A0'      # Non Breaking Space
+EN_SPACE = u'\U00002002'           # Non Breaking Space
 MONTHS = {1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May', 6: 'June', 7: 'July', 8: 'August', 9: 'September', 10: 'October', 11: 'November', 12: 'December'}
 
 # Plex System Variables/Methods
@@ -668,13 +669,18 @@ def getIAFDArtist(artistURL):
 
     return artist
 # -------------------------------------------------------------------------------------------------------------------------------
-def getPicContent(image, sortTitle, picType):
+def getPicContent(image, entry, picType):
     ''' Used for getting flag images, actors and directors pictures - Deceased Actors/Directors shown in GrayScale'''
 
     picContent = None
     fileOnDisk = False if 'http' in image else True
-    if not fileOnDisk and ' ' in image:
+    if not fileOnDisk:
         image = image.replace(' ', '%20')
+        picContent = HTTP.Request(image).content
+        picInfo = Image.open(BytesIO(picContent))
+        width, height = picInfo.size
+        width = int(width)
+        height = int(width * 1.5)
 
     log('UTILS :: {0:<29} {1}'.format('Location', 'On Disk' if fileOnDisk else 'On Web'))
 
@@ -683,37 +689,29 @@ def getPicContent(image, sortTitle, picType):
         log('UTILS :: {0:<29} {1}'.format('{0} Image Location'.format(picType), image))
         picContent = PlexLoadFile(image)
 
-    # Cast from IAFD [Deceased]
-    elif 'd{0}'.format(COLCAST) in sortTitle:
-        image = r'{0}/filters:grayscale()/{1}'.format(THUMBOR, image)
-        picContent = HTTP.Request(image).content
-        log('UTILS :: {0:<29} {1}'.format('Deceased Cast {0} Image URL'.format(picType), image))
-
-    # Directors from IAFD [Deceased] - GrayScale + Watermark
-    elif 'd{0}'.format(COLDIRECTOR) in sortTitle:
-        image = r'{0}/filters:grayscale():watermark({1},1,1,15)/{2}'.format(THUMBOR, WATERMARK, image)
-        picContent = HTTP.Request(image).content
-        log('UTILS :: {0:<29} {1}'.format('Deceased Director {0} Image URL'.format(picType), image))
-
     # Cast from IAFD
-    elif COLCAST in sortTitle:
-        image = r'{0}'.format(image)
-        picContent = getHTTPRequest(image).content
-        log('UTILS :: {0:<29} {1}'.format('Cast {0} Image URL'.format(picType), image))
+    elif COLCAST in entry:
+        if '[d]' in entry:
+            image = r'{0}/{1}x{2}/filters:stretch():grayscale()/{3}'.format(THUMBOR, width, height, image)
+        else:
+            image = r'{0}/{1}x{2}/filters:stretch()/{3}'.format(THUMBOR, width, height, image)
 
-    # Directors from IAFD - Watermark
-    elif COLDIRECTOR in sortTitle:
-        image = r'{0}/filters:watermark({1},1,1,15)/{2}'.format(THUMBOR, WATERMARK, image)
         picContent = HTTP.Request(image).content
-        log('UTILS :: {0:<29} {1}'.format('Director {0} Image URL'.format(picType), image))
+        log('UTILS :: {0:<29} {1}'.format('{0}Cast {1} Image URL'.format('Deceased ' if '[d]' in entry else '', picType), image))
+
+    # Directors from IAFD - GrayScale + Watermark if deceased else just Watermark
+    elif COLDIRECTOR in entry:
+        if '[d]' in entry:
+            image = r'{0}/{1}x{2}/filters:stretch():grayscale():watermark({3},1,1,15)/{4}'.format(THUMBOR, width, height, WATERMARK, image)
+        else:
+            image = r'{0}/{1}x{2}/filters:stretch():watermark({3},1,1,15)/{4}'.format(THUMBOR, width, height, WATERMARK, image)
+
+        picContent = HTTP.Request(image).content
+        log('UTILS :: {0:<29} {1}'.format('{0}Director {1} Image URL'.format('Deceased ' if '[d]' in entry else '', picType), image))
 
     # all other internet images need to be ratio wxh = 1x1.5
     else:
-        picContent = HTTP.Request(image).content
-        picInfo = Image.open(BytesIO(picContent))
-        width, height = picInfo.size
-        newHeight = int(width * 1.5)
-        image = r'{0}/{1}x{2}/filters:stretch()/{3}'.format(THUMBOR, int(width), newHeight, image)
+        image = r'{0}/{1}x{2}/filters:stretch()/{3}'.format(THUMBOR, width, height, image)
         picContent = HTTP.Request(image).content
         log('UTILS :: {0:<29} {1}'.format('{0} Genre Image URL'.format(picType), image))
 
@@ -3738,7 +3736,7 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
                 log('UTILS :: {0:<29} {1}'.format('Film Rating', rating))
                 siteInfoDict['Rating'] = rating
             else:
-                raise Exception('< No Rated! >')
+                raise Exception('< Not Rated! >')
         except Exception as e:
             siteInfoDict['Rating'] = 0.0
             log('UTILS :: Error getting Rating: %s', e)
@@ -5165,7 +5163,7 @@ def logHeader(myFunc, media, lang):
     log('%s::      > Genres:                        %s', myFunc, COLGENRE)
     log('%s::      > Countries                      %s', myFunc, COLCOUNTRY)
     log('%s::      > Studio:                        %s', myFunc, COLSTUDIO)
-    log('%s::      > Series:                        %s, Keep Series with Studio? %s', myFunc, COLSERIES, 'Yes' if SERIESWITHSTUDIO else 'No')
+    log('%s::      > Series:                        %s', myFunc, COLSERIES)
     log('%s::      > Directors:                     %s', myFunc, COLDIRECTOR)
     log('%s::      > Cast:                          %s', myFunc, COLCAST)
     log('%s::  > Download Poster Image to Disk      %s', myFunc, DOWNLOADPOSTER)
@@ -5341,7 +5339,7 @@ def matchCast(unmatchedCastList, FILMDICT):
             xType = 'Bisexual/Straight'
 
         try:
-            html = getURLElement(IAFD_SEARCH_URL.format(String.URLEncode(unmatchedCast.replace('.', ''))), FilterYear = myYear) # remove full stops before encoding
+            html = getURLElement(IAFD_SEARCH_URL.format(String.URLEncode(unmatchedCast)), FilterYear = myYear) # remove full stops before encoding
             castList = html.xpath(xPath)
             log('UTILS :: {0:<29} {1}'.format('{0} Cast xPath'.format(xType), xPath))
 
@@ -5619,7 +5617,7 @@ def matchDirectors(unmatchedDirectorList, FILMDICT):
             continue
 
         try:
-            html = getURLElement(IAFD_SEARCH_URL.format(String.URLEncode(unmatchedDirector.replace('.', ''))), UseAdditionalResults=False)  # remove full stops before encoding
+            html = getURLElement(IAFD_SEARCH_URL.format(String.URLEncode(unmatchedDirector)), UseAdditionalResults=False)
             directorList = html.xpath('//table[@id="tblDir"]/tbody/tr')
 
             directorsFound = len(directorList)
@@ -6153,6 +6151,15 @@ def setMetadata(metadata, media, FILMDICT):
                 metadata.title = FILMDICT['Title']
             log('UTILS :: {0:<29} {1}'.format('1c. Title', metadata.title))
 
+            # Showcase Collection - if "Best of" found in Title
+            if COLGENRE:
+                pattern = r'Best Of'
+                matched = re.search(pattern, FILMDICT['Title'], re.IGNORECASE)
+                if matched:
+                    item = 'Showcase'
+                    entry = '{0} {1}'.format(COLGENRE, item)
+                    collectionsDict[entry] = {'Poster': GENRESDICT[item.lower()], 'Art': '', 'Summary': ''}
+
         except Exception as e:
             log('UTILS :: Error setting Title: %s', e)
             FILMDICT['Status'] = False
@@ -6265,7 +6272,7 @@ def setMetadata(metadata, media, FILMDICT):
                 # Process Genres
                 if COLGENRE:
                     entry = '{0} {1}'.format(COLSYSTEM if item == 'Compilations' else COLGENRE, item)
-                    collectionsDict[item] = {'Poster': GENRESDICT[item.lower()], 'Art': '', 'SortTitle': entry, 'Summary': ''}
+                    collectionsDict[entry] = {'Poster': GENRESDICT[item.lower()], 'Art': '', 'Summary': ''}
 
         except Exception as e:
             log('UTILS :: Error setting Genres: %s', e)
@@ -6294,9 +6301,10 @@ def setMetadata(metadata, media, FILMDICT):
                 countryVFlag = countryVFlag if os.path.exists(countryVFlag) else '{0}Flags{1}Vertical{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, '_Error')
                 log('UTILS :: {0:<29} {1}'.format('Country' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
                 metadata.countries.add(item)
-                # Process Countryes - Group Prefix |n|
+                # Process Countries
                 if COLCOUNTRY:
-                    collectionsDict[item] = {'Poster': countryVFlag, 'Art': countryHFlag, 'SortTitle': '{0} {1}'.format(COLCOUNTRY, item), 'Summary': ''}
+                    entry = '{0} {1}'.format(COLCOUNTRY, item)
+                    collectionsDict[entry] = {'Poster': countryVFlag, 'Art': countryHFlag, 'Summary': ''}
 
         except Exception as e:
             log('UTILS :: Error setting Countries: %s', e)
@@ -6323,24 +6331,23 @@ def setMetadata(metadata, media, FILMDICT):
 
             # sort the dictionary and add key(Name)- value(Photo, Role) to metadata
             for idx, item in enumerate(sorted(castDict), start=1):
+                entry = castDict[item]['RealName'] if castDict[item]['RealName'] else item
                 newRole = metadata.roles.new()
-                newRole.name = castDict[item]['RealName']
+                newRole.name = entry
                 newRole.role = castDict[item]['Role']
-                newRole.photo = castDict[item]['Photo'] if 'iafd_ad' not in castDict[item]['Photo'] else 'https://www.iafd.com/graphics/headshots/nophoto340.jpg'
+                newRole.photo = castDict[item]['Photo'] if 'iafd_ad' not in castDict[item]['Photo'] and castDict[item]['Photo'] else 'https://www.iafd.com/graphics/headshots/nophoto340.jpg'
                 log('UTILS :: {0:<29} {1}'.format('Cast Name' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
-                # Process Cast - Group Prefix |c|
                 if COLCAST:
                     if item == 'Unknown Actor':      # do not create collections for unknown actors...
                         continue
 
                     # check for user defined photo - this only works if the actor has an entry on IAFD
                     if 'nophoto' in newRole.photo:      # actor has no photo but has entry on IAFD
-                        if castDict[item]['URL']:
+                        castDict[item]['Photo'] = NOCAST_POSTER
+                        if castDict[item]['URL']:       # artiste has no photo but has entry on IAFD, check if there is a photo on disk #### still not fully implemented
                             #   https://www.iafd.com/person.rme/perfid=zakspears/gender=m/zak-spears.htm -> zakspears#zak-spears
-                            castPhoto = castDict[item]['URL'].split('perfid=')[1].split('.htm')[0].replace('/gender=m/', '#')
+                            castPhoto = castDict[item]['URL'].split('perfid=')[1].split('.htm')[0].replace('/gender=m/', '#').replace('/gender=f/', '#')
                             castDict[item]['Photo'] = PGMA_CASTDICT.get(castPhoto, NOCAST_POSTER)
-                        else:
-                            castDict[item]['Photo'] = NOCAST_POSTER
 
                     myBioList = []
                     myBioDict = OrderedDict(sorted(castDict[item]['Bio'].items()))
@@ -6358,12 +6365,11 @@ def setMetadata(metadata, media, FILMDICT):
 
                     summary = ' '.join(myBioList)
 
-                    sortPrefix = 'd{0}'.format(COLCAST) if re.search(deathRegex, summary, re.IGNORECASE) else '{0}'.format(COLCAST)
+                    entry = '{0} {1}[d]'.format(COLCAST, entry) if re.search(deathRegex, summary, re.IGNORECASE) else '{0} {1}'.format(COLCAST, entry)
                     myNationality = castDict[item]['Nationality'].split(',')[-1].strip() if castDict[item]['Nationality'] else ''
                     myFlag = '{0}Flags{1}Horizontal{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, myNationality) if myNationality else ''
                     art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else '{0}Flags{1}Horizontal{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, '_Error') 
-                    entry = castDict[item]['RealName']
-                    collectionsDict[entry] = {'Poster': castDict[item]['Photo'], 'Art': art, 'SortTitle': '{0} {1}'.format(sortPrefix, entry), 'Summary': summary}
+                    collectionsDict[entry] = {'Poster': castDict[item]['Photo'], 'Art': art, 'Summary': summary}
 
         except Exception as e:
             log('UTILS :: Error setting Cast: %s', e)
@@ -6381,18 +6387,21 @@ def setMetadata(metadata, media, FILMDICT):
             tempDict = getDirectors(directors, FILMDICT)
             directorDict = {k.split('(')[0].strip():v for (k,v) in tempDict.items()}
             for idx, item in enumerate(sorted(directorDict), start=1):
+                # to create unique cast vs direcotr entries - replace all spaces with no-break space and end with it
+                entry = directorDict[item]['RealName'] if directorDict[item]['RealName'] else item
+                entry += ' '
+                entry = entry.replace(' ', NOBREAK_SPACE)
                 newDirector = metadata.directors.new()
-                newDirector.name = directorDict[item]['RealName']
-                newDirector.photo = directorDict[item]['Photo'] if 'iafd_ad' not in directorDict[item]['Photo'] else 'https://www.iafd.com/graphics/headshots/nophoto340.jpg'
+                newDirector.name = entry
+                newDirector.photo = directorDict[item]['Photo'] if 'iafd_ad' not in directorDict[item]['Photo'] and directorDict[item]['Photo'] else 'https://www.iafd.com/graphics/headshots/nophoto340.jpg'
                 log('UTILS :: {0:<29} {1}'.format('Director' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
                 if COLDIRECTOR:
-                    if 'nophoto' in newDirector.photo:      # actor has no photo but has entry on IAFD
-                        if directorDict[item]['URL']:
+                    if 'nophoto' in newDirector.photo:
+                        directorDict[item]['Photo'] = NODIRECTOR_POSTER
+                        if directorDict[item]['URL']:      # artiste has no photo but has entry on IAFD, check if there is a photo on disk #### still not fully implemented
                             #   https://www.iafd.com/person.rme/perfid=zakspears/gender=d/zak-spears.htm -> zakspears#zak-spears
                             directorPhoto = directorDict[item]['URL'].split('perfid=')[1].split('.htm')[0].replace('/gender=d/', '#')
                             directorDict[item]['Photo'] = PGMA_DIRECTORDICT.get(directorPhoto, NODIRECTOR_POSTER)
-                        else:
-                            directorDict[item]['Photo'] = NODIRECTOR_POSTER
 
                     myBioList = []
                     myBioDict = OrderedDict(sorted(directorDict[item]['Bio'].items()))
@@ -6409,13 +6418,11 @@ def setMetadata(metadata, media, FILMDICT):
                         myBioList.extend(directorDict[item]['Films'])
 
                     summary = ' '.join(myBioList)
-
-                    sortPrefix = 'd{0}'.format(COLDIRECTOR) if re.search(deathRegex, summary, re.IGNORECASE) else '{0}'.format(COLDIRECTOR)
+                    entry = '{0} {1}[d]'.format(COLDIRECTOR, entry) if re.search(deathRegex, summary, re.IGNORECASE) else '{0} {1}'.format(COLDIRECTOR, entry)
                     myNationality = directorDict[item]['Nationality'].split(',')[-1].strip() if directorDict[item]['Nationality'] else ''
                     myFlag = '{0}Flags{1}Horizontal{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, myNationality) if myNationality else ''
                     art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else '{0}Flags{1}Horizontal{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, '_Error') 
-                    entry = directorDict[item]['RealName']
-                    collectionsDict[entry] = {'Poster': directorDict[item]['Photo'], 'Art': art, 'SortTitle': '{0} {1}'.format(sortPrefix, entry), 'Summary': summary}
+                    collectionsDict[entry] = {'Poster': directorDict[item]['Photo'], 'Art': art, 'Summary': summary}
 
         except Exception as e:
             log('UTILS :: Error setting Director(s): %s', e)
@@ -6581,9 +6588,8 @@ def setMetadata(metadata, media, FILMDICT):
                     if myAgentDict['Collections']:
                         websiteCollectionList = myAgentDict['Collections']
                         for idx, item in enumerate(websiteCollectionList, start=1):
-                            sortTitle = '{0} {1}:{2}'.format(COLSTUDIO, studio, item) if SERIESWITHSTUDIO else '{0} {1}'.format(COLSERIES, item)
-                            entry = '{0}:{1}'.format(studio, item) if SERIESWITHSTUDIO else '{0}'.format(item)
-                            collectionsDict[entry] = {'Poster': '', 'Art': countryHFlag, 'SortTitle': sortTitle, 'Summary': ''}
+                            entry = '{0} {1}: {2}'.format(COLSTUDIO if COLSTUDIO else COLSERIES, studio, item)
+                            collectionsDict[entry] = {'Poster': '', 'Art': countryHFlag, 'Summary': ''}
                 except Exception as e:
                     log('UTILS :: Error Collating Website Series Collections: %s', e)
 
@@ -6591,38 +6597,42 @@ def setMetadata(metadata, media, FILMDICT):
                 try:
                     seriesList = FILMDICT['Series']
                     for idx, item in enumerate(seriesList, start=1):
-                        sortTitle = '{0} {1}:{2}'.format(COLSTUDIO, studio, item) if SERIESWITHSTUDIO else '{0} {1}'.format(COLSERIES, item)
-                        entry = '{0}:{1}'.format(studio, item) if SERIESWITHSTUDIO else '{0}'.format(item)
-                        collectionsDict[entry] = {'Poster': '', 'Art': countryHFlag, 'SortTitle': sortTitle, 'Summary': ''}
+                        entry = '{0} {1}: {2}'.format(COLSTUDIO if COLSTUDIO else COLSERIES, studio, item)
+                        collectionsDict[entry] = {'Poster': '', 'Art': countryHFlag, 'Summary': ''}
 
                 except Exception as e:
                     log('UTILS :: Error Collating Derived Series Collections: %s', e)
 
             # Process Studio Name:
             if COLSTUDIO:
-                collectionsDict[studio] = {'Poster': '', 'Art': countryHFlag, 'SortTitle': '{0} {1}'.format(COLSTUDIO, studio),'Summary': ''}
+                entry = '{0} {1}'.format(COLSTUDIO, studio)
+                collectionsDict[entry] = {'Poster': '', 'Art': countryHFlag, 'Summary': ''}
 
-            # scraped by agent collection - find all films scrapped by agent in case of errors missed
+            # Default Collections
             try:
-                collectionsDict[myAgent] = {'Poster': AGENT_POSTER, 'Art': '', 'SortTitle': '{0} {1}'.format(COLSYSTEM, myAgent), 'Summary': ''}
+                # Agent Collection
+                entry = '{0} {1}'.format(COLSYSTEM, myAgent)
+                collectionsDict[entry] = {'Poster': AGENT_POSTER, 'Art': '', 'Summary': ''}
 
-                IAFDPoster = '{0}-IAFD'.format('On' if FILMDICT['FoundOnIAFD'] == 'Yes' else 'Not On')
-                collectionsDict[IAFDPoster] = {'Poster': IAFD_POSTER if FILMDICT['FoundOnIAFD'] == 'Yes' else NOTIAFD_POSTER, 
-                                               'Art': IAFD_POSTER if FILMDICT['FoundOnIAFD'] == 'Yes' else NOTIAFD_POSTER, 
-                                               'SortTitle': '{0} {1}-IAFD'.format(COLSYSTEM, 'On' if FILMDICT['FoundOnIAFD'] == 'Yes' else 'Not On'), 
-                                               'Summary': ''}
+                # IAFD : On or Not On - Collection
+                entry = '{0} {1}-IAFD'.format(COLSYSTEM, 'On' if FILMDICT['FoundOnIAFD'] == 'Yes' else 'Not On')
+                collectionsDict[entry] = {'Poster': IAFD_POSTER if FILMDICT['FoundOnIAFD'] == 'Yes' else NOTIAFD_POSTER, 
+                                          'Art': IAFD_POSTER if FILMDICT['FoundOnIAFD'] == 'Yes' else NOTIAFD_POSTER, 
+                                          'Summary': ''}
 
-                stackPoster = 'Stacked' if FILMDICT['Stacked'] == 'Yes' else 'Not Stacked'
-                collectionsDict[stackPoster] = {'Poster': STACKED_POSTER if FILMDICT['Stacked'] == 'Yes' else NOTSTACKED_POSTER, 
-                                                'Art': STACKED_POSTER if FILMDICT['Stacked'] == 'Yes' else NOTSTACKED_POSTER, 
-                                                'SortTitle': '{0} {1}'.format(COLSYSTEM, stackPoster), 
-                                                'Summary': ''}
+                # stacked or Not Stacked Collection
+                entry = '{0} {1}'.format(COLSYSTEM, 'Stacked' if FILMDICT['Stacked'] == 'Yes' else 'Not Stacked')
+                collectionsDict[entry] = {'Poster': STACKED_POSTER if FILMDICT['Stacked'] == 'Yes' else NOTSTACKED_POSTER, 
+                                          'Art': STACKED_POSTER if FILMDICT['Stacked'] == 'Yes' else NOTSTACKED_POSTER, 
+                                          'Summary': ''}
 
+                # Compilation Collection
                 if FILMDICT['Compilation'] == 'Yes':
-                    collectionsDict['Compilations'] = {'Poster': COMPILATIONS_POSTER, 
-                                                       'Art': COMPILATIONS_POSTER, 
-                                                       'SortTitle': '{0} Compilations'.format(COLSYSTEM), 
-                                                       'Summary': ''}
+                    item = 'Compilations'
+                    entry = '{0} {1}'.format(COLSYSTEM, item)
+                    collectionsDict[entry] = {'Poster': COMPILATIONS_POSTER, 
+                                              'Art': COMPILATIONS_POSTER, 
+                                              'Summary': ''}
 
                 for idx, item in enumerate(sorted(collectionsDict.keys()), start=1):
                     log('UTILS :: {0:<29} {1}'.format('{0}'.format('Collections' if idx == 1 else ''), '{0:>2} - {1:<20} - {2}'.format(idx, item, collectionsDict[item])))
@@ -6647,14 +6657,32 @@ def setMetadata(metadata, media, FILMDICT):
             ssn.headers.update({'Accept': 'application/json'})
             ssn.params.update({'X-Plex-Token': PLEXTOKEN})
             machineID = MACHINEID if MACHINEID else ssn.get('{0}/'.format(plexBaseURL)).json()['MediaContainer']['machineIdentifier']
-            for idx, title in enumerate(sorted(collectionsDict.keys()), start=1):
-                if not title:
-                    continue
-                myDictionary = collectionsDict.get(title)
+            for idx, entry in enumerate(sorted(collectionsDict.keys()), start=1):
+                myDictionary = collectionsDict.get(entry)
                 if myDictionary is None:
                     continue
 
-                log('UTILS :: {0:<29} {1}'.format('{0}'.format('Adding & Enhancing'), '{0:>2} - {1} - {2}'.format(idx, title, myDictionary)))
+                log('UTILS :: {0:<29} {1}'.format('{0}'.format('Entry'), '{0:>2} - {1} - {2}'.format(idx, entry, myDictionary)))
+
+                # create collection title - depending on type of collection i.e. Cast, Director, Studio, Series - replace standard spaces with alternate spaces
+                if COLCAST in entry:
+                    title = entry.replace(COLCAST, '').replace('[d]', '').strip()
+                elif COLDIRECTOR in entry:            # add space to string then replace spaces with no-break space - to give differention to single name director artists to single named cast artists
+                    title = entry.replace(COLDIRECTOR, '').replace('[d]', '').strip()
+                    title += ' '
+                    title = title.replace(' ', NOBREAK_SPACE)
+                elif COLSTUDIO in entry:             # add space to string then replace spaces with en-space
+                    title = entry.replace(COLSTUDIO, '').strip()
+                    title += ' '
+                    title = title.replace(' ', EN_SPACE)
+                elif COLSERIES in entry:             # add space to string then replace spaces with en-space
+                    title = entry.replace(COLSERIES, '').strip()
+                    title += ' '
+                    title = title.replace(' ', EN_SPACE)
+                else:
+                    title = re.sub('\|\d\|', '', entry).strip()
+
+                log('UTILS :: {0:<29} {1}'.format('Collection Title', title))
                 metadata.collections.add(title)
 
                 # get rating key if collection exists else create
@@ -6680,24 +6708,22 @@ def setMetadata(metadata, media, FILMDICT):
 
                 log('UTILS :: {0:<29} {1}'.format('{0} Rating Key'.format('Created' if createdRatingKey else 'Found'), ratingKey))
 
-                #   Set Sort Title
-                sortTitle = myDictionary.get('SortTitle', '')
-                if sortTitle:
-                    try:
-                        log('UTILS :: {0:<29} {1}'.format('Sort Title:', sortTitle))
-                        payload = {'type': 18, 'id': ratingKey}
-                        payload['titleSort.value'] = sortTitle.replace('d|', '|')       # remove death marker
-                        payload['titleSort.locked'] = 1
-                        ssn.put('{0}/library/sections/{1}/all'.format(plexBaseURL, FILMDICT['LibraryID']), params=payload)
-                    except Exception as e:
-                        log('UTILS :: Error setting Collection Sort Title: %s', e)
+                #   Set Sort Title: from entry string
+                try:
+                    log('UTILS :: {0:<29} {1}'.format('Sort Title:', entry))
+                    payload = {'type': 18, 'id': ratingKey}
+                    payload['titleSort.value'] = entry.replace('[d]', '')       # remove death marker
+                    payload['titleSort.locked'] = 1
+                    ssn.put('{0}/library/sections/{1}/all'.format(plexBaseURL, FILMDICT['LibraryID']), params=payload)
+                except Exception as e:
+                    log('UTILS :: Error setting Collection Sort Title: %s', e)
 
                 #   Set poster
                 poster = myDictionary.get('Poster', '')
                 if poster:
                     try:
                         log('UTILS :: {0:<29} {1}'.format('Poster:', poster))
-                        data = getPicContent(poster, sortTitle, 'Poster')
+                        data = getPicContent(poster, entry, 'Poster')
                         ssn.post('{0}/library/collections/{1}/posters'.format(plexBaseURL, ratingKey), data=data, stream=True)
                     except Exception as e:
                         log('UTILS :: Error setting Collection Poster: %s', e)
@@ -6707,7 +6733,7 @@ def setMetadata(metadata, media, FILMDICT):
                 if art:
                     try:
                         log('UTILS :: {0:<29} {1}'.format('Art:', art))
-                        data = getPicContent(art, sortTitle, 'Art')                 #data = ssn.get(art).content
+                        data = getPicContent(art, entry, 'Art')                 #data = ssn.get(art).content
                         ssn.post('{0}/library/collections/{1}/arts'.format(plexBaseURL, ratingKey), data=data, stream=True)
                     except Exception as e:
                         log('UTILS :: Error setting Collection Art: %s', e)
@@ -6785,7 +6811,7 @@ def setupStartVariables():
         except Exception as e:
             log('START :: Error Loading Default Preferences File: %s', e)
 
-        global COLCAST, COLCOUNTRY, COLGENRE,COLDIRECTOR, COLSERIES, COLSTUDIO, COLSYSTEM, GROUPCOLLECTIONS, SERIESWITHSTUDIO
+        global COLCAST, COLCOUNTRY, COLGENRE,COLDIRECTOR, COLSERIES, COLSTUDIO, COLSYSTEM, GROUPCOLLECTIONS
         GROUPCOLLECTIONS = Prefs['groupcollections']
         COLCAST = '|{0}|'.format(int(Prefs['castcollection'])) if GROUPCOLLECTIONS else ''
         COLCOUNTRY = '|{0}|'.format(int(Prefs['countrycollection'])) if GROUPCOLLECTIONS else ''
@@ -6794,7 +6820,6 @@ def setupStartVariables():
         COLSTUDIO = '|{0}|'.format(int(Prefs['studiocollection'])) if GROUPCOLLECTIONS else ''
         COLSERIES = '|{0}|'.format(int(Prefs['seriescollection'])) if GROUPCOLLECTIONS else ''
         COLSYSTEM = '|{0}|'.format(int(Prefs['systemcollection'])) if GROUPCOLLECTIONS else ''
-        SERIESWITHSTUDIO = Prefs['serieswithstudio']
 
     #   3. PGMA - Folder Location, where all general files needed for the PGMA Agents are stored, like posters, gayTidy, Countries et cetera
     global PGMA_FOLDER, PGMA_CASTPOSTERFOLDER, PGMA_DIRECTORPOSTERFOLDER, PGMA_HFLAGFOLDER, PGMA_VFLAGFOLDER

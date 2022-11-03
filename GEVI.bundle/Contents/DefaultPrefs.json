@@ -53,7 +53,7 @@
         "id": "thumbor",
         "label": "Thumbor URL: Imaging service for online cropping, resizing and flipping",
         "type": "text",
-        "default": "http://34.125.125.171:8888/unsafe"
+        "default": "http://34.127.127.212:8888/unsafe"
     },
     {
         "id": "resetmeta",
@@ -103,16 +103,10 @@
     },
     {
         "id": "seriescollection",
-        "label": "Create Series Collections: 0 = disable",
+        "label": "Create Series Collections: 0 = disable, if Studio enabled Series will use Studio grouping",
         "type": "enum",
         "values": ["0", "1", "2", "3", "4", "5", "6", "7"],
         "default": "5"
-    },
-    {
-        "id": "serieswithstudio",
-        "label": "Ensure that all Series collection posters follow their studio",
-        "type": "bool",
-        "default": "true"
     },
     {
         "id": "directorcollection",
