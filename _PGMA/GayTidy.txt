@@ -333,6 +333,7 @@ Compilations::Compilations
 Congolese DRC::Congo Kinshasha
 Congolese ROC::Congo-Brazzaville
 Connecticut::United States
+Construction Worker::Blue Collar
 Cook Islander::Cook Islands
 Cops::Role Play
 Cops/Prison::Role Play

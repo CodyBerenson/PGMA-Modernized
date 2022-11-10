@@ -168,7 +168,8 @@ def getDirectors(agntDirectorList, FILMDICT):
 def getFilmImages(imageType, imageURL, whRatio):
     ''' Only for Scene Agents: get Film images - posters/background art and crop if necessary '''
     Thumbor = THUMBOR + "/0x0:{0}x{1}/{2}"
-    Cropper = r'CScript.exe "{0}/Plex Media Server/Plug-ins/{1}.bundle/Contents/Code/ImageCropper.vbs" "{2}" "{3}" "{4}" "{5}"'
+    vbScript = os.path.join(PlexSupportPath, 'Plug-ins', '{0}.bundle'.format(AGENT), 'Contents', 'Code', 'ImageCropper.vbs')
+    Cropper = r'CScript.exe "{0}" "{1}" "{2}" "{3}"'
 
     pic = imageURL
     picContent = HTTP.Request(pic).content
@@ -197,23 +198,28 @@ def getFilmImages(imageType, imageURL, whRatio):
     log('UTILS :: Crop {0} {1}: Actual (w{2} x h{3}), Desired (w{4} x h{5}), % Dx = w[{6}%] x h[{7}%]'.format("Required:" if cropRequired else "Not Required:", imageType, dispWidth, dispHeight, desiredWidth, desiredHeight, DxWidth, DxHeight))
     if cropRequired:
         try:
-            log('UTILS :: Using Thumbor to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
             pic = Thumbor.format(cropWidth, cropHeight, imageURL)
+            log('UTILS :: Thumbor - Crop Image: {0}'.format(pic))
+            log('UTILS ::   Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
             picContent = HTTP.Request(pic).content
         except Exception as e:
             log('UTILS :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
-            try:
-                if os.name == 'nt':
-                    log('UTILS :: Using Script to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
+            if os.name == 'nt':
+                try:
                     envVar = os.environ
                     TempFolder = envVar['TEMP']
-                    LocalAppDataFolder = envVar['LOCALAPPDATA']
                     pic = os.path.join(TempFolder, imageURL.split("/")[-1])
-                    cmd = Cropper.format(LocalAppDataFolder, AGENT, imageURL, pic, cropWidth, cropHeight)
+                    PlexSaveFile(pic, picContent)
+                    cmd = Cropper.format(vbScript, pic, cropWidth, cropHeight)
+                    log('UTILS ::')
+                    log('UTILS :: Script - Crop Image: {0}'.format(pic))
+                    log('UTILS ::  Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
+                    log('UTILS ::        Command Line: {0}'.format(cmd))
                     subprocess.call(cmd)
+                    time.sleep(2)
                     picContent = PlexLoadFile(pic)
-            except Exception as e:
-                log('UTILS :: Error Script Failed to Crop Image to: {0} x {1}'.format(desiredWidth, desiredHeight))
+                except Exception as e:
+                    log('UTILS :: Error Script Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
 
     return pic, picContent
 
@@ -6441,9 +6447,15 @@ def setMetadata(metadata, media, FILMDICT):
             poster = myAgentDict['Poster']
             log('UTILS :: {0:<29} {1}'.format('2h. Poster Image', poster if poster else 'None Found'))
             if poster:
-                pic, picContent = getFilmImages(imageType='Poster', imageURL=poster, whRatio=1.5)
+                if FILMDICT['SceneAgent']:
+                    pic, picContent = getFilmImages(imageType='Poster', imageURL=poster, whRatio=1.5)
+                else:
+                    pic = poster
+                    picContent = HTTP.Request(poster).content
+
                 metadata.posters[pic] = Proxy.Media(picContent, sort_order=1)
                 metadata.posters.validate_keys([pic])
+                log('UTILS :: {0:<29} {1}'.format('Poster', pic))
 
                 # save poster to disk
                 if DOWNLOADPOSTER:
@@ -6475,9 +6487,11 @@ def setMetadata(metadata, media, FILMDICT):
                         pic, picContent = getFilmImages(imageType='Art', imageURL=art, whRatio=0.5625)
                         metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
                         metadata.art.validate_keys([pic])
+                        log('UTILS :: {0:<29} {1}'.format('Art', pic))
                     else:
                         metadata.art[art] = Proxy.Media(HTTP.Request(art).content, sort_order=1)
                         metadata.art.validate_keys([art])
+                        log('UTILS :: {0:<29} {1}'.format('Art', art))
             else:
                 log('UTILS :: {0:<29} {1}'.format('Art Image', 'Not Set By Preference'))
 

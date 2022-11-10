@@ -26,13 +26,14 @@
                                     - tidy up of genres as they have different names across various websites.
                                     - tidy up of countries and locations
                                     - introduced Grouped Collections and Default to keep track of films
+    07 Nov 2022     2019.12.25.39   Search String corrections taking in to account the new GEVI Search Engine
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.38'
+VERSION_NO = '2019.12.25.39'
 AGENT = 'GEVI'
 
 # URLS
@@ -136,13 +137,8 @@ class GEVI(Agent.Movies):
         myString = myString.replace(' & ', ' ').replace(' and ', ' ')
         utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Replaced ampersands & " and " with ', 'Space')))
 
-        # split words with ' and take first half
-        myWords = myString.split()
-        myWords = [x.split("'")[0] for x in myWords if x.strip()]
-        myString = ' '.join(myWords)
-
         # replace following with null
-        nullChars = [',', '!', '\.', '#'] # to be replaced with null
+        nullChars = [',', '!', '#', '+', '='] # to be replaced with null
         pattern = u'[{0}]'.format(''.join(nullChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
@@ -150,7 +146,7 @@ class GEVI(Agent.Movies):
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Pattern', pattern)))
 
         # replace following with space
-        spaceChars = ["@", '\-', ur'\u2013', ur'\u2014', '\(', '\)']  # to be replaced with space
+        spaceChars = ["@", '\-', ur'\u2013', ur'\u2014', '\(', '\)', '\.', "'", ur'\u2019']  # to be replaced with space
         pattern = u'[{0}]'.format(''.join(spaceChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
@@ -158,6 +154,7 @@ class GEVI(Agent.Movies):
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Pattern', pattern)))
 
         # examine first word in string for numbers - only if an indefinite has not been determined i.e skip stuff like <The 1980S>
+        myWords = myString.split()
         pattern = r'[0-9]'
         matched = re.search(pattern, myWords[0])  # match against whole word
         if matched:
@@ -235,12 +232,12 @@ class GEVI(Agent.Movies):
 
         # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
-        startRecord = 0
         for searchTitle in FILMDICT['SearchTitles']:
             if FILMDICT['Status']:
                 break
 
             searchTitle = self.CleanSearchString(searchTitle)
+            startRecord = 0
             morePages = True
             while morePages:
                 searchType = 'containing' if '%7E%7E' in searchTitle else 'starting+with'           # ~~ = %7E%7E after URLEncoding
@@ -264,7 +261,7 @@ class GEVI(Agent.Movies):
                     break
 
                 pageNumber = int(startRecord / 100) + 1
-                utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
+                utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2} - Search String: {2}'.format(filmsFound, pageNumber, searchTitle)))
                 utils.log(LOG_BIGLINE)
                 myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
                 for idx, film in enumerate(filmsList, start=1):
