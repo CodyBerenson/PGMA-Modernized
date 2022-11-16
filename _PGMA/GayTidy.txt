@@ -330,7 +330,7 @@ Compilation / Collection::Compilations
 Compilation::Compilations
 Compilations -> Pot Luck::Compilations
 Compilations::Compilations
-Congolese DRC::Congo Kinshasha
+Congolese DRC::Congo-Kinshasha
 Congolese ROC::Congo-Brazzaville
 Connecticut::United States
 Construction Worker::Blue Collar

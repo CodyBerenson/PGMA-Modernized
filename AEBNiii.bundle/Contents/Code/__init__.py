@@ -22,7 +22,7 @@ AGENT = 'AEBNiii'
 # URLS
 BASE_URL = 'https://gay.aebn.com'
 BASE_SEARCH_URL = BASE_URL + '/gay/search/movies/page/1?sysQuery="{0}"&criteria=%7B%22sort%22%3A%22Relevance%22%7D'
-WATERMARK = 'https://cdn3.iconfinder.com/data/icons/ellegant/32x32/4.png'
+WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Date Formats used by website
 DATEFORMAT = '%b %d, %Y'
@@ -31,7 +31,6 @@ DATEFORMAT = '%b %d, %Y'
 SITE_LANGUAGE = 'en'
 
 # Preferences
-GROUPCOLLECTIONS = Prefs['groupcollections']        # choose to group collections by types or not
 COLCAST = Prefs['castcollection']                   # add cast collections
 COLCOUNTRY = Prefs['countrycollection']             # add country collections
 COLDIRECTOR = Prefs['directorcollection']           # add director collections
@@ -39,11 +38,11 @@ COLGENRE = Prefs['genrecollection']                 # add genres collections
 COLSERIES = Prefs['seriescollection']               # add series collections
 COLSTUDIO = Prefs['studiocollection']               # add studio name collections
 COLSYSTEM = Prefs['systemcollection']               # add system collections
+COUNTRYPOSTERTYPE = Prefs['countrypostertype']      # show poster as map or vertical flag
 DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DOWNLOADPOSTER = Prefs['downloadposter']            # Down film poster to disk, (renamed as film title + image extension)
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
-GROUPCOL = Prefs['groupcollections']                # group collections by Genre, Directors, and Cast
 MATCHIAFDDURATION = Prefs['matchiafdduration']      # Match against IAFD Duration value
 MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
 PLEXTOKEN = Prefs['plextoken']                      # Plex token from View XML of any library item
@@ -73,7 +72,6 @@ STACKED_POSTER = ''
 NOTSTACKED_POSTER = ''
 NOCAST_POSTER = ''
 NODIRECTOR_POSTER = ''
-START_SCRAPE = True
 
 # utils.log section separators
 LOG_BIGLINE = '-' * 140
@@ -129,14 +127,18 @@ class AEBNiii(Agent.Movies):
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
+            utils.log(LOG_ASTLINE)
             utils.log('SEARCH:: {0:<29} {1}'.format('Error: Missing Media Item File', 'QUIT'))
+            utils.log(LOG_ASTLINE)
             return
 
         #clear-cache directive
-        if media.name == "clear-cache":  
+        if media.name == "clear-cache":
             HTTP.ClearCache()
             results.Append(MetadataSearchResult(id='clear-cache', name='Plex web cache cleared', year=media.year, lang=lang, score=0))
+            utils.log(LOG_ASTLINE)
             utils.log('SEARCH:: {0:<29} {1}'.format('Warning: Clear Cache Directive Encountered', 'QUIT'))
+            utils.log(LOG_ASTLINE)
             return
 
         utils.logHeader('SEARCH', media, lang)
@@ -146,8 +148,11 @@ class AEBNiii(Agent.Movies):
             FILMDICT = copy.deepcopy(utils.matchFilename(media))
             FILMDICT['lang'] = lang
             FILMDICT['Agent'] = AGENT
+            FILMDICT['Status'] = False
         except Exception as e:
+            utils.log(LOG_ASTLINE)
             utils.log('SEARCH:: Error: %s', e)
+            utils.log(LOG_ASTLINE)
             return
 
         utils.log(LOG_BIGLINE)

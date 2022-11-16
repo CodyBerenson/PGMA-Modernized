@@ -68,58 +68,52 @@
         "default": "false"
     },
     {
-        "id": "groupcollections",
-        "label": "Group Created Collections By Type",
+        "id": "systemcollection",
+        "label": "Create System Collections - IAFD?, Compilation?, Stacked?",
         "type": "bool",
         "default": "true"
     },
     {
-        "id": "systemcollection",
-        "label": "Create System Collections - IAFD?, Compilation?, Stacked?: 0 = disable",
-        "type": "enum",
-        "values": ["0", "1", "2", "3", "4", "5", "6", "7"],
-        "default": "1"
-    },
-    {
         "id": "genrecollection",
-        "label": "Create Film Genre Collections: 0 = disable",
-        "type": "enum",
-        "values": ["0", "1", "2", "3", "4", "5", "6", "7"],
-        "default": "2"
+        "label": "Create Film Genre Collections",
+        "type": "bool",
+        "default": "true"
     },
     {
         "id": "countrycollection",
-        "label": "Create Film Production Country Collections: 0 = disable",
+        "label": "Create Film Production Country Collections",
+        "type": "bool",
+        "default": "true"
+    },
+    {
+        "id": "countrypostertype",
+        "label": "Show Country Poster as",
         "type": "enum",
-        "values": ["0", "1", "2", "3", "4", "5", "6", "7"],
-        "default": "3"
+        "values": ["Map", "Flag"],
+        "default": "Map"
     },
     {
         "id": "studiocollection",
-        "label": "Create Studio Collections: 0 = disable",
-        "type": "enum",
-        "values": ["0", "1", "2", "3", "4", "5", "6", "7"],
-        "default": "4"
+        "label": "Create Studio Collections",
+        "type": "bool",
+        "default": "true"
     },
     {
         "id": "seriescollection",
-        "label": "Create Series Collections: 0 = disable, if Studio enabled Series will use Studio grouping",
-        "type": "enum",
-        "values": ["0", "1", "2", "3", "4", "5", "6", "7"],
-        "default": "5"
+        "label": "Create Series Collections, format Studio: Series",
+        "type": "bool",
+        "default": "true"
     },
     {
         "id": "directorcollection",
-        "label": "Create Film Director Collections: 0 = disable",
-        "type": "enum",
-        "values": ["0", "1", "2", "3", "4", "5", "6", "7"],
-        "default": "6"
+        "label": "Create Film Director Collections",
+        "type": "bool",
+        "default": "true"
     },
     {
         "id": "castcollection",
-        "label": "Create Film Cast Collection: 0 = disable",
-        "type": "enum",
-        "values": ["0", "1", "2", "3", "4", "5", "6", "7"],
-        "default": "7"
+        "label": "Create Film Cast Collection",
+        "type": "bool",
+        "default": "true"
     }
 ]

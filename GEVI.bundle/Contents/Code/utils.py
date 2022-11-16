@@ -171,10 +171,10 @@ def getFilmImages(imageType, imageURL, whRatio):
     vbScript = os.path.join(PlexSupportPath, 'Plug-ins', '{0}.bundle'.format(AGENT), 'Contents', 'Code', 'ImageCropper.vbs')
     Cropper = r'CScript.exe "{0}" "{1}" "{2}" "{3}"'
 
-    pic = imageURL
-    picContent = HTTP.Request(pic).content
-    picInfo = Image.open(BytesIO(picContent))
-    width, height = picInfo.size
+    imageLocation = imageURL
+    imageContent = HTTP.Request(imageLocation).content
+    myImage = Image.open(BytesIO(imageContent))
+    width, height = myImage.size
     dispWidth = '{:,d}'.format(width)       # thousands separator
     dispHeight = '{:,d}'.format(height)     # thousands separator
 
@@ -198,30 +198,42 @@ def getFilmImages(imageType, imageURL, whRatio):
     log('UTILS :: Crop {0} {1}: Actual (w{2} x h{3}), Desired (w{4} x h{5}), % Dx = w[{6}%] x h[{7}%]'.format("Required:" if cropRequired else "Not Required:", imageType, dispWidth, dispHeight, desiredWidth, desiredHeight, DxWidth, DxHeight))
     if cropRequired:
         try:
-            pic = Thumbor.format(cropWidth, cropHeight, imageURL)
-            log('UTILS :: Thumbor - Crop Image: {0}'.format(pic))
-            log('UTILS ::   Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
-            picContent = HTTP.Request(pic).content
-        except Exception as e:
-            log('UTILS :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
-            if os.name == 'nt':
-                try:
-                    envVar = os.environ
-                    TempFolder = envVar['TEMP']
-                    pic = os.path.join(TempFolder, imageURL.split("/")[-1])
-                    PlexSaveFile(pic, picContent)
-                    cmd = Cropper.format(vbScript, pic, cropWidth, cropHeight)
-                    log('UTILS ::')
-                    log('UTILS :: Script - Crop Image: {0}'.format(pic))
-                    log('UTILS ::  Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
-                    log('UTILS ::        Command Line: {0}'.format(cmd))
-                    subprocess.call(cmd)
-                    time.sleep(2)
-                    picContent = PlexLoadFile(pic)
-                except Exception as e:
-                    log('UTILS :: Error Script Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
+            imageContent = myImage.crop((0, 0, desiredWidth, desiredHeight))
+            pic = os.path.join(TempFolder, imageURL.split("/")[-1])
+            log('UTILS :: Python PIL Crop Image: {0}'.format(pic))
+            log('UTILS ::    Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
+            PlexSaveFile(pic, imageContent)
+            time.sleep(2)
+            imageContent = PlexLoadFile(pic)
 
-    return pic, picContent
+        except Exception as e:
+            log('UTILS :: Error Python PIL Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
+            try:
+                pic = Thumbor.format(cropWidth, cropHeight, imageURL)
+                log('UTILS :: Thumbor - Crop Image: {0}'.format(pic))
+                log('UTILS ::   Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
+                imageContent = HTTP.Request(pic).content
+
+            except Exception as e:
+                log('UTILS :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
+                if os.name == 'nt':
+                    try:
+                        envVar = os.environ
+                        TempFolder = envVar['TEMP']
+                        pic = os.path.join(TempFolder, imageURL.split("/")[-1])
+                        PlexSaveFile(pic, imageContent)
+                        cmd = Cropper.format(vbScript, pic, cropWidth, cropHeight)
+                        log('UTILS ::')
+                        log('UTILS :: Script - Crop Image: {0}'.format(pic))
+                        log('UTILS ::  Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
+                        log('UTILS ::        Command Line: {0}'.format(cmd))
+                        subprocess.call(cmd)
+                        time.sleep(2)
+                        imageContent = PlexLoadFile(pic)
+                    except Exception as e:
+                        log('UTILS :: Error Script Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
+
+    return pic, imageContent
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def getFilmOnIAFD(FILMDICT):
@@ -566,6 +578,15 @@ def getIAFDArtist(artistURL):
 
         artistRealName = ahtml.xpath('//h1/text()[normalize-space()]')[0].strip()
         artistPhoto = ahtml.xpath('//div[@id="headshot"]/img/@src')[0].strip()
+        if 'nophoto' in artistPhoto and artistType == 'Director':               # if no photo check if he has a performer page
+            try:
+                bhtml = getURLElement(artistURL.replace('gender=d', 'gender=m'))
+                artistPhoto = bhtml.xpath('//div[@id="headshot"]/img/@src')[0].strip()
+                if not re.search(r'(?:jpg|jpeg|png|gif|bmp|webp)$', artistPhoto, re.IGNORECASE):
+                    artistPhoto = ''
+
+            except Exception as e:
+                log('UTILS :: Error getting Director Photo from "As Performer" Details Page: %s', e)
 
     except Exception as e:
         log('UTILS :: Error getting Artist Details Page: %s', e)
@@ -666,7 +687,7 @@ def getIAFDArtist(artistURL):
 
             artistFilms.sort(key = lambda x: x.lower())
 
-    except:
+    except Exception as e:
         log('UTILS :: Error processing Artist Details Page: %s', e)
         artist = {'Awards': [], 'Bio': {}, 'Films': [], 'Photo': '', 'Nationality': '', 'RealName': ''}
 
@@ -675,16 +696,16 @@ def getIAFDArtist(artistURL):
 
     return artist
 # -------------------------------------------------------------------------------------------------------------------------------
-def getPicContent(image, entry, picType):
+def getPicContent(imageLocation, entry, picType):
     ''' Used for getting flag images, actors and directors pictures - Deceased Actors/Directors shown in GrayScale'''
 
-    picContent = None
-    fileOnDisk = False if 'http' in image else True
+    imageContent = None
+    fileOnDisk = False if 'http' in imageLocation else True
     if not fileOnDisk:
-        image = image.replace(' ', '%20')
-        picContent = HTTP.Request(image).content
-        picInfo = Image.open(BytesIO(picContent))
-        width, height = picInfo.size
+        imageLocation = imageLocation.replace(' ', '%20').strip()
+        ImageContent = HTTP.Request(imageLocation).content
+        myImage = Image.open(BytesIO(ImageContent))
+        width, height = myImage.size
         width = int(width)
         height = int(width * 1.5)
 
@@ -692,36 +713,40 @@ def getPicContent(image, entry, picType):
 
     # Countries & System - IAFD, Stacked, Agent are stored on disk, AND posters under _PGMA + Agent.jpg
     if fileOnDisk:
-        log('UTILS :: {0:<29} {1}'.format('{0} Image Location'.format(picType), image))
-        picContent = PlexLoadFile(image)
+        log('UTILS :: {0:<29} {1}'.format('{0} Image Location'.format(picType), imageLocation))
+        imageContent = PlexLoadFile(imageLocation)
 
     # Cast from IAFD
     elif COLCAST in entry:
         if '[d]' in entry:
-            image = r'{0}/{1}x{2}/filters:stretch():grayscale()/{3}'.format(THUMBOR, width, height, image)
+            imageLocation = r'{0}/{1}x{2}/filters:stretch():grayscale()/{3}'.format(THUMBOR, width, height, imageLocation)
         else:
-            image = r'{0}/{1}x{2}/filters:stretch()/{3}'.format(THUMBOR, width, height, image)
+            imageLocation = r'{0}/{1}x{2}/filters:stretch()/{3}'.format(THUMBOR, width, height, imageLocation)
 
-        picContent = HTTP.Request(image).content
-        log('UTILS :: {0:<29} {1}'.format('{0}Cast {1} Image URL'.format('Deceased ' if '[d]' in entry else '', picType), image))
+        imageContent = HTTP.Request(imageLocation).content
+        log('UTILS :: {0:<29} {1}'.format('{0}Cast {1} Image URL'.format('Deceased ' if '[d]' in entry else '', picType), imageLocation))
 
     # Directors from IAFD - GrayScale + Watermark if deceased else just Watermark
     elif COLDIRECTOR in entry:
         if '[d]' in entry:
-            image = r'{0}/{1}x{2}/filters:stretch():grayscale():watermark({3},1,1,15)/{4}'.format(THUMBOR, width, height, WATERMARK, image)
+            imageLocation = r'{0}/{1}x{2}/filters:stretch():grayscale():watermark({3},1,1,0)/{4}'.format(THUMBOR, width, height, WATERMARK, imageLocation)
         else:
-            image = r'{0}/{1}x{2}/filters:stretch():watermark({3},1,1,15)/{4}'.format(THUMBOR, width, height, WATERMARK, image)
+            imageLocation = r'{0}/{1}x{2}/filters:stretch():watermark({3},1,1,0)/{4}'.format(THUMBOR, 128, 192, WATERMARK, imageLocation)
 
-        picContent = HTTP.Request(image).content
-        log('UTILS :: {0:<29} {1}'.format('{0}Director {1} Image URL'.format('Deceased ' if '[d]' in entry else '', picType), image))
+        imageContent = HTTP.Request(imageLocation).content
+        log('UTILS :: {0:<29} {1}'.format('{0}Director {1} Image URL'.format('Deceased ' if '[d]' in entry else '', picType), imageLocation))
 
     # all other internet images need to be ratio wxh = 1x1.5
     else:
-        image = r'{0}/{1}x{2}/filters:stretch()/{3}'.format(THUMBOR, width, height, image)
-        picContent = HTTP.Request(image).content
-        log('UTILS :: {0:<29} {1}'.format('{0} Genre Image URL'.format(picType), image))
+        ImageContent = HTTP.Request(imageLocation).content
+        ImageInfo = Image.open(BytesIO(ImageContent))
+        width, height = ImageInfo.size
+        height = int(width * 1.5)
+        imageLocation = r'{0}/fit-in/{1}x{2}/{3}'.format(THUMBOR, width, height, imageLocation)
+        imageContent = HTTP.Request(imageLocation).content
+        log('UTILS :: {0:<29} {1}'.format('{0} Genre Image URL'.format(picType), imageLocation))
 
-    return picContent
+    return imageContent
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def getRecordedCast(html):
@@ -1039,14 +1064,14 @@ def getSiteInfoAdultFilmDatabase(FILMDICT, **kwargs):
             try:
                 htmlimages = html.xpath('//img[@title]/@src')
                 htmlimages = [('' if kwBaseURL in x else kwBaseURL) + x for x in htmlimages]
-                poster = htmlimages[0]
-                art = htmlimages[1]
+                poster = [htmlimages[0]]
+                art = [htmlimages[1]]
                 log('UTILS :: {0:<29} {1}'.format('Poster', poster))
                 log('UTILS :: {0:<29} {1}'.format('Art', art))
 
             except Exception as e:
-                poster = ''
-                art = ''
+                poster = []
+                art = []
                 log('UTILS :: Error getting Images: %s', e)
 
             finally:
@@ -1230,14 +1255,14 @@ def getSiteInfoAEBNiii(FILMDICT, **kwargs):
             htmlimages = html.xpath('//*[contains(@class,"dts-movie-boxcover")]//img/@src')
             htmlimages = [x.replace('=293', '=1000') for x in htmlimages]
             htmlimages = ['http:{0}'.format(x) if 'http:' not in x else x for x in htmlimages]
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -1554,14 +1579,14 @@ def getSiteInfoAVEntertainments(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         try:
             htmlimage = html.xpath('//a[text()="Cover Jacket"]/@href')[0]
-            poster = htmlimage.replace('bigcover', 'jacket_images')     # replace text of dvd cover url to get poster
-            art = htmlimage.replace('bigcover', 'screen_shot')          # replace text of dvd cover url to get background
+            poster = [htmlimage.replace('bigcover', 'jacket_images')]     # replace text of dvd cover url to get poster
+            art = [htmlimage.replace('bigcover', 'screen_shot')]          # replace text of dvd cover url to get background
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -1725,15 +1750,15 @@ def getSiteInfoBestExclusivePorn(FILMDICT, **kwargs):
         FILMDICT['SceneAgent'] = True                 # notify update routine to crop images
         try:
             htmlimages = html.xpath('//div[@class="entry"]/p//img/@src')
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
 
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -1866,14 +1891,14 @@ def getSiteInfoCDUniverse(FILMDICT, **kwargs):
         #   8.  Poster and Art URLs
         log(LOG_SUBLINE)
         try:
-            poster = html.xpath('//img[@id="PIMainImg"]/@src')[0]
-            art = html.xpath('//img[@id="0"]/@src')[0]
+            poster = [html.xpath('//img[@id="PIMainImg"]/@src')[0]]
+            art = [html.xpath('//img[@id="0"]/@src')[0]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -2139,15 +2164,15 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
         try:
             htmlimages = html.xpath('//div[@class="mypicsgallery"]/a//img/@src')
             htmlimages = [x for x in htmlimages if 'data:image' not in x]
-            poster = htmlimages[0]
-            art = htmlimages[0] if len(htmlimages) == 1 else htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[0] if len(htmlimages) == 1 else htmlimages[1]]
 
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -2327,19 +2352,20 @@ def getSiteInfoGayDVDEmpire(FILMDICT, **kwargs):
 
         #   8.  Poster and Art URLs
         log(LOG_SUBLINE)
-        poster = ''
-        art = ''
         try:
             # some films do not have a back cover - so replace with poster
             htmlimages = html.xpath('//a[@id="front-cover"]/@href')
-            poster = htmlimages[0] if htmlimages else ''
+            poster = [htmlimages[0]] if htmlimages else []
             htmlimages = html.xpath('//a[@id="back-cover"]/@href')
-            art = htmlimages[0] if htmlimages else poster
+            art = [htmlimages[0]] if htmlimages else []         # empty list if nowt found
+            art = [poster[0]] if not art and poster else art    # use poster element if empty
 
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -2613,8 +2639,8 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
         #                                                                      - just one image (old style)
         log(LOG_SUBLINE)
         try:
-            poster = html.xpath('//div[@class="lg_inside_wrap"]/@data-front')[0]
-            art = html.xpath('//div[@class="lg_inside_wrap"]/@data-back')[0]
+            poster = [html.xpath('//div[@class="lg_inside_wrap"]/@data-front')[0]]
+            art = [html.xpath('//div[@class="lg_inside_wrap"]/@data-back')[0]]
 
         except Exception as e:
             log('UTILS :: Error getting Images, Try Old Style: %s', e)
@@ -2622,13 +2648,13 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
                 # sometimes no back cover exists... on some old movies/ so use cover photo for both poster/art
                 htmlimage = html.xpath('//img[@id="cover" and @class="cover"]/@src')[0]
                 log('UTILS ::{0:<29} {1}'.format('Old Style Image', 'Using Old Style Image'))
+                poster = [htmlimage]
+                art = [htmlimage]
+
             except Exception as e:
-                poster = ''
-                art = ''
+                poster = []
+                art = []
                 log('UTILS :: Error getting Old Style Images: %s', e)
-            else:
-                poster = htmlimage
-                art = htmlimage
 
         finally:
             siteInfoDict['Poster'] = poster
@@ -2894,8 +2920,8 @@ def getSiteInfoGayFetishandBDSM(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -3035,8 +3061,8 @@ def getSiteInfoGayMovie(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -3176,14 +3202,14 @@ def getSiteInfoGayRado(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         try:
             htmlimages = html.xpath('//a[contains(@class,"magictoolbox")]/@href')
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -3323,8 +3349,8 @@ def getSiteInfoGayWorld(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -3618,27 +3644,27 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Images', '{0:>} - {1}'.format(len(htmlimages), htmlimages)))
             images = []
             [images.append(x) for x in htmlimages if x not in images]
-            poster = images[0]
-            art = images[1] if len(images) > 1 else poster
+            poster = [images[0]]
+            art = [images[1] if len(images) > 1 else poster[0]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
-            log('UTILS :: Check if Better Quality External Poster/Art Exists')
+            log('UTILS :: Add External Poster/Art')
 
             for key in ['AEBNiii', 'GayDVDEmpire', 'GayHotMovies']:
                 myExternalDict = FILMDICT.get(key, '')
                 if myExternalDict:
                     externalPoster = myExternalDict.get('Poster', '')
-                    poster = externalPoster if externalPoster else poster
+                    poster += externalPoster
                     externalArt = myExternalDict.get('Art', '')
-                    art = externalArt if externalArt else art
+                    art += externalArt
                     break
 
-            log('UTILS :: {0:<29} {1}'.format('Poster - After Check', poster))
-            log('UTILS :: {0:<29} {1}'.format('Art - After Check', art))
+            log('UTILS :: {0:<29} {1}'.format('Poster - After Addition', poster))
+            log('UTILS :: {0:<29} {1}'.format('Art - After Addition', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -3915,14 +3941,14 @@ def getSiteInfoHFGPM(FILMDICT, **kwargs):
             if len(htmlimages) == 1:    # if only one image duplicate it
                 htmlimages.append(htmlimages[0])
 
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -4090,14 +4116,14 @@ def getSiteInfoHomoActive(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         try:
             htmlimages = html.xpath('//img[@class="gallery-image"]/@src')
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -4486,15 +4512,15 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
         FILMDICT['SceneAgent'] = True                 # notify update routine to crop images
         try:
             htmlimages = html.xpath('.//a[@class="aimg"]/img/@data-lazy-src|.//p/img/@data-lazy-src')
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
 
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -4637,14 +4663,14 @@ def getSiteInfoSimplyAdult(FILMDICT, **kwargs):
             if len(htmlimages) == 1:    # if only one image duplicate it
                 htmlimages.append(htmlimages[0])
 
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -4818,15 +4844,15 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
             if len(htmlimages) == 1:
                 htmlimages.append(htmlimages[0])
 
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
 
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -4973,14 +4999,14 @@ def getSiteInfoWolffVideo(FILMDICT, **kwargs):
             htmlimage = html.xpath('//a[@id="view_cover"]/@href')[0]
             htmlimage = ('' if BASE_URL in htmlimage else BASE_URL) + htmlimage
 
-            poster = htmlimage
-            art = htmlimage
+            poster = [htmlimage]
+            art = [htmlimage]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -5159,7 +5185,7 @@ def logHeader(myFunc, media, lang):
     log(LOG_ASTLINE)
     log(LOG_ASTLINE)
     log('%s:: Version:                              v.%s', myFunc, VERSION_NO)
-    log('%s:: Python:                               %s %s', myFunc, platform.python_version(), platform.python_build())
+    log('%s:: Python:                               %s (%s): %s', myFunc, platform.python_version(), platform.architecture()[0], platform.python_build())
     log('%s:: Platform:                             %s - %s %s', myFunc, platform.machine(), platform.system(), platform.release())
     log('%s:: Preferences:', myFunc)
     log('%s::  > Legend Before Summary:             %s', myFunc, PREFIXLEGEND)
@@ -5167,7 +5193,7 @@ def logHeader(myFunc, media, lang):
     log('%s::  > Collection Gathering Order', myFunc)
     log('%s::      > System:                        %s', myFunc, COLSYSTEM)
     log('%s::      > Genres:                        %s', myFunc, COLGENRE)
-    log('%s::      > Countries                      %s', myFunc, COLCOUNTRY)
+    log('%s::      > Countries                      %s, Display poster as %s', myFunc, COLCOUNTRY, COUNTRYPOSTERTYPE)
     log('%s::      > Studio:                        %s', myFunc, COLSTUDIO)
     log('%s::      > Series:                        %s', myFunc, COLSERIES)
     log('%s::      > Directors:                     %s', myFunc, COLDIRECTOR)
@@ -5744,7 +5770,7 @@ def matchDirectors(unmatchedDirectorList, FILMDICT):
 # -------------------------------------------------------------------------------------------------------------------------------
 def matchFilename(media):
     ''' Check filename on disk corresponds to regex preference format '''
-    if not START_SCRAPE:
+    if START_SCRAPE == 'No':
         raise Exception('<QUIT: Scraping Parameters Not Set Up!>')
 
     filmVars = {}
@@ -6114,6 +6140,9 @@ def setMetadata(metadata, media, FILMDICT):
 
     collectionsDict = {}             # used to create collections that have extra information like cast photos, country flags etc order by Sort title
     deathRegex = r'Date of Death|Year of Death|would be'.replace(' ', NOBREAK_SPACE)
+    errorHFlag = os.path.join(PGMA_HFLAGFOLDER, '_Error.png')
+    errorVFlag = os.path.join(PGMA_VFLAGFOLDER, '_Error.png')
+
     log('UTILS :: 1.  Set Metadata from File Name and Default Settings:')
 
     try:
@@ -6287,8 +6316,8 @@ def setMetadata(metadata, media, FILMDICT):
 
         # 2e.   Countries
         log(LOG_SUBLINE)
-        countryHFlag = ''
-        countryVFlag = ''
+        countryBackground = ''
+        countryPoster = ''
         try:
             if RESETMETA:
                 metadata.countries.clear()
@@ -6301,16 +6330,24 @@ def setMetadata(metadata, media, FILMDICT):
             listCountries.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('2e. Countries', '{0:>2} - {1}'.format(len(listCountries), listCountries)))
             for idx, item in enumerate(listCountries, start=1):
-                countryHFlag = '{0}Flags{1}Horizontal{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, item)
-                countryHFlag = countryHFlag if os.path.exists(countryHFlag) else '{0}Flags{1}Horizontal{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, '_Error')
-                countryVFlag = '{0}Flags{1}Vertical{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, item)
-                countryVFlag = countryVFlag if os.path.exists(countryVFlag) else '{0}Flags{1}Vertical{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, '_Error')
+                countryBackground = os.path.join(PGMA_HFLAGFOLDER, '{0}.png'.format(item))
+                countryBackground = countryBackground if os.path.exists(countryBackground) else errorHFlag
+
+                # use map as country posters, if missing use vertical flag of country or error flag if that is also missing
+                flagPoster = os.path.join(PGMA_VFLAGFOLDER, '{0}.png'.format(item))
+                if COUNTRYPOSTERTYPE == 'Map':
+                    mapPoster = os.path.join(PGMA_MAPSFOLDER, '{0}.jpg'.format(item))
+                    countryPoster = mapPoster if os.path.exists(mapPoster) else flagPoster if os.path.exists(flagPoster) else errorVFlag
+                else:
+                    # use vertical flag as poster or error flag if missing
+                    countryPoster = flagPoster if os.path.exists(flagPoster) else errorVFlag
+
                 log('UTILS :: {0:<29} {1}'.format('Country' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
                 metadata.countries.add(item)
                 # Process Countries
                 if COLCOUNTRY:
                     entry = '{0} {1}'.format(COLCOUNTRY, item)
-                    collectionsDict[entry] = {'Poster': countryVFlag, 'Art': countryHFlag, 'Summary': ''}
+                    collectionsDict[entry] = {'Poster': countryPoster, 'Art': countryBackground, 'Summary': ''}
 
         except Exception as e:
             log('UTILS :: Error setting Countries: %s', e)
@@ -6373,8 +6410,8 @@ def setMetadata(metadata, media, FILMDICT):
 
                     entry = '{0} {1}[d]'.format(COLCAST, entry) if re.search(deathRegex, summary, re.IGNORECASE) else '{0} {1}'.format(COLCAST, entry)
                     myNationality = castDict[item]['Nationality'].split(',')[-1].strip() if castDict[item]['Nationality'] else ''
-                    myFlag = '{0}Flags{1}Horizontal{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, myNationality) if myNationality else ''
-                    art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else '{0}Flags{1}Horizontal{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, '_Error') 
+                    myFlag = os.path.join(PGMA_HFLAGFOLDER, '{0}.png'.format(myNationality)) if myNationality else ''
+                    art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else errorHFlag
                     collectionsDict[entry] = {'Poster': castDict[item]['Photo'], 'Art': art, 'Summary': summary}
 
         except Exception as e:
@@ -6426,8 +6463,8 @@ def setMetadata(metadata, media, FILMDICT):
                     summary = ' '.join(myBioList)
                     entry = '{0} {1}[d]'.format(COLDIRECTOR, entry) if re.search(deathRegex, summary, re.IGNORECASE) else '{0} {1}'.format(COLDIRECTOR, entry)
                     myNationality = directorDict[item]['Nationality'].split(',')[-1].strip() if directorDict[item]['Nationality'] else ''
-                    myFlag = '{0}Flags{1}Horizontal{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, myNationality) if myNationality else ''
-                    art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else '{0}Flags{1}Horizontal{1}{2}.png'.format(PGMA_FOLDER, os.path.sep, '_Error') 
+                    myFlag = os.path.join(PGMA_HFLAGFOLDER, '{0}.png'.format(myNationality)) if myNationality else ''
+                    art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else errorHFlag
                     collectionsDict[entry] = {'Poster': directorDict[item]['Photo'], 'Art': art, 'Summary': summary}
 
         except Exception as e:
@@ -6445,23 +6482,22 @@ def setMetadata(metadata, media, FILMDICT):
                     metadata.posters.validate_keys([])
 
             poster = myAgentDict['Poster']
-            log('UTILS :: {0:<29} {1}'.format('2h. Poster Image', poster if poster else 'None Found'))
-            if poster:
+            log('UTILS :: {0:<29} {1}'.format('2h. Poster Images', poster if poster else 'None Found'))
+            for idx, item in enumerate(poster, start=1):
+                log('UTILS :: {0:<29} {1}'.format('Poster' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
                 if FILMDICT['SceneAgent']:
-                    pic, picContent = getFilmImages(imageType='Poster', imageURL=poster, whRatio=1.5)
+                    pic, picContent = getFilmImages(imageType='Poster', imageURL=item, whRatio=1.5)
                 else:
-                    pic = poster
-                    picContent = HTTP.Request(poster).content
+                    pic = item
+                    picContent = HTTP.Request(item).content
 
-                metadata.posters[pic] = Proxy.Media(picContent, sort_order=1)
-                metadata.posters.validate_keys([pic])
-                log('UTILS :: {0:<29} {1}'.format('Poster', pic))
+                metadata.posters[pic] = Proxy.Media(picContent, sort_order=idx)
 
                 # save poster to disk
                 if DOWNLOADPOSTER:
-                    extension = poster.split('.')[-1].split('?')[0]
+                    extension = item.split('.')[-1].split('?')[0]
                     filename = os.path.splitext(media.items[0].parts[0].file)[0]
-                    downloadPoster = '{0}.{1}'.format(filename, extension)
+                    downloadPoster = '{0}.{1}'.format(filename, extension) if idx ==  1 else '{0}-{1}.{2}'.format(filename, idx - 1, extension)
                     log('UTILS :: {0:<29} {1}'.format('Downloaded Poster', downloadPoster))
                     PlexSaveFile(downloadPoster, picContent)
 
@@ -6481,17 +6517,16 @@ def setMetadata(metadata, media, FILMDICT):
                         metadata.art.validate_keys([])
 
                 art = myAgentDict['Art']
-                log('UTILS :: {0:<29} {1}'.format('2i. Art Image', art if art else 'None Found'))
-                if art:
+                log('UTILS :: {0:<29} {1}'.format('2i. Art Images', art if art else 'None Found'))
+                for idx, item in enumerate(art, start=1):
+                    log('UTILS :: {0:<29} {1}'.format('Art' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
                     if FILMDICT['SceneAgent']:
-                        pic, picContent = getFilmImages(imageType='Art', imageURL=art, whRatio=0.5625)
-                        metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
-                        metadata.art.validate_keys([pic])
-                        log('UTILS :: {0:<29} {1}'.format('Art', pic))
+                        pic, picContent = getFilmImages(imageType='Art', imageURL=item, whRatio=0.5625)
                     else:
-                        metadata.art[art] = Proxy.Media(HTTP.Request(art).content, sort_order=1)
-                        metadata.art.validate_keys([art])
-                        log('UTILS :: {0:<29} {1}'.format('Art', art))
+                        pic = item
+                        picContent = HTTP.Request(item).content
+
+                    metadata.art[pic] = Proxy.Media(picContent, sort_order=idx)
             else:
                 log('UTILS :: {0:<29} {1}'.format('Art Image', 'Not Set By Preference'))
 
@@ -6603,7 +6638,7 @@ def setMetadata(metadata, media, FILMDICT):
                         websiteCollectionList = myAgentDict['Collections']
                         for idx, item in enumerate(websiteCollectionList, start=1):
                             entry = '{0} {1}: {2}'.format(COLSTUDIO if COLSTUDIO else COLSERIES, studio, item)
-                            collectionsDict[entry] = {'Poster': '', 'Art': countryHFlag, 'Summary': ''}
+                            collectionsDict[entry] = {'Poster': '', 'Art': countryBackground, 'Summary': ''}
                 except Exception as e:
                     log('UTILS :: Error Collating Website Series Collections: %s', e)
 
@@ -6612,7 +6647,7 @@ def setMetadata(metadata, media, FILMDICT):
                     seriesList = FILMDICT['Series']
                     for idx, item in enumerate(seriesList, start=1):
                         entry = '{0} {1}: {2}'.format(COLSTUDIO if COLSTUDIO else COLSERIES, studio, item)
-                        collectionsDict[entry] = {'Poster': '', 'Art': countryHFlag, 'Summary': ''}
+                        collectionsDict[entry] = {'Poster': '', 'Art': countryBackground, 'Summary': ''}
 
                 except Exception as e:
                     log('UTILS :: Error Collating Derived Series Collections: %s', e)
@@ -6620,7 +6655,7 @@ def setMetadata(metadata, media, FILMDICT):
             # Process Studio Name:
             if COLSTUDIO:
                 entry = '{0} {1}'.format(COLSTUDIO, studio)
-                collectionsDict[entry] = {'Poster': '', 'Art': countryHFlag, 'Summary': ''}
+                collectionsDict[entry] = {'Poster': '', 'Art': countryBackground, 'Summary': ''}
 
             # Default Collections
             try:
@@ -6799,20 +6834,26 @@ def setMetadata(metadata, media, FILMDICT):
 # ----------------------------------------------------------------------------------------------------------------------------------
 def setupStartVariables():
     ''' used by start routine to set up Tidy Genres, Countries List and Show Preference Settings'''
+    global START_SCRAPE
+    START_SCRAPE = 'No'
 
     #   1.    Plex Support Path
     log(LOG_SUBLINE)
     log('START :: {0:<29} {1}'.format('1.\tPlex Support Path', PlexSupportPath))
+    continueSetup = True if os.path.isdir(PlexSupportPath) else False
 
     #   2.    Agent Preference Settings
-    log(LOG_SUBLINE)
-    log('START :: 2.\tAgent Preference Settings')
-    defaultPrefs_json = os.path.join(PlexSupportPath, 'Plug-ins', '{0}.bundle'.format(AGENT), 'Contents', 'DefaultPrefs.json')
-    log('START :: {0:<29} {1}'.format('Default Preferences', os.path.relpath(defaultPrefs_json, PlexSupportPath)))
-    if os.path.isfile(defaultPrefs_json):
-        try:
-            json = JSON.ObjectFromString(PlexLoadFile(defaultPrefs_json), encoding=None)  ### Load 'DefaultPrefs.json' to have access to default settings ###
-            if json:
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 2.\tAgent Preference Settings')
+        defaultPrefs_json = os.path.join(PlexSupportPath, 'Plug-ins', '{0}.bundle'.format(AGENT), 'Contents', 'DefaultPrefs.json')
+        log('START :: {0:<29} {1}'.format('Default Preferences', os.path.relpath(defaultPrefs_json, PlexSupportPath)))
+        if os.path.isfile(defaultPrefs_json):
+            try:
+                json = JSON.ObjectFromString(PlexLoadFile(defaultPrefs_json), encoding=None)  ### Load 'DefaultPrefs.json' to have access to default settings ###
+                if not json:
+                    raise Exception('< Could Not Read Default Prefs! >')
+
                 log('START :: {0:<29} {1}'.format('Loaded', defaultPrefs_json))
                 log('START :: {0:<29} {1}'.format('Preferences:', len(json)))
                 idx = 0
@@ -6822,103 +6863,96 @@ def setupStartVariables():
                     defSet =  entry['default']
                     setAs = Prefs[prefName] if prefName != 'plextoken' else '********'              # hide token in logs
                     log('START :: {0:<29} {1}'.format('{0:>2}. {1}'.format(idx, prefName), 'Default = {0:<10} Set As = {1}'.format(defSet, setAs)))
-        except Exception as e:
-            log('START :: Error Loading Default Preferences File: %s', e)
 
-        global COLCAST, COLCOUNTRY, COLGENRE,COLDIRECTOR, COLSERIES, COLSTUDIO, COLSYSTEM, GROUPCOLLECTIONS
-        GROUPCOLLECTIONS = Prefs['groupcollections']
-        COLCAST = '|{0}|'.format(int(Prefs['castcollection'])) if GROUPCOLLECTIONS else ''
-        COLCOUNTRY = '|{0}|'.format(int(Prefs['countrycollection'])) if GROUPCOLLECTIONS else ''
-        COLDIRECTOR = '|{0}|'.format(int(Prefs['directorcollection'])) if GROUPCOLLECTIONS else ''
-        COLGENRE = '|{0}|'.format(int(Prefs['genrecollection'])) if GROUPCOLLECTIONS else ''
-        COLSTUDIO = '|{0}|'.format(int(Prefs['studiocollection'])) if GROUPCOLLECTIONS else ''
-        COLSERIES = '|{0}|'.format(int(Prefs['seriescollection'])) if GROUPCOLLECTIONS else ''
-        COLSYSTEM = '|{0}|'.format(int(Prefs['systemcollection'])) if GROUPCOLLECTIONS else ''
+                global COLCAST, COLCOUNTRY, COLGENRE,COLDIRECTOR, COLSERIES, COLSTUDIO, COLSYSTEM
+                COLSYSTEM = '|1|' if Prefs['systemcollection'] else ''
+                COLGENRE = '|2|' if Prefs['genrecollection'] else ''
+                COLCOUNTRY = '|3|' if Prefs['countrycollection'] else ''
+                COLSTUDIO = '|4|' if Prefs['studiocollection'] else ''
+                COLSERIES = '|5|' if Prefs['seriescollection'] else ''
+                COLDIRECTOR = '|6|' if Prefs['directorcollection']  else ''
+                COLCAST = '|7|' if Prefs['castcollection'] else ''
+
+            except Exception as e:
+                log('START :: Error Loading Default Preferences File: %s', e)
+                continueSetup = False
+
 
     #   3. PGMA - Folder Location, where all general files needed for the PGMA Agents are stored, like posters, gayTidy, Countries et cetera
-    global PGMA_FOLDER, PGMA_CASTPOSTERFOLDER, PGMA_DIRECTORPOSTERFOLDER, PGMA_HFLAGFOLDER, PGMA_VFLAGFOLDER
-    log(LOG_SUBLINE)
-    log('START :: 3.\tPGMA Usage Folder Locations')
-    PGMA_FOLDER = os.path.join(PlexSupportPath, 'Plug-ins', '_PGMA', 'xxx').replace('xxx', '')      # replace xxx to get trailing \ or / depending on windows or linux
-    PGMA_CASTPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Cast', 'Posters')
-    PGMA_DIRECTORPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Directors', 'Posters')
-    PGMA_HFLAGFOLDER = os.path.join(PGMA_FOLDER, 'Flags', 'Horizontal')
-    PGMA_VFLAGFOLDER = os.path.join(PGMA_FOLDER, 'Flags', 'Vertical')
-    log('START :: {0:<29} {1}'.format('PGMA Folder Location', PGMA_FOLDER))
-    log('START :: {0:<29} {1}'.format('Cast', PGMA_CASTPOSTERFOLDER))
-    log('START :: {0:<29} {1}'.format('Director', PGMA_DIRECTORPOSTERFOLDER))
-    log('START :: {0:<29} {1}'.format('Horizontal Flags', PGMA_HFLAGFOLDER))
-    log('START :: {0:<29} {1}'.format('Vertical Flags', PGMA_VFLAGFOLDER))
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 3.\tPGMA Usage Folder Locations')
+        global PGMA_FOLDER, PGMA_CASTPOSTERFOLDER, PGMA_DIRECTORPOSTERFOLDER, PGMA_HFLAGFOLDER, PGMA_VFLAGFOLDER, PGMA_MAPSFOLDER, PGMA_GENRESFOLDER
+        PGMA_FOLDER = os.path.join(PlexSupportPath, 'Plug-ins', '_PGMA')
+        PGMA_CASTPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Cast', 'Posters')
+        PGMA_DIRECTORPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Directors', 'Posters')
+        PGMA_HFLAGFOLDER = os.path.join(PGMA_FOLDER, 'Flags', 'Horizontal')
+        PGMA_VFLAGFOLDER = os.path.join(PGMA_FOLDER, 'Flags', 'Vertical')
+        PGMA_MAPSFOLDER = os.path.join(PGMA_FOLDER, 'Maps')
+        PGMA_GENRESFOLDER = os.path.join(PGMA_FOLDER, 'Genres')
 
-    #   4. PGMA - On disk Cast and Director Photos
-    global PGMA_CASTDICT, PGMA_DIRECTORDICT
-    log(LOG_SUBLINE)
-    log('START :: 4.\tPGMA Cast and Director Photo Dictionaries')
-    PGMA_CASTDICT = {x.rsplit('.', 1)[0]:os.path.join(PGMA_CASTPOSTERFOLDER, x) for x in os.listdir(PGMA_CASTPOSTERFOLDER)}
-    PGMA_DIRECTORDICT = {x.rsplit('.', 1)[0]:os.path.join(PGMA_DIRECTORPOSTERFOLDER, x) for x in os.listdir(PGMA_DIRECTORPOSTERFOLDER)}
-    log('START :: {0:<29} {1}'.format('Cast Photo Dictionary', '{0:>4} - {1}'.format(len(PGMA_CASTDICT), PGMA_CASTDICT)))
-    log('START :: {0:<29} {1}'.format('Director Photo Dictionary', '{0:>4} - {1}'.format(len(PGMA_DIRECTORDICT), PGMA_DIRECTORDICT)))
+        PGMA_FOLDER = PGMA_FOLDER if os.path.isdir(PGMA_FOLDER) else ''
+        PGMA_CASTPOSTERFOLDER = PGMA_CASTPOSTERFOLDER if os.path.isdir(PGMA_CASTPOSTERFOLDER) else ''
+        PGMA_DIRECTORPOSTERFOLDER = PGMA_DIRECTORPOSTERFOLDER if os.path.isdir(PGMA_DIRECTORPOSTERFOLDER) else ''
+        PGMA_HFLAGFOLDER = PGMA_HFLAGFOLDER if os.path.isdir(PGMA_HFLAGFOLDER) else ''
+        PGMA_VFLAGFOLDER = PGMA_VFLAGFOLDER if os.path.isdir(PGMA_VFLAGFOLDER) else ''
+        PGMA_MAPSFOLDER = PGMA_MAPSFOLDER if os.path.isdir(PGMA_MAPSFOLDER) else ''
+        PGMA_GENRESFOLDER = PGMA_GENRESFOLDER if os.path.isdir(PGMA_GENRESFOLDER) else ''
+
+        log('START :: {0:<29} {1}'.format('PGMA Folder Location', PGMA_FOLDER if PGMA_FOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('        Cast Posters', PGMA_CASTPOSTERFOLDER if PGMA_CASTPOSTERFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('    Director Posters', PGMA_DIRECTORPOSTERFOLDER if PGMA_DIRECTORPOSTERFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('    Horizontal Flags', PGMA_HFLAGFOLDER if PGMA_HFLAGFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('      Vertical Flags', PGMA_VFLAGFOLDER if PGMA_VFLAGFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('        Country Maps', PGMA_MAPSFOLDER if PGMA_MAPSFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('              Genres', PGMA_GENRESFOLDER if PGMA_GENRESFOLDER else '** FAIL **'))
+
+        # only contunue with setup if all folders are present
+        continueSetup = PGMA_FOLDER and PGMA_CASTPOSTERFOLDER and PGMA_DIRECTORPOSTERFOLDER and PGMA_HFLAGFOLDER and PGMA_VFLAGFOLDER and PGMA_MAPSFOLDER and PGMA_GENRESFOLDER
+
+    #   4. PGMA - On disk Cast and Director Collection Posters
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 4.\tPGMA Cast and Director Collection Poster Dictionaries')
+        global PGMA_CASTDICT, PGMA_DIRECTORDICT
+        try:
+            PGMA_CASTDICT = {x.rsplit('.', 1)[0]:os.path.join(PGMA_CASTPOSTERFOLDER, x) for x in os.listdir(PGMA_CASTPOSTERFOLDER)}
+            log('START :: {0:<29} {1}'.format('Cast Collection Posters', '{0:>4} - {1}'.format(len(PGMA_CASTDICT), PGMA_CASTDICT)))
+
+            PGMA_DIRECTORDICT = {x.rsplit('.', 1)[0]:os.path.join(PGMA_DIRECTORPOSTERFOLDER, x) for x in os.listdir(PGMA_DIRECTORPOSTERFOLDER)}
+            log('START :: {0:<29} {1}'.format('Director Collection Posters', '{0:>4} - {1}'.format(len(PGMA_DIRECTORDICT), PGMA_DIRECTORDICT)))
+
+        except Exception as e:
+            log('START :: Error creating Local Cast and Director Collection Poster Dictionaries: %s', e)
+            continueSetup = False
 
     #   5. Country Dictionary: create dictionary containing countries and flag urls from Country.txt located in plugins code directory
-    log(LOG_SUBLINE)
-    log('START :: 5.\tPrepare Dictionary of Country Names and Flags')
-    global COUNTRYSET
-    try:
-        countries_txt = os.path.join(PGMA_FOLDER, 'Countries.txt')
-        txtfile = PlexLoadFile(countries_txt)
-        txtrows = txtfile.split('\n')
-        for idx, row in enumerate(txtrows, start=1):
-            COUNTRYSET.add(row.strip())
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 5.\tPrepare Dictionary of Country Names and Flags')
+        global COUNTRYSET
+        try:
+            countries_txt = os.path.join(PGMA_FOLDER, 'Countries.txt')
+            txtfile = PlexLoadFile(countries_txt)
+            txtrows = txtfile.split('\n')
+            for idx, row in enumerate(txtrows, start=1):
+                COUNTRYSET.add(row.strip())
 
-        log('START :: {0:<29} {1}'.format('Country Dictionary', '{0:>4} - {1}'.format(len(COUNTRYSET), sorted(COUNTRYSET))))
+            log('START :: {0:<29} {1}'.format('Country Dictionary', '{0:>4} - {1}'.format(len(COUNTRYSET), sorted(COUNTRYSET))))
 
-    except Exception as e:
-        log('START :: Error creating Country Dictionary: %s', e)
-        log('START :: Error: Country Source File: %s', countries_txt)
+        except Exception as e:
+            log('START :: Error creating Country Dictionary: %s', e)
+            log('START :: Error: Country Source File: %s', countries_txt)
+            continueSetup = False
 
     #   6. Genres Dictionary: create dictionary containing genres and image urls from Genres.txt located in plugins code directory
-    log(LOG_SUBLINE)
-    log('START :: 6.\tPrepare Dictionary of Genres and Symbols')
-    global GENRESDICT
-    try:
-        genres_txt = os.path.join(PGMA_FOLDER, 'Genres.txt')
-        txtfile = PlexLoadFile(genres_txt)
-        txtrows = txtfile.split('\n')
-        for idx, row in enumerate(txtrows, start=1):
-            if '::' not in row:
-                log('START :: {0:<29} {1}'.format('Invalid Format Row', 'Row {0} - {1}'.format(idx, row)))
-                continue
-
-            keyValue = row.split('::')
-            keyValue = [x.strip() for x in keyValue]
-            key = keyValue[0].lower()
-            value = keyValue[1]
-            if key in GENRESDICT:
-                log('START :: {0:<29} {1}'.format('Duplicate/Error Row', 'Row {0} - {1}'.format(idx, row)))
-                continue
-
-            value = value.replace('\\', os.path.sep).replace('[_PGMA]', PGMA_FOLDER)
-            GENRESDICT[key] = value
-
-        log('START :: {0:<29} {1}'.format('Genres Dictionary', '{0:>4} - {1}'.format(len(GENRESDICT), sorted(GENRESDICT))))
-
-    except Exception as e:
-        log('START :: Error creating Genres Dictionary: %s', e)
-        log('START :: Error: Genres Source File: %s', genres_txt)
-
-    #   7.     Tidy Genres: create dictionary containing the tidy genres from genres.tsv file located in plugins code directory
-    #                       unless second field is an 'x', it should appear in the COUNTRYSET or GENRESDICT
-    log(LOG_SUBLINE)
-    log('START :: 7.\tPrepare Tidied Dictionary of Genres and Countries')
-    global TIDYDICT
-    tidiedCountriesSet = set()                              # used for debugging
-    tidiedGenresSet = set()                                 # used for debugging
-    tidiedNullSet = set()                                   # used for debugging
-    tidiedErrorSet = set()                                  # used for debugging
-    try:
-        for tidy in ['GayTidy.txt', 'UserGayTidy.txt']:     # gaytidy has to be first in list as user can make changes
-            tidy_txt = os.path.join(PGMA_FOLDER, tidy)
-            txtfile = PlexLoadFile(tidy_txt)
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 6.\tPrepare Dictionary of Genres and Symbols')
+        global GENRESDICT
+        try:
+            genres_txt = os.path.join(PGMA_FOLDER, 'Genres.txt')
+            txtfile = PlexLoadFile(genres_txt)
             txtrows = txtfile.split('\n')
             for idx, row in enumerate(txtrows, start=1):
                 if '::' not in row:
@@ -6928,124 +6962,170 @@ def setupStartVariables():
                 keyValue = row.split('::')
                 keyValue = [x.strip() for x in keyValue]
                 key = keyValue[0].lower()
-                value = keyValue[1]
-                if key in TIDYDICT:
+
+                if key in GENRESDICT:
                     log('START :: {0:<29} {1}'.format('Duplicate/Error Row', 'Row {0} - {1}'.format(idx, row)))
                     continue
 
-                TIDYDICT[key] = value if value != 'x' else None
-                if value in COUNTRYSET:                 # useful for comparing cities, locations to the country they are in when debugging
-                    tidiedCountriesSet.add('{0} : {1}'.format(keyValue[0], value))
-                elif value.lower() in GENRESDICT:
-                    tidiedGenresSet.add('{0} : {1}'.format(keyValue[0], value))
-                elif value == 'x':
-                    tidiedNullSet.add('{0} : {1}'.format(keyValue[0], value))
-                else:
-                    tidiedErrorSet.add('{0} : {1}'.format(keyValue[0], value))
+                value = os.path.join(PGMA_GENRESFOLDER, keyValue[1])
+                GENRESDICT[key] = value
 
-        log('START :: {0:<29} {1}'.format('Original Categories', '{0:>4} - {1}'.format(len(TIDYDICT), sorted(TIDYDICT.keys()))))
-        log('START :: {0:<29} {1}'.format('Tidied Countries', '{0:>4} - {1}'.format(len(tidiedCountriesSet), sorted(tidiedCountriesSet))))
-        log('START :: {0:<29} {1}'.format('Tidied Genres', '{0:>4} - {1}'.format(len(tidiedGenresSet), sorted(tidiedGenresSet))))
-        log('START :: {0:<29} {1}'.format('Null Categories', '{0:>4} - {1}'.format(len(tidiedNullSet), sorted(tidiedNullSet))))
-        log('START :: {0:<29} {1}'.format('Error Categories', '{0:>4} - {1}'.format(len(tidiedErrorSet), sorted(tidiedErrorSet))))
-
-    except Exception as e:
-        log('START :: Error creating Tidy Categories Dictionary: %s', e)   
-        log('START :: Error: Tidy Categories Source File: %s', tidy_txt)   
-
-    #   8.     Retrieve Plex Token
-    log(LOG_SUBLINE)
-    log('START :: 8.\tRetrieve Plex Token')
-    global PLEXTOKEN
-    PLEXTOKEN = ''
-    if os.name == 'nt':
-        global MACHINEID
-        try:
-            preferences_xml = os.path.join(PlexSupportPath, 'preferences.xml').replace('Plex', 'Plex\Plex')
-            log('START :: {0:<29} {1}'.format('Preference XML', preferences_xml))
-            txtfile = PlexLoadFile(preferences_xml)
-            txtrows = txtfile.split('\n')
-            for row in txtrows:
-                if 'PlexOnlineToken=' in row:
-                    item = row.split('PlexOnlineToken=')[1]
-                    item = item.split()[0].replace('"', '').strip()
-                    PLEXTOKEN = item
-
-                if 'MachineIdentifier=' in row:
-                    item = row.split('MachineIdentifier=')[1]
-                    item = item.split()[0].replace('"', '').strip()
-                    MACHINEID = item
-
-            log('START :: {0:<29} {1}'.format('Machine ID', MACHINEID))
+            log('START :: {0:<29} {1}'.format('Genres Dictionary', '{0:>4} - {1}'.format(len(GENRESDICT), sorted(GENRESDICT))))
 
         except Exception as e:
-            log('START :: Error retrieving Plex Token: %s', e)
-            log('START :: Error: Preferences XML File: %s', preferences_xml)
-    else:
-        PLEXTOKEN = Prefs['plextoken']
+            log('START :: Error creating Genres Dictionary: %s', e)
+            log('START :: Error: Genres Source File: %s', genres_txt)
+            continueSetup = False
 
-    if PLEXTOKEN and PLEXTOKEN is not None:
-        log('START :: {0:<29} {1}'.format('Plex Token', '*' * len(PLEXTOKEN)))
-    else:
-        log('START :: {0:<29} {1}'.format('Plex Token', 'MISSING'))
+    #   7.     Tidy Genres: create dictionary containing the tidy genres from genres.tsv file located in plugins code directory
+    #                       unless second field is an 'x', it should appear in the COUNTRYSET or GENRESDICT
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 7.\tPrepare Tidied Dictionary of Genres and Countries')
+        global TIDYDICT
+        tidiedCountriesSet = set()                              # used for debugging
+        tidiedGenresSet = set()                                 # used for debugging
+        tidiedNullSet = set()                                   # used for debugging
+        tidiedErrorSet = set()                                  # used for debugging
+        try:
+            for tidy in ['GayTidy.txt', 'UserGayTidy.txt']:     # gaytidy has to be first in list as user can make changes
+                tidy_txt = os.path.join(PGMA_FOLDER, tidy)
+                txtfile = PlexLoadFile(tidy_txt)
+                txtrows = txtfile.split('\n')
+                for idx, row in enumerate(txtrows, start=1):
+                    if '::' not in row:
+                        log('START :: {0:<29} {1}'.format('Invalid Format Row', 'Row {0} - {1}'.format(idx, row)))
+                        continue
+
+                    keyValue = row.split('::')
+                    keyValue = [x.strip() for x in keyValue]
+                    key = keyValue[0].lower()
+                    value = keyValue[1]
+                    if key in TIDYDICT:
+                        log('START :: {0:<29} {1}'.format('Duplicate/Error Row', 'Row {0} - {1}'.format(idx, row)))
+                        continue
+
+                    TIDYDICT[key] = value if value != 'x' else None
+                    if value in COUNTRYSET:                 # useful for comparing cities, locations to the country they are in when debugging
+                        tidiedCountriesSet.add('{0} : {1}'.format(keyValue[0], value))
+                    elif value.lower() in GENRESDICT:
+                        tidiedGenresSet.add('{0} : {1}'.format(keyValue[0], value))
+                    elif value == 'x':
+                        tidiedNullSet.add('{0} : {1}'.format(keyValue[0], value))
+                    else:
+                        tidiedErrorSet.add('{0} : {1}'.format(keyValue[0], value))
+
+            log('START :: {0:<29} {1}'.format('Original Categories', '{0:>4} - {1}'.format(len(TIDYDICT), sorted(TIDYDICT.keys()))))
+            log('START :: {0:<29} {1}'.format('Tidied Countries', '{0:>4} - {1}'.format(len(tidiedCountriesSet), sorted(tidiedCountriesSet))))
+            log('START :: {0:<29} {1}'.format('Tidied Genres', '{0:>4} - {1}'.format(len(tidiedGenresSet), sorted(tidiedGenresSet))))
+            log('START :: {0:<29} {1}'.format('Null Categories', '{0:>4} - {1}'.format(len(tidiedNullSet), sorted(tidiedNullSet))))
+            log('START :: {0:<29} {1}'.format('Error Categories', '{0:>4} - {1}'.format(len(tidiedErrorSet), sorted(tidiedErrorSet))))
+
+        except Exception as e:
+            log('START :: Error creating Tidy Categories Dictionary: %s', e)   
+            log('START :: Error: Tidy Categories Source File: %s', tidy_txt)   
+            continueSetup = False
+
+    #   8.     Retrieve Plex Token
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 8.\tRetrieve Plex Token')
+        global PLEXTOKEN
         PLEXTOKEN = ''
+        if os.name == 'nt':
+            global MACHINEID
+            try:
+                preferences_xml = os.path.join(PlexSupportPath, 'preferences.xml').replace('Plex', 'Plex\Plex')
+                log('START :: {0:<29} {1}'.format('Preference XML', preferences_xml))
+                txtfile = PlexLoadFile(preferences_xml)
+                txtrows = txtfile.split('\n')
+                for row in txtrows:
+                    if 'PlexOnlineToken=' in row:
+                        item = row.split('PlexOnlineToken=')[1]
+                        item = item.split()[0].replace('"', '').strip()
+                        PLEXTOKEN = item
+
+                    if 'MachineIdentifier=' in row:
+                        item = row.split('MachineIdentifier=')[1]
+                        item = item.split()[0].replace('"', '').strip()
+                        MACHINEID = item
+
+                log('START :: {0:<29} {1}'.format('Machine ID', MACHINEID))
+
+            except Exception as e:
+                log('START :: Error retrieving Plex Token: %s', e)
+                log('START :: Error: Preferences XML File: %s', preferences_xml)
+        else:
+            PLEXTOKEN = Prefs['plextoken']
+
+        if PLEXTOKEN and PLEXTOKEN is not None:
+            log('START :: {0:<29} {1}'.format('Plex Token', '*' * len(PLEXTOKEN)))
+        else:
+            log('START :: {0:<29} {1}'.format('Plex Token', 'MISSING'))
+            PLEXTOKEN = ''
+            continueSetup = False
 
     #   9. Get paths to Default Posters for Agent, Compilations Genre, IAFD, Stacks
-    log(LOG_SUBLINE)
-    log('START :: 9.\Retrieve Agent and Default Posters')
-    global AGENT_POSTER, COMPILATIONS_POSTER, IAFD_POSTER, NOTIAFD_POSTER, STACKED_POSTER, NOTSTACKED_POSTER, NOCAST_POSTER, NODIRECTOR_POSTER, WATERMARK
-    AGENT_POSTER = os.path.join(PGMA_FOLDER, '_Standard','{0}.png'.format(AGENT))
-    AGENT_POSTER = AGENT_POSTER if os.path.exists(AGENT_POSTER) else ''
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 9.\tRetrieve Agent and Default Posters')
+        global AGENT_POSTER, COMPILATIONS_POSTER, IAFD_POSTER, NOTIAFD_POSTER, STACKED_POSTER, NOTSTACKED_POSTER, NOCAST_POSTER, NODIRECTOR_POSTER, WATERMARK
+        AGENT_POSTER = os.path.join(PGMA_FOLDER, '_Standard','{0}.png'.format(AGENT))
+        AGENT_POSTER = AGENT_POSTER if os.path.exists(AGENT_POSTER) else ''
 
-    COMPILATIONS_POSTER = os.path.join(PGMA_FOLDER, '_Standard','Compilations.png')
-    COMPILATIONS_POSTER = COMPILATIONS_POSTER if os.path.exists(COMPILATIONS_POSTER) else ''
+        COMPILATIONS_POSTER = os.path.join(PGMA_FOLDER, '_Standard','Compilations.png')
+        COMPILATIONS_POSTER = COMPILATIONS_POSTER if os.path.exists(COMPILATIONS_POSTER) else ''
 
-    IAFD_POSTER = os.path.join(PGMA_FOLDER, '_Standard','IAFD.png')
-    IAFD_POSTER = IAFD_POSTER if os.path.exists(IAFD_POSTER) else ''
+        IAFD_POSTER = os.path.join(PGMA_FOLDER, '_Standard','IAFD.png')
+        IAFD_POSTER = IAFD_POSTER if os.path.exists(IAFD_POSTER) else ''
 
-    NOTIAFD_POSTER = os.path.join(PGMA_FOLDER, '_Standard','NotIAFD.png')
-    NOTIAFD_POSTER = NOTIAFD_POSTER if os.path.exists(NOTIAFD_POSTER) else ''
+        NOTIAFD_POSTER = os.path.join(PGMA_FOLDER, '_Standard','NotIAFD.png')
+        NOTIAFD_POSTER = NOTIAFD_POSTER if os.path.exists(NOTIAFD_POSTER) else ''
 
-    STACKED_POSTER = os.path.join(PGMA_FOLDER, '_Standard','Stacked.png')
-    STACKED_POSTER = STACKED_POSTER if os.path.exists(STACKED_POSTER) else ''
+        STACKED_POSTER = os.path.join(PGMA_FOLDER, '_Standard','Stacked.png')
+        STACKED_POSTER = STACKED_POSTER if os.path.exists(STACKED_POSTER) else ''
 
-    NOTSTACKED_POSTER = os.path.join(PGMA_FOLDER, '_Standard','NotStacked.png')
-    NOTSTACKED_POSTER = NOTSTACKED_POSTER if os.path.exists(NOTSTACKED_POSTER) else ''
+        NOTSTACKED_POSTER = os.path.join(PGMA_FOLDER, '_Standard','NotStacked.png')
+        NOTSTACKED_POSTER = NOTSTACKED_POSTER if os.path.exists(NOTSTACKED_POSTER) else ''
 
-    NOCAST_POSTER = os.path.join(PGMA_FOLDER, '_Standard','NoCast.png')
-    NOCAST_POSTER = NOCAST_POSTER if os.path.exists(NOCAST_POSTER) else ''
+        NOCAST_POSTER = os.path.join(PGMA_FOLDER, '_Standard','NoCast.png')
+        NOCAST_POSTER = NOCAST_POSTER if os.path.exists(NOCAST_POSTER) else ''
 
-    NODIRECTOR_POSTER = os.path.join(PGMA_FOLDER, '_Standard','NoDirector.png')
-    NODIRECTOR_POSTER = NODIRECTOR_POSTER if os.path.exists(NODIRECTOR_POSTER) else ''
+        NODIRECTOR_POSTER = os.path.join(PGMA_FOLDER, '_Standard','NoDirector.png')
+        NODIRECTOR_POSTER = NODIRECTOR_POSTER if os.path.exists(NODIRECTOR_POSTER) else ''
 
-    WATERMARK = String.URLEncode(WATERMARK)
+        #WATERMARK = os.path.join(PGMA_FOLDER, '_Standard','Watermark.png')
+        #WATERMARK = WATERMARK if os.path.exists(WATERMARK) else ''
 
-    log('START :: {0:<29} {1}'.format('Agent Poster', AGENT_POSTER if AGENT_POSTER else '** FAIL **'))
-    log('START :: {0:<29} {1}'.format('Compilations Poster', COMPILATIONS_POSTER if COMPILATIONS_POSTER else '** FAIL **'))
-    log('START :: {0:<29} {1}'.format('IAFD Poster', IAFD_POSTER if IAFD_POSTER else '** FAIL **'))
-    log('START :: {0:<29} {1}'.format('Not IAFD Poster', NOTIAFD_POSTER if NOTIAFD_POSTER else '** FAIL **'))
-    log('START :: {0:<29} {1}'.format('Stacked Poster', STACKED_POSTER if STACKED_POSTER else '** FAIL **'))
-    log('START :: {0:<29} {1}'.format('Not Stacked Poster', NOTSTACKED_POSTER if NOTSTACKED_POSTER else '** FAIL **'))
-    log('START :: {0:<29} {1}'.format('No Cast Poster', NOCAST_POSTER if NOCAST_POSTER else '** FAIL **'))
-    log('START :: {0:<29} {1}'.format('No Director Poster', NODIRECTOR_POSTER if NODIRECTOR_POSTER else '** FAIL **'))
+        WATERMARK = String.URLEncode(WATERMARK)
 
-    # if any of the posters do not resolve we have to stop the Search Process: set GLOBAL variable and use later
-    global START_SCRAPE
-    START_SCRAPE = True if not tidiedErrorSet and AGENT_POSTER != '' and COMPILATIONS_POSTER != '' and IAFD_POSTER != '' and NOTIAFD_POSTER != '' and STACKED_POSTER != '' and NOTSTACKED_POSTER != '' and NOCAST_POSTER != '' and NODIRECTOR_POSTER != '' and PLEXTOKEN != '' else False
+        log('START :: {0:<29} {1}'.format('Agent Poster', AGENT_POSTER if AGENT_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('Compilations Poster', COMPILATIONS_POSTER if COMPILATIONS_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('IAFD Poster', IAFD_POSTER if IAFD_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('Not IAFD Poster', NOTIAFD_POSTER if NOTIAFD_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('Stacked Poster', STACKED_POSTER if STACKED_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('Not Stacked Poster', NOTSTACKED_POSTER if NOTSTACKED_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('No Cast Poster', NOCAST_POSTER if NOCAST_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('No Director Poster', NODIRECTOR_POSTER if NODIRECTOR_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('Watermark', WATERMARK if WATERMARK else '** FAIL **'))
 
-    log('START :: {0:<29} {1}'.format('Start Scrape Process', 'Passed' if START_SCRAPE else 'Failed'))
+        # if any of the posters do not resolve we have to stop the Search Process: set GLOBAL variable and use later
+        START_SCRAPE = 'Yes' if PLEXTOKEN and not tidiedErrorSet and AGENT_POSTER != '' and COMPILATIONS_POSTER != '' and IAFD_POSTER != '' and NOTIAFD_POSTER != '' and STACKED_POSTER != '' and NOTSTACKED_POSTER != '' and NOCAST_POSTER != '' and NODIRECTOR_POSTER != '' and PLEXTOKEN != '' and WATERMARK != '' else 'No'
 
-    # not needed anymore - free up memory
-    tidiedCountriesSet = None
-    tidiedGenresSet = None
-    tidiedNullSet = None
-    tidiedErrorSet = None
-    del(tidiedCountriesSet)
-    del(tidiedGenresSet)
-    del(tidiedNullSet)
-    del(tidiedErrorSet)
+        log('START :: {0:<29} {1}'.format('Start Scrape Process', START_SCRAPE))
+
+        # not needed anymore - free up memory
+        tidiedCountriesSet = None
+        tidiedGenresSet = None
+        tidiedNullSet = None
+        tidiedErrorSet = None
+        del(tidiedCountriesSet)
+        del(tidiedGenresSet)
+        del(tidiedNullSet)
+        del(tidiedErrorSet)
 
     return True
+
 # -------------------------------------------------------------------------------------------------------------------------------
 def showSetData(mySet, myString):
     myList = list(mySet)

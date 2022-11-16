@@ -39,7 +39,8 @@ AGENT = 'GEVI'
 # URLS
 BASE_URL = 'https://www.gayeroticvideoindex.com'
 BASE_SEARCH_URL = BASE_URL + '/shtt.php?draw=1&order[0][dir]=desc&start={0}&length=100&search[value]={1}&where={2}&_=1665855952743'
-WATERMARK = 'https://cdn3.iconfinder.com/data/icons/ellegant/32x32/4.png'
+#WATERMARK = 'https://cdn3.iconfinder.com/data/icons/ellegant/32x32/4.png'
+WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Date Formats used by website
 DATEFORMAT = '%Y%m%d'
@@ -48,7 +49,6 @@ DATEFORMAT = '%Y%m%d'
 SITE_LANGUAGE = 'en'
 
 # Preferences
-GROUPCOLLECTIONS = Prefs['groupcollections']        # choose to group collections by types or not
 COLCAST = Prefs['castcollection']                   # add cast collections
 COLCOUNTRY = Prefs['countrycollection']             # add country collections
 COLDIRECTOR = Prefs['directorcollection']           # add director collections
@@ -56,11 +56,11 @@ COLGENRE = Prefs['genrecollection']                 # add genres collections
 COLSERIES = Prefs['seriescollection']               # add series collections
 COLSTUDIO = Prefs['studiocollection']               # add studio name collections
 COLSYSTEM = Prefs['systemcollection']               # add system collections
+COUNTRYPOSTERTYPE = Prefs['countrypostertype']      # show poster as map or vertical flag
 DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
 DOWNLOADPOSTER = Prefs['downloadposter']            # Down film poster to disk, (renamed as film title + image extension)
 DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
 DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
-GROUPCOL = Prefs['groupcollections']                # group collections by Genre, Directors, and Cast
 MATCHIAFDDURATION = Prefs['matchiafdduration']      # Match against IAFD Duration value
 MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
 PLEXTOKEN = Prefs['plextoken']                      # Plex token from View XML of any library item
@@ -90,7 +90,6 @@ STACKED_POSTER = ''
 NOTSTACKED_POSTER = ''
 NOCAST_POSTER = ''
 NODIRECTOR_POSTER = ''
-START_SCRAPE = True
 
 # utils.log section separators
 LOG_BIGLINE = '-' * 140
@@ -153,43 +152,8 @@ class GEVI(Agent.Movies):
             myString = re.sub(pattern, ' ', myString)
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Pattern', pattern)))
 
-        # examine first word in string for numbers - only if an indefinite has not been determined i.e skip stuff like <The 1980S>
-        myWords = myString.split()
-        pattern = r'[0-9]'
-        matched = re.search(pattern, myWords[0])  # match against whole word
-        if matched:
-            numPos = matched.start()
-            if numPos > 0:
-                myWord = myWords[0]
-                myWords[0] = myWords[0][:numPos]
-                myString = ' '.join(myWords)
-                utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Split 1st Word at', numPos, myWord)))
-
-        # if length of search string is less than 6 characters - change search from starting with to containing - determined by adding ~~
-        if len(myString) < 6:
-            myString = '{0}~~'.format(myString)
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Changed Search Type', 'Appended ~~')))
-
-        utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Post 1st Word Analysis', myString)))
-
-        # examine subsequent words in string for numbers
-        myWords = myString.split()
-        pattern = r'[0-9]'
-        matched = re.search(pattern, ' '.join(myWords[1:]))  # match against whole string
-        if matched:
-            numPos = matched.start() + len(myWords[0])
-            myString = myString[:numPos]
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Split at Pattern Match', numPos, pattern)))
-
         # remove continuous spaces in string
         myString = ' '.join(myString.split())
-
-        # GEVI uses a maximum of 24 characters when searching - pick whole words no longer than this
-        if len(myString) > 23:
-            lastSpace = myString[:24].rfind(' ')
-            myString = myString[:lastSpace]
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: "{1} <= 24"'.format('Search Query Length', lastSpace)))
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: "{1}"'.format('Shorten Search Query', myString[:lastSpace])))
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())
@@ -206,14 +170,18 @@ class GEVI(Agent.Movies):
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
+            utils.log(LOG_ASTLINE)
             utils.log('SEARCH:: {0:<29} {1}'.format('Error: Missing Media Item File', 'QUIT'))
+            utils.log(LOG_ASTLINE)
             return
 
         #clear-cache directive
         if media.name == "clear-cache":
             HTTP.ClearCache()
             results.Append(MetadataSearchResult(id='clear-cache', name='Plex web cache cleared', year=media.year, lang=lang, score=0))
+            utils.log(LOG_ASTLINE)
             utils.log('SEARCH:: {0:<29} {1}'.format('Warning: Clear Cache Directive Encountered', 'QUIT'))
+            utils.log(LOG_ASTLINE)
             return
 
         utils.logHeader('SEARCH', media, lang)
@@ -225,7 +193,9 @@ class GEVI(Agent.Movies):
             FILMDICT['Agent'] = AGENT
             FILMDICT['Status'] = False
         except Exception as e:
+            utils.log(LOG_ASTLINE)
             utils.log('SEARCH:: Error: %s', e)
+            utils.log(LOG_ASTLINE)
             return
 
         utils.log(LOG_BIGLINE)
@@ -453,11 +423,11 @@ class GEVI(Agent.Movies):
                         for idx, fhtmlURL in enumerate(fhtmlURLs, start=1):
                             key = 'AEBNiii' if 'aebn' in fhtmlURL else 'GayHotMovies' if 'gayhotmovies' in fhtmlURL else 'GayDVDEmpire' if 'gaydvdempire' in fhtmlURL else ''
                             utils.log('SEARCH:: {0:<29} {1}'.format('External Sites Found' if idx ==1 else '', '{0:>2} - {1:<15} - {2}'.format(idx, key, fhtmlURL)))
-                            if key not in webLinks:
+                            if key and key not in webLinks:
                                 webLinks[key] = fhtmlURL
 
                         for key in ['AEBNiii', 'GayHotMovies', 'GayDVDEmpire']:                  # access links in this order: break after processing first external link
-                            try:
+                            if key in webLinks:
                                 vFilmURL = webLinks[key]
                                 vFilmHTML = HTML.ElementFromURL(vFilmURL, timeout=60, errors='ignore', sleep=DELAY)
                                 FILMDICT[key] = utils.getSiteInfo(key, FILMDICT, kwFilmURL=vFilmURL, kwFilmHTML=vFilmHTML)
@@ -472,10 +442,6 @@ class GEVI(Agent.Movies):
                                 vReleaseDate = extReleaseDate if extReleaseDate is not None and extReleaseDate < vReleaseDate else vReleaseDate
 
                                 break       # external info retrieved
-
-                            except Exception as e:
-                                utils.log('SEARCH:: Error reading External %s URL Link: %s', key, e)
-                                continue    # next external site
 
                     except Exception as e:
                         utils.log('SEARCH:: No External Links Recorded: %s', e)
