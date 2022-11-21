@@ -1,12 +1,5 @@
 [
     {
-        "id": "delay",
-        "label": "Seconds to pause after a network request was made, ensuring undue burden is not placed on the web server",
-        "type": "enum",
-        "values": ["3", "6", "12", "18", "24", "30"],
-        "default": "6"
-    },
-    {
         "id": "matchiafdduration",
         "label": "Match against IAFD's recorded film/scene length",
         "type": "bool",
@@ -45,7 +38,7 @@
     },
     {
         "id": "plextoken",
-        "label": "Non-Windows Only: View the XML for Film and get X-Plex-Token value from URL",
+        "label": "If your system cannot find it automatically: Retrieve <<X-Plex-Token>> from Film's URL when viewing the XML",
         "type": "text",
         "default": ""
     },
@@ -62,10 +55,11 @@
         "default": "false"
     },
     {
-        "id": "downloadposter",
-        "label": "Download Poster to Disk (Filename + image extension)",
-        "type": "bool",
-        "default": "false"
+        "id": "postersourcedownload",
+        "label": "Choose Poster Source and whether to download to Disk",
+        "type": "enum",
+        "values": ["Local - No", "External - No", "Local - Yes", "External - Yes"],
+        "default": "Local - No"
     },
     {
         "id": "systemcollection",

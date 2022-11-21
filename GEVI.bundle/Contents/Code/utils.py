@@ -80,6 +80,12 @@ LOG_ASTLINE = '*' * 140
 # getHTTPRequest variable
 scraper = None
 # ----------------------------------------------------------------------------------------------------------------------------------
+def delay():
+    delayList = [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
+    delay = random.choice(delayList)
+    return delay
+
+# ----------------------------------------------------------------------------------------------------------------------------------
 def findTidy(myItem):
     myItem = myItem.lower()
     myNewItem = TIDYDICT[myItem] if myItem in TIDYDICT else ''
@@ -165,20 +171,19 @@ def getDirectors(agntDirectorList, FILMDICT):
     return directorDict
 
 # -------------------------------------------------------------------------------------------------------------------------------
-def getFilmImages(imageType, imageURL, whRatio):
+def getFilmImages(imageType, imageLocation, whRatio):
     ''' Only for Scene Agents: get Film images - posters/background art and crop if necessary '''
     Thumbor = THUMBOR + "/0x0:{0}x{1}/{2}"
     vbScript = os.path.join(PlexSupportPath, 'Plug-ins', '{0}.bundle'.format(AGENT), 'Contents', 'Code', 'ImageCropper.vbs')
     Cropper = r'CScript.exe "{0}" "{1}" "{2}" "{3}"'
 
-    imageLocation = imageURL
     imageContent = HTTP.Request(imageLocation).content
     myImage = Image.open(BytesIO(imageContent))
     width, height = myImage.size
     dispWidth = '{:,d}'.format(width)       # thousands separator
     dispHeight = '{:,d}'.format(height)     # thousands separator
 
-    log('UTILS :: {0} Found: Width ({1}) x Height ({2}); URL: {3}'.format(imageType, dispWidth, dispHeight, imageURL))
+    log('UTILS :: {0} Found: Width ({1}) x Height ({2}); URL: {3}'.format(imageType, dispWidth, dispHeight, imageLocation))
 
     maxHeight = float(width * whRatio)      # Maximum allowable height
 
@@ -198,42 +203,31 @@ def getFilmImages(imageType, imageURL, whRatio):
     log('UTILS :: Crop {0} {1}: Actual (w{2} x h{3}), Desired (w{4} x h{5}), % Dx = w[{6}%] x h[{7}%]'.format("Required:" if cropRequired else "Not Required:", imageType, dispWidth, dispHeight, desiredWidth, desiredHeight, DxWidth, DxHeight))
     if cropRequired:
         try:
-            imageContent = myImage.crop((0, 0, desiredWidth, desiredHeight))
-            pic = os.path.join(TempFolder, imageURL.split("/")[-1])
-            log('UTILS :: Python PIL Crop Image: {0}'.format(pic))
-            log('UTILS ::    Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
-            PlexSaveFile(pic, imageContent)
-            time.sleep(2)
-            imageContent = PlexLoadFile(pic)
+            imageLocation = Thumbor.format(cropWidth, cropHeight, imageLocation)
+            log('UTILS :: Thumbor - Crop Image: {0}'.format(imageLocation))
+            log('UTILS ::   Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
+            imageContent = HTTP.Request(imageLocation).content
 
         except Exception as e:
-            log('UTILS :: Error Python PIL Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
-            try:
-                pic = Thumbor.format(cropWidth, cropHeight, imageURL)
-                log('UTILS :: Thumbor - Crop Image: {0}'.format(pic))
-                log('UTILS ::   Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
-                imageContent = HTTP.Request(pic).content
+            log('UTILS :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, imageLocation, e))
+            if os.name == 'nt':
+                try:
+                    envVar = os.environ
+                    TempFolder = envVar['TEMP']
+                    imageLocation = os.path.join(TempFolder, imageLocation.split("/")[-1])
+                    PlexSaveFile(imageLocation, imageContent)
+                    cmd = Cropper.format(vbScript, imageLocation, cropWidth, cropHeight)
+                    log('UTILS ::')
+                    log('UTILS :: Script - Crop Image: {0}'.format(imageLocation))
+                    log('UTILS ::  Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
+                    log('UTILS ::        Command Line: {0}'.format(cmd))
+                    subprocess.call(cmd)
+                    time.sleep(2)
+                    imageContent = PlexLoadFile(imageLocation)
+                except Exception as e:
+                    log('UTILS :: Error Script Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, imageLocation, e))
 
-            except Exception as e:
-                log('UTILS :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
-                if os.name == 'nt':
-                    try:
-                        envVar = os.environ
-                        TempFolder = envVar['TEMP']
-                        pic = os.path.join(TempFolder, imageURL.split("/")[-1])
-                        PlexSaveFile(pic, imageContent)
-                        cmd = Cropper.format(vbScript, pic, cropWidth, cropHeight)
-                        log('UTILS ::')
-                        log('UTILS :: Script - Crop Image: {0}'.format(pic))
-                        log('UTILS ::  Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
-                        log('UTILS ::        Command Line: {0}'.format(cmd))
-                        subprocess.call(cmd)
-                        time.sleep(2)
-                        imageContent = PlexLoadFile(pic)
-                    except Exception as e:
-                        log('UTILS :: Error Script Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
-
-    return pic, imageContent
+    return imageLocation, imageContent
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def getFilmOnIAFD(FILMDICT):
@@ -384,8 +378,8 @@ def getFilmOnIAFD(FILMDICT):
                     try:
                         value = externalDict[key]
                         ################################ needs looking at to get Location response header - ask group.......
-                        xSiteHTML = HTML.ElementFromURL(value, timeout=60, errors='ignore', sleep=DELAY)
-                        # xhtml = HTML.ElementFromURL(value, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36"},timeout=60, errors='ignore', sleep=DELAY)
+                        xSiteHTML = HTML.ElementFromURL(value, timeout=60, errors='ignore', sleep=delay())
+                        # xhtml = HTML.ElementFromURL(value, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36"},timeout=60, errors='ignore', sleep=delay())
                         # xhtml = getURLElement(value)
                         FILMDICT[key] = getSiteInfo(key, FILMDICT, kwFilmURL=value, kwFilmHTML=xSiteHTML)
                         # change Compilation to 'Yes' if one result is not the default 'No'
@@ -696,7 +690,7 @@ def getIAFDArtist(artistURL):
 
     return artist
 # -------------------------------------------------------------------------------------------------------------------------------
-def getPicContent(imageLocation, entry, picType):
+def getImage(imageLocation, entry, picType):
     ''' Used for getting flag images, actors and directors pictures - Deceased Actors/Directors shown in GrayScale'''
 
     imageContent = None
@@ -1330,7 +1324,7 @@ def getSiteInfoAEBNiii(FILMDICT, **kwargs):
                         else:
                             mySource = 'N/A'
                             reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
-                            log('UTILS :: Warning No Review Source (Used Film Title)')
+                            log('UTILS :: Warning: No Review Source (Used Film Title)')
 
                         log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
 
@@ -1506,13 +1500,13 @@ def getSiteInfoAVEntertainments(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -1944,7 +1938,7 @@ def getSiteInfoCDUniverse(FILMDICT, **kwargs):
                         else:
                             mySource = 'N/A'
                             reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
-                            log('UTILS :: Warning No Review Source (Used Film Title)')
+                            log('UTILS :: Warning: No Review Source (Used Film Title)')
 
                         log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
 
@@ -2106,13 +2100,13 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -2416,7 +2410,7 @@ def getSiteInfoGayDVDEmpire(FILMDICT, **kwargs):
                     # Review Source - GayDVDEmpire has no Cast List per Scene, use iafd scenes cast or Film title in that order of preference
                     reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
                     mySource = 'N/A'
-                    log('UTILS :: Warning No Review Source (Used Film Title)')
+                    log('UTILS :: Warning: No Review Source (Used Film Title)')
                     log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
 
                     # Review Author - default to website name
@@ -2724,7 +2718,7 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
                         else:
                             mySource = 'N/A'
                             reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
-                            log('UTILS :: Warning No Review Source (Used Film Title)')
+                            log('UTILS :: Warning: No Review Source (Used Film Title)')
 
                         log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
 
@@ -2865,13 +2859,13 @@ def getSiteInfoGayFetishandBDSM(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -3006,13 +3000,13 @@ def getSiteInfoGayMovie(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -3294,13 +3288,13 @@ def getSiteInfoGayWorld(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -3412,22 +3406,30 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
         try:
             # GEVI has access to external websites: AEBN, GayHotMovies, then GayDVDEmpire
             htmldirectors = html.xpath('//a[contains(@href, "/director/")]/text()')
-            htmldirectors = [x.strip() for x in htmldirectors if x.strip()]
+            htmldirectors = [x.split('(')[0].strip() for x in htmldirectors if x.strip()]
             directors = list(set(htmldirectors))
             directorsLength = len(directors)
             directors.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('GEVI Directors', '{0:>2} - {1}'.format(len(directors), sorted(directors))))
-
             for key in ['AEBNiii', 'GayHotMovies', 'GayDVDEmpire']:
-                if key in FILMDICT and FILMDICT[key] != {}:
-                    if 'Directors' in FILMDICT[key] and FILMDICT[key]['Directors'] != set():
-                        if len(FILMDICT[key]['Directors']) > directorsLength:
-                            directors = FILMDICT[key]['Directors']
-                            log('UTILS :: {0:<29} {1}'.format('External Directors', '{0} - {1}'.format(key), directors))
-                            break
+                myExternalAgentDict = FILMDICT.get(key, '')
+                if myExternalAgentDict:
+                    myExternalDirectors = myExternalAgentDict.get('Directors', '')
+                    if myExternalDirectors:
+                        log('UTILS :: {0:<29} {1}'.format('{0} Directors'.format(key), '{0:>2} - {1}'.format(len(myExternalDirectors), sorted(myExternalDirectors))))
+                        directors = list(set(directors + myExternalDirectors))
+                        # combine both lists and create a case insensitive List
+                        combinedDirectors = list(set(directors + myExternalDirectors))
+                        s = set()
+                        directors = []
+                        for x in combinedDirectors:
+                            if x.lower() not in s:
+                                s.add(x.lower())
+                                directors.append(x)                        
+                        directors.sort(key = lambda x: x.lower())
 
             siteInfoDict['Directors'] = directors[:]
-            log('UTILS :: {0:<29} {1}'.format('Director(s)', '{0:>2} - {1}'.format(len(directors), directors)))
+            log('UTILS :: {0:<29} {1}'.format('Combined Director(s)', '{0:>2} - {1}'.format(len(directors), directors)))
 
         except Exception as e:
             siteInfoDict['Directors'] = []
@@ -3438,22 +3440,29 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
         try:
             # GEVI has access to external websites: AEBN, GayHotMovies, then GayDVDEmpire
             htmlcast = html.xpath('//a[contains(@href, "/performer/")]//text()')
-            htmlcast = [x.strip() for x in htmlcast if x.strip()]
+            htmlcast = [x.split('(')[0].strip() for x in htmlcast if x.strip()]
             cast = list(set(htmlcast))
             castLength = len(cast)
             cast.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('GEVI Cast', '{0:>2} - {1}'.format(castLength, cast)))
-
             for key in ['AEBNiii', 'GayHotMovies', 'GayDVDEmpire']:
-                if key in FILMDICT and FILMDICT[key] != {}:
-                    if 'Cast' in FILMDICT[key] and FILMDICT[key]['Cast'] != set():
-                        if len(FILMDICT[key]['Cast']) > castLength:
-                            cast = FILMDICT[key]['Cast']
-                            log('UTILS :: {0:<29} {1}'.format('External Cast', '{0} - {1}'.format(key), sorted(cast)))
-                            break
+                myExternalAgentDict = FILMDICT.get(key, '')
+                if myExternalAgentDict:
+                    myExternalCast = myExternalAgentDict.get('Cast', '')
+                    if myExternalCast:
+                        log('UTILS :: {0:<29} {1}'.format('{0} Cast'.format(key), '{0:>2} - {1}'.format(len(myExternalCast), sorted(myExternalCast))))
+                        # combine both lists and create a case insensitive List
+                        combinedCast = list(set(cast + myExternalCast))
+                        s = set()
+                        cast = []
+                        for x in combinedCast:
+                            if x.lower() not in s:
+                                s.add(x.lower())
+                                cast.append(x)                        
+                        cast.sort(key = lambda x: x.lower())
 
             siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+            log('UTILS :: {0:<29} {1}'.format('Combined Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
         except Exception as e:
             siteInfoDict['Cast'] = []
@@ -3523,13 +3532,13 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -3707,7 +3716,7 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
                         else:
                             mySource = 'N/A'
                             reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
-                            log('UTILS :: Warning No Review Source (Used Film Title)')
+                            log('UTILS :: Warning: No Review Source (Used Film Title)')
 
                         log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
 
@@ -4031,13 +4040,13 @@ def getSiteInfoHomoActive(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     genresSet.add(newItem)
 
                 showSetData(genresSet, 'Genres (set*)')
@@ -4208,13 +4217,13 @@ def getSiteInfoIAFD(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -4227,7 +4236,7 @@ def getSiteInfoIAFD(FILMDICT, **kwargs):
                 rolesSet = {cast[x]['Role'] for x in siteInfoDict['Cast'].keys()}
                 rolesSet = {x for x in rolesSet if 'AKA' not in x and x != IAFD_FOUND}
                 rolesSet = set(' '.join(rolesSet).split())
-                log('UTILS :: {0:<29} {1}'.format('Roles Word Count', '{0:>3} - {1}'.format(len(rolesSet), rolesSet)))
+                log('UTILS :: {0:<29} {1}'.format('Roles Word Count', '{0:>2} - {1}'.format(len(rolesSet), rolesSet)))
                 for idx, item in enumerate(rolesSet, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
@@ -4455,13 +4464,13 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -4611,13 +4620,13 @@ def getSiteInfoSimplyAdult(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -4784,13 +4793,13 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -5052,7 +5061,7 @@ def getSiteInfoWolffVideo(FILMDICT, **kwargs):
                         else:
                             mySource = 'N/A'
                             reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
-                            log('UTILS :: Warning No Review Source (Used Film Title)')
+                            log('UTILS :: Warning: No Review Source (Used Film Title)')
 
                         log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
 
@@ -5198,13 +5207,12 @@ def logHeader(myFunc, media, lang):
     log('%s::      > Series:                        %s', myFunc, COLSERIES)
     log('%s::      > Directors:                     %s', myFunc, COLDIRECTOR)
     log('%s::      > Cast:                          %s', myFunc, COLCAST)
-    log('%s::  > Download Poster Image to Disk      %s', myFunc, DOWNLOADPOSTER)
+    log('%s::  > Poster Source - Download?          %s', myFunc, POSTERSOURCEDOWNLOAD)
     log('%s::  > Match IAFD Duration:               %s', myFunc, MATCHIAFDDURATION)
     log('%s::  > Match Site Duration:               %s', myFunc, MATCHSITEDURATION)
     log('%s::  > Duration Dx                        ±%s Minutes', myFunc, DURATIONDX)
     log('%s::  > Language Detection:                %s', myFunc, DETECT)
     log('%s::  > Library:Site Language:             (%s:%s)', myFunc, lang, SITE_LANGUAGE)
-    log('%s::  > Network Request Delay:             %s Seconds', myFunc, DELAY)
     log('%s:: Media Title:                          %s', myFunc, media.title)
     log('%s:: File Path:                            %s', myFunc, media.items[0].parts[0].file)
     log(LOG_ASTLINE)
@@ -6140,8 +6148,8 @@ def setMetadata(metadata, media, FILMDICT):
 
     collectionsDict = {}             # used to create collections that have extra information like cast photos, country flags etc order by Sort title
     deathRegex = r'Date of Death|Year of Death|would be'.replace(' ', NOBREAK_SPACE)
-    errorHFlag = os.path.join(PGMA_HFLAGFOLDER, '_Error.png')
-    errorVFlag = os.path.join(PGMA_VFLAGFOLDER, '_Error.png')
+    errorCountryArt = os.path.join(PGMA_COUNTRYART, '_Error.png')
+    errorCountryPosterFlag = os.path.join(PGMA_COUNTRYPOSTERFLAGS, '_Error.png')
 
     log('UTILS :: 1.  Set Metadata from File Name and Default Settings:')
 
@@ -6316,7 +6324,7 @@ def setMetadata(metadata, media, FILMDICT):
 
         # 2e.   Countries
         log(LOG_SUBLINE)
-        countryBackground = ''
+        countryArt = ''
         countryPoster = ''
         try:
             if RESETMETA:
@@ -6330,24 +6338,24 @@ def setMetadata(metadata, media, FILMDICT):
             listCountries.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('2e. Countries', '{0:>2} - {1}'.format(len(listCountries), listCountries)))
             for idx, item in enumerate(listCountries, start=1):
-                countryBackground = os.path.join(PGMA_HFLAGFOLDER, '{0}.png'.format(item))
-                countryBackground = countryBackground if os.path.exists(countryBackground) else errorHFlag
+                countryArt = os.path.join(PGMA_COUNTRYART, '{0}.png'.format(item))
+                countryArt = countryArt if os.path.exists(countryArt) else errorCountryArt
 
                 # use map as country posters, if missing use vertical flag of country or error flag if that is also missing
-                flagPoster = os.path.join(PGMA_VFLAGFOLDER, '{0}.png'.format(item))
+                flagPoster = os.path.join(PGMA_COUNTRYPOSTERFLAGS, '{0}.png'.format(item))
                 if COUNTRYPOSTERTYPE == 'Map':
-                    mapPoster = os.path.join(PGMA_MAPSFOLDER, '{0}.jpg'.format(item))
-                    countryPoster = mapPoster if os.path.exists(mapPoster) else flagPoster if os.path.exists(flagPoster) else errorVFlag
+                    mapPoster = os.path.join(PGMA_COUNTRYPOSTERMAPS, '{0}.jpg'.format(item))
+                    countryPoster = mapPoster if os.path.exists(mapPoster) else flagPoster if os.path.exists(flagPoster) else errorCountryPosterFlag
                 else:
                     # use vertical flag as poster or error flag if missing
-                    countryPoster = flagPoster if os.path.exists(flagPoster) else errorVFlag
+                    countryPoster = flagPoster if os.path.exists(flagPoster) else errorCountryPosterFlag
 
                 log('UTILS :: {0:<29} {1}'.format('Country' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
                 metadata.countries.add(item)
                 # Process Countries
                 if COLCOUNTRY:
                     entry = '{0} {1}'.format(COLCOUNTRY, item)
-                    collectionsDict[entry] = {'Poster': countryPoster, 'Art': countryBackground, 'Summary': ''}
+                    collectionsDict[entry] = {'Poster': countryPoster, 'Art': countryArt, 'Summary': ''}
 
         except Exception as e:
             log('UTILS :: Error setting Countries: %s', e)
@@ -6410,8 +6418,8 @@ def setMetadata(metadata, media, FILMDICT):
 
                     entry = '{0} {1}[d]'.format(COLCAST, entry) if re.search(deathRegex, summary, re.IGNORECASE) else '{0} {1}'.format(COLCAST, entry)
                     myNationality = castDict[item]['Nationality'].split(',')[-1].strip() if castDict[item]['Nationality'] else ''
-                    myFlag = os.path.join(PGMA_HFLAGFOLDER, '{0}.png'.format(myNationality)) if myNationality else ''
-                    art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else errorHFlag
+                    myFlag = os.path.join(PGMA_COUNTRYART, '{0}.png'.format(myNationality)) if myNationality else ''
+                    art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else errorCountryArt
                     collectionsDict[entry] = {'Poster': castDict[item]['Photo'], 'Art': art, 'Summary': summary}
 
         except Exception as e:
@@ -6463,8 +6471,8 @@ def setMetadata(metadata, media, FILMDICT):
                     summary = ' '.join(myBioList)
                     entry = '{0} {1}[d]'.format(COLDIRECTOR, entry) if re.search(deathRegex, summary, re.IGNORECASE) else '{0} {1}'.format(COLDIRECTOR, entry)
                     myNationality = directorDict[item]['Nationality'].split(',')[-1].strip() if directorDict[item]['Nationality'] else ''
-                    myFlag = os.path.join(PGMA_HFLAGFOLDER, '{0}.png'.format(myNationality)) if myNationality else ''
-                    art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else errorHFlag
+                    myFlag = os.path.join(PGMA_COUNTRYART, '{0}.png'.format(myNationality)) if myNationality else ''
+                    art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else errorCountryArt
                     collectionsDict[entry] = {'Poster': directorDict[item]['Photo'], 'Art': art, 'Summary': summary}
 
         except Exception as e:
@@ -6483,23 +6491,46 @@ def setMetadata(metadata, media, FILMDICT):
 
             poster = myAgentDict['Poster']
             log('UTILS :: {0:<29} {1}'.format('2h. Poster Images', poster if poster else 'None Found'))
-            for idx, item in enumerate(poster, start=1):
-                log('UTILS :: {0:<29} {1}'.format('Poster' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
+            if len(poster) == 1:
+                item = poster[0]
                 if FILMDICT['SceneAgent']:
-                    pic, picContent = getFilmImages(imageType='Poster', imageURL=item, whRatio=1.5)
+                    image, imageContent = getFilmImages(imageType='Poster', imageLocation=item, whRatio=1.5)
                 else:
-                    pic = item
-                    picContent = HTTP.Request(item).content
+                    image = item
+                    imageContent = HTTP.Request(item).content
 
-                metadata.posters[pic] = Proxy.Media(picContent, sort_order=idx)
+                metadata.posters[image] = Proxy.Media(imageContent, sort_order=1)
 
                 # save poster to disk
-                if DOWNLOADPOSTER:
+                if 'Yes' in POSTERSOURCEDOWNLOAD:
                     extension = item.split('.')[-1].split('?')[0]
                     filename = os.path.splitext(media.items[0].parts[0].file)[0]
-                    downloadPoster = '{0}.{1}'.format(filename, extension) if idx ==  1 else '{0}-{1}.{2}'.format(filename, idx - 1, extension)
+                    downloadPoster = '{0}.{1}'.format(filename, extension)
                     log('UTILS :: {0:<29} {1}'.format('Downloaded Poster', downloadPoster))
-                    PlexSaveFile(downloadPoster, picContent)
+                    PlexSaveFile(downloadPoster, imageContent)
+
+            elif len(poster) == 2:
+                for idx, item in enumerate(poster, start=1):
+                    log('UTILS :: {0:<29} {1}'.format('Poster' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
+                    if FILMDICT['SceneAgent']:
+                        image, imageContent = getFilmImages(imageType='Poster', imageLocation=item, whRatio=1.5)
+                    else:
+                        image = item
+                        imageContent = HTTP.Request(item).content
+
+                    metadata.posters[image] = Proxy.Media(imageContent, sort_order=idx)
+
+                    # save poster to disk
+                    if 'Yes' in POSTERSOURCEDOWNLOAD:
+                        extension = item.split('.')[-1].split('?')[0]
+                        filename = os.path.splitext(media.items[0].parts[0].file)[0]
+                        if 'Local' in POSTERSOURCEDOWNLOAD:
+                            downloadPoster = '{0}.{1}'.format(filename, extension) if idx == 1 else '{0}-{1}.{2}'.format(filename, idx, extension)
+                        elif 'External' in POSTERSOURCEDOWNLOAD:
+                            downloadPoster = '{0}.{1}'.format(filename, extension) if idx == len(poster) else '{0}-{1}.{2}'.format(filename, idx, extension)
+
+                        log('UTILS :: {0:<29} {1}'.format('Downloaded Poster', downloadPoster))
+                        PlexSaveFile(downloadPoster, imageContent)
 
         except Exception as e:
             log('UTILS :: Error setting Poster: %s', e)
@@ -6521,12 +6552,12 @@ def setMetadata(metadata, media, FILMDICT):
                 for idx, item in enumerate(art, start=1):
                     log('UTILS :: {0:<29} {1}'.format('Art' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
                     if FILMDICT['SceneAgent']:
-                        pic, picContent = getFilmImages(imageType='Art', imageURL=item, whRatio=0.5625)
+                        image, imageContent = getFilmImages(imageType='Art', imageLocation=item, whRatio=0.5625)
                     else:
-                        pic = item
-                        picContent = HTTP.Request(item).content
+                        image = item
+                        imageContent = HTTP.Request(item).content
 
-                    metadata.art[pic] = Proxy.Media(picContent, sort_order=idx)
+                    metadata.art[image] = Proxy.Media(imageContent, sort_order=idx)
             else:
                 log('UTILS :: {0:<29} {1}'.format('Art Image', 'Not Set By Preference'))
 
@@ -6544,26 +6575,30 @@ def setMetadata(metadata, media, FILMDICT):
                 scenes = FILMDICT['IAFD']['Scenes']
                 source = 'IAFD'
 
-            scenesLink = scenes['Link']
-            del scenes['Link']
-            log('UTILS :: {0:<29} {1}'.format('2j. Scenes Link', '{0}: {1}'.format(source, scenesLink)))
-            log('UTILS :: {0:<29} {1}'.format('Scenes', '{0}: {1} - {2}'.format(source, len(scenes), scenes)))
-            if scenes != {}:
-                if RESETMETA:
-                    metadata.reviews.clear()
+            scenesLink = scenes.get('Link', '')
+            if scenesLink:
+                del scenes['Link']
+                log('UTILS :: {0:<29} {1}'.format('2j. Scenes Link', '{0}: {1}'.format(source, scenesLink)))
+                log('UTILS :: {0:<29} {1}'.format('Scenes', '{0}: {1} - {2}'.format(source, len(scenes), scenes)))
+                if scenes != {}:
+                    if RESETMETA:
+                        metadata.reviews.clear()
 
-                for idx, item in enumerate(scenes, start=1):
-                    scene = str(idx)
-                    if not scenes[scene]['Text']:                     # if no review text - skip
-                        continue
-                    newReview = metadata.reviews.new()
-                    newReview.author = scenes[scene]['Author']
-                    newReview.link  = scenesLink
-                    newReview.source = scenes[scene]['Source']
-                    newReview.text = scenes[scene]['Text']
-                    log('UTILS :: {0:<29} {1}'.format('Created Reviews' if idx == 1 else '', '{0}: {1}'.format(idx, newReview.author)))
+                    for idx, item in enumerate(scenes, start=1):
+                        scene = str(idx)
+                        if not scenes[scene]['Text']:                     # if no review text - skip
+                            continue
+                        newReview = metadata.reviews.new()
+                        newReview.author = scenes[scene]['Author']
+                        newReview.link  = scenesLink
+                        newReview.source = scenes[scene]['Source']
+                        newReview.text = scenes[scene]['Text']
+                        log('UTILS :: {0:<29} {1}'.format('Created Reviews' if idx == 1 else '', '{0}: {1}'.format(idx, newReview.author)))
+                else:
+                    log('UTILS :: Warning: No Scenes / Reviews Found!')
+
             else:
-                log('UTILS :: Warning No Scenes / Reviews Found!')
+                log('UTILS :: Warning: Agent Has No Scenes / Reviews Set!')
 
         except Exception as e:
             log('UTILS :: Error setting Reviews: %s', e)
@@ -6587,7 +6622,7 @@ def setMetadata(metadata, media, FILMDICT):
                     newChapter.end_time_offset = chapters[chapter]['EndTime']
                     log('UTILS :: {0:<29} {1}'.format('Created Chapters' if idx == 1 else '', '{0}: {1}'.format(idx, newChapter.title)))
             else:
-                log('UTILS :: Warning No Chapters Found!')
+                log('UTILS :: Warning: No Chapters Found!')
 
         except Exception as e:
             log('UTILS :: Error setting Chapters: %s', e)
@@ -6638,7 +6673,7 @@ def setMetadata(metadata, media, FILMDICT):
                         websiteCollectionList = myAgentDict['Collections']
                         for idx, item in enumerate(websiteCollectionList, start=1):
                             entry = '{0} {1}: {2}'.format(COLSTUDIO if COLSTUDIO else COLSERIES, studio, item)
-                            collectionsDict[entry] = {'Poster': '', 'Art': countryBackground, 'Summary': ''}
+                            collectionsDict[entry] = {'Poster': '', 'Art': countryArt, 'Summary': ''}
                 except Exception as e:
                     log('UTILS :: Error Collating Website Series Collections: %s', e)
 
@@ -6647,7 +6682,7 @@ def setMetadata(metadata, media, FILMDICT):
                     seriesList = FILMDICT['Series']
                     for idx, item in enumerate(seriesList, start=1):
                         entry = '{0} {1}: {2}'.format(COLSTUDIO if COLSTUDIO else COLSERIES, studio, item)
-                        collectionsDict[entry] = {'Poster': '', 'Art': countryBackground, 'Summary': ''}
+                        collectionsDict[entry] = {'Poster': '', 'Art': countryArt, 'Summary': ''}
 
                 except Exception as e:
                     log('UTILS :: Error Collating Derived Series Collections: %s', e)
@@ -6655,39 +6690,41 @@ def setMetadata(metadata, media, FILMDICT):
             # Process Studio Name:
             if COLSTUDIO:
                 entry = '{0} {1}'.format(COLSTUDIO, studio)
-                collectionsDict[entry] = {'Poster': '', 'Art': countryBackground, 'Summary': ''}
+                collectionsDict[entry] = {'Poster': '', 'Art': countryArt, 'Summary': ''}
 
-            # Default Collections
-            try:
-                # Agent Collection
-                entry = '{0} {1}'.format(COLSYSTEM, myAgent)
-                collectionsDict[entry] = {'Poster': AGENT_POSTER, 'Art': '', 'Summary': ''}
+            # System Collections
+            if COLSYSTEM:
+                try:
+                    # Agent Collection
+                    entry = '{0} {1}'.format(COLSYSTEM, myAgent)
+                    collectionsDict[entry] = {'Poster': AGENT_POSTER, 'Art': '', 'Summary': ''}
 
-                # IAFD : On or Not On - Collection
-                entry = '{0} {1}-IAFD'.format(COLSYSTEM, 'On' if FILMDICT['FoundOnIAFD'] == 'Yes' else 'Not On')
-                collectionsDict[entry] = {'Poster': IAFD_POSTER if FILMDICT['FoundOnIAFD'] == 'Yes' else NOTIAFD_POSTER, 
-                                          'Art': IAFD_POSTER if FILMDICT['FoundOnIAFD'] == 'Yes' else NOTIAFD_POSTER, 
-                                          'Summary': ''}
-
-                # stacked or Not Stacked Collection
-                entry = '{0} {1}'.format(COLSYSTEM, 'Stacked' if FILMDICT['Stacked'] == 'Yes' else 'Not Stacked')
-                collectionsDict[entry] = {'Poster': STACKED_POSTER if FILMDICT['Stacked'] == 'Yes' else NOTSTACKED_POSTER, 
-                                          'Art': STACKED_POSTER if FILMDICT['Stacked'] == 'Yes' else NOTSTACKED_POSTER, 
-                                          'Summary': ''}
-
-                # Compilation Collection
-                if FILMDICT['Compilation'] == 'Yes':
-                    item = 'Compilations'
-                    entry = '{0} {1}'.format(COLSYSTEM, item)
-                    collectionsDict[entry] = {'Poster': COMPILATIONS_POSTER, 
-                                              'Art': COMPILATIONS_POSTER, 
+                    # IAFD : On or Not On - Collection
+                    entry = '{0} {1}-IAFD'.format(COLSYSTEM, 'On' if FILMDICT['FoundOnIAFD'] == 'Yes' else 'Not On')
+                    collectionsDict[entry] = {'Poster': IAFD_POSTER if FILMDICT['FoundOnIAFD'] == 'Yes' else NOTIAFD_POSTER, 
+                                              'Art': IAFD_POSTER if FILMDICT['FoundOnIAFD'] == 'Yes' else NOTIAFD_POSTER, 
                                               'Summary': ''}
 
-                for idx, item in enumerate(sorted(collectionsDict.keys()), start=1):
-                    log('UTILS :: {0:<29} {1}'.format('{0}'.format('Collections' if idx == 1 else ''), '{0:>2} - {1:<20} - {2}'.format(idx, item, collectionsDict[item])))
+                    # stacked or Not Stacked Collection
+                    entry = '{0} {1}'.format(COLSYSTEM, 'Stacked' if FILMDICT['Stacked'] == 'Yes' else 'Not Stacked')
+                    collectionsDict[entry] = {'Poster': STACKED_POSTER if FILMDICT['Stacked'] == 'Yes' else NOTSTACKED_POSTER, 
+                                              'Art': STACKED_POSTER if FILMDICT['Stacked'] == 'Yes' else NOTSTACKED_POSTER, 
+                                              'Summary': ''}
 
-            except Exception as e:
-                log('UTILS :: Error Collating Default Collections: %s', e)
+                    # Compilation Collection
+                    if FILMDICT['Compilation'] == 'Yes':
+                        item = 'Compilations'
+                        entry = '{0} {1}'.format(COLSYSTEM, item)
+                        collectionsDict[entry] = {'Poster': COMPILATIONS_POSTER, 
+                                                  'Art': COMPILATIONS_POSTER, 
+                                                  'Summary': ''}
+
+                except Exception as e:
+                    log('UTILS :: Error Collating System Collections: %s', e)
+
+            # List the collections
+            for idx, item in enumerate(sorted(collectionsDict.keys()), start=1):
+                log('UTILS :: {0:<29} {1}'.format('{0}'.format('Collections' if idx == 1 else ''), '{0:>2} - {1:<25} - {2}'.format(idx, item, collectionsDict[item])))
 
         except Exception as e:
             log('UTILS :: Error collating Collections: %s', e)
@@ -6772,7 +6809,7 @@ def setMetadata(metadata, media, FILMDICT):
                 if poster:
                     try:
                         log('UTILS :: {0:<29} {1}'.format('Poster:', poster))
-                        data = getPicContent(poster, entry, 'Poster')
+                        data = getImage(poster, entry, 'Poster')
                         ssn.post('{0}/library/collections/{1}/posters'.format(plexBaseURL, ratingKey), data=data, stream=True)
                     except Exception as e:
                         log('UTILS :: Error setting Collection Poster: %s', e)
@@ -6782,7 +6819,7 @@ def setMetadata(metadata, media, FILMDICT):
                 if art:
                     try:
                         log('UTILS :: {0:<29} {1}'.format('Art:', art))
-                        data = getPicContent(art, entry, 'Art')                 #data = ssn.get(art).content
+                        data = getImage(art, entry, 'Art')                 #data = ssn.get(art).content
                         ssn.post('{0}/library/collections/{1}/arts'.format(plexBaseURL, ratingKey), data=data, stream=True)
                     except Exception as e:
                         log('UTILS :: Error setting Collection Art: %s', e)
@@ -6827,7 +6864,6 @@ def setMetadata(metadata, media, FILMDICT):
 
     except Exception as e:
         FILMDICT['Status'] = False
-
     else:
         FILMDICT['Status'] = True
 
@@ -6835,13 +6871,21 @@ def setMetadata(metadata, media, FILMDICT):
 def setupStartVariables():
     ''' used by start routine to set up Tidy Genres, Countries List and Show Preference Settings'''
     global START_SCRAPE
+
+    # preferences
+    global COLCAST, COLCOUNTRY, COLGENRE, COLDIRECTOR, COLSERIES, COLSTUDIO, COLSYSTEM
+    global COUNTRYPOSTERTYPE, POSTERSOURCEDOWNLOAD, DETECT, DURATIONDX, MATCHIAFDDURATION, MATCHSITEDURATION
+    global PLEXTOKEN, PREFIXLEGEND, RESETMETA, THUMBOR, USEBACKGROUNDART
+
+    # variables
+    global COUNTRYSET, GENRESDICT, TIDYDICT, MACHINEID, PGMA_CASTDICT, PGMA_DIRECTORDICT
+
     START_SCRAPE = 'No'
 
-    #   1.    Plex Support Path
+    #   1.    Plex Support Path and preferences
     log(LOG_SUBLINE)
     log('START :: {0:<29} {1}'.format('1.\tPlex Support Path', PlexSupportPath))
     continueSetup = True if os.path.isdir(PlexSupportPath) else False
-
     #   2.    Agent Preference Settings
     if continueSetup:
         log(LOG_SUBLINE)
@@ -6864,7 +6908,6 @@ def setupStartVariables():
                     setAs = Prefs[prefName] if prefName != 'plextoken' else '********'              # hide token in logs
                     log('START :: {0:<29} {1}'.format('{0:>2}. {1}'.format(idx, prefName), 'Default = {0:<10} Set As = {1}'.format(defSet, setAs)))
 
-                global COLCAST, COLCOUNTRY, COLGENRE,COLDIRECTOR, COLSERIES, COLSTUDIO, COLSYSTEM
                 COLSYSTEM = '|1|' if Prefs['systemcollection'] else ''
                 COLGENRE = '|2|' if Prefs['genrecollection'] else ''
                 COLCOUNTRY = '|3|' if Prefs['countrycollection'] else ''
@@ -6872,6 +6915,19 @@ def setupStartVariables():
                 COLSERIES = '|5|' if Prefs['seriescollection'] else ''
                 COLDIRECTOR = '|6|' if Prefs['directorcollection']  else ''
                 COLCAST = '|7|' if Prefs['castcollection'] else ''
+
+                # Other Preferences
+                COUNTRYPOSTERTYPE = Prefs['countrypostertype']        # show poster as map or vertical flag
+                DETECT = Prefs['detect']                              # detect the language the summary appears in on the web page
+                DURATIONDX = int(Prefs['durationdx'])                 # Acceptable difference between actual duration of video file and that on agent website
+                MATCHIAFDDURATION = Prefs['matchiafdduration']        # Match against IAFD Duration value
+                MATCHSITEDURATION = Prefs['matchsiteduration']        # Match against Site Duration value
+                PLEXTOKEN = Prefs['plextoken']                        # Plex token from View XML of any library item
+                POSTERSOURCEDOWNLOAD = Prefs['postersourcedownload']  # Down film poster to disk, (renamed as film title + image extension)
+                PREFIXLEGEND = Prefs['prefixlegend']                  # place cast legend at start of summary or end
+                RESETMETA = Prefs['resetmeta']                        # clear previously set metadata
+                THUMBOR = Prefs['thumbor']                            # Thumbor Image manipulation URL
+                USEBACKGROUNDART = Prefs['usebackgroundart']          # Use background art
 
             except Exception as e:
                 log('START :: Error Loading Default Preferences File: %s', e)
@@ -6882,39 +6938,50 @@ def setupStartVariables():
     if continueSetup:
         log(LOG_SUBLINE)
         log('START :: 3.\tPGMA Usage Folder Locations')
-        global PGMA_FOLDER, PGMA_CASTPOSTERFOLDER, PGMA_DIRECTORPOSTERFOLDER, PGMA_HFLAGFOLDER, PGMA_VFLAGFOLDER, PGMA_MAPSFOLDER, PGMA_GENRESFOLDER
+        global PGMA_FOLDER, PGMA_CASTFACEFOLDER, PGMA_DIRECTORFACEFOLDER, PGMA_CASTPOSTERFOLDER, PGMA_DIRECTORPOSTERFOLDER, PGMA_COUNTRYART, PGMA_COUNTRYPOSTERFLAGS, PGMA_COUNTRYPOSTERMAPS, PGMA_GENREFOLDER
         PGMA_FOLDER = os.path.join(PlexSupportPath, 'Plug-ins', '_PGMA')
-        PGMA_CASTPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Cast', 'Posters')
-        PGMA_DIRECTORPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Directors', 'Posters')
-        PGMA_HFLAGFOLDER = os.path.join(PGMA_FOLDER, 'Flags', 'Horizontal')
-        PGMA_VFLAGFOLDER = os.path.join(PGMA_FOLDER, 'Flags', 'Vertical')
-        PGMA_MAPSFOLDER = os.path.join(PGMA_FOLDER, 'Maps')
-        PGMA_GENRESFOLDER = os.path.join(PGMA_FOLDER, 'Genres')
+        PGMA_SYSTEMFOLDER = os.path.join(PGMA_FOLDER, 'System')
+        PGMA_CASTFACEFOLDER = os.path.join(PGMA_FOLDER, 'Cast', 'Face')
+        PGMA_CASTPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Cast', 'Poster')
+        PGMA_DIRECTORFACEFOLDER = os.path.join(PGMA_FOLDER, 'Director', 'Face')
+        PGMA_DIRECTORPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Director', 'Poster')
+        PGMA_COUNTRYART = os.path.join(PGMA_FOLDER, 'Country', 'Art')
+        PGMA_COUNTRYPOSTERFLAGS = os.path.join(PGMA_FOLDER, 'Country', 'Poster', 'Flags')
+        PGMA_COUNTRYPOSTERMAPS = os.path.join(PGMA_FOLDER, 'Country', 'Poster', 'Maps')
+        PGMA_GENREFOLDER = os.path.join(PGMA_FOLDER, 'Genre')
 
         PGMA_FOLDER = PGMA_FOLDER if os.path.isdir(PGMA_FOLDER) else ''
+        PGMA_SYSTEMFOLDER = PGMA_SYSTEMFOLDER if os.path.isdir(PGMA_SYSTEMFOLDER) else ''
+        PGMA_GENREFOLDER = PGMA_GENREFOLDER if os.path.isdir(PGMA_GENREFOLDER) else ''
+        PGMA_COUNTRYART = PGMA_COUNTRYART if os.path.isdir(PGMA_COUNTRYART) else ''
+        PGMA_COUNTRYPOSTERFLAGS = PGMA_COUNTRYPOSTERFLAGS if os.path.isdir(PGMA_COUNTRYPOSTERFLAGS) else ''
+        PGMA_COUNTRYPOSTERMAPS = PGMA_COUNTRYPOSTERMAPS if os.path.isdir(PGMA_COUNTRYPOSTERMAPS) else ''
+        PGMA_CASTFACEFOLDER = PGMA_CASTFACEFOLDER if os.path.isdir(PGMA_CASTFACEFOLDER) else ''
+        PGMA_DIRECTORFACEFOLDER = PGMA_DIRECTORFACEFOLDER if os.path.isdir(PGMA_DIRECTORFACEFOLDER) else ''
         PGMA_CASTPOSTERFOLDER = PGMA_CASTPOSTERFOLDER if os.path.isdir(PGMA_CASTPOSTERFOLDER) else ''
         PGMA_DIRECTORPOSTERFOLDER = PGMA_DIRECTORPOSTERFOLDER if os.path.isdir(PGMA_DIRECTORPOSTERFOLDER) else ''
-        PGMA_HFLAGFOLDER = PGMA_HFLAGFOLDER if os.path.isdir(PGMA_HFLAGFOLDER) else ''
-        PGMA_VFLAGFOLDER = PGMA_VFLAGFOLDER if os.path.isdir(PGMA_VFLAGFOLDER) else ''
-        PGMA_MAPSFOLDER = PGMA_MAPSFOLDER if os.path.isdir(PGMA_MAPSFOLDER) else ''
-        PGMA_GENRESFOLDER = PGMA_GENRESFOLDER if os.path.isdir(PGMA_GENRESFOLDER) else ''
 
         log('START :: {0:<29} {1}'.format('PGMA Folder Location', PGMA_FOLDER if PGMA_FOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('              System', PGMA_SYSTEMFOLDER if PGMA_SYSTEMFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('              Genres', PGMA_GENREFOLDER if PGMA_GENREFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('         Country Art', PGMA_COUNTRYART if PGMA_COUNTRYART else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('Country Poster Flags', PGMA_COUNTRYPOSTERFLAGS if PGMA_COUNTRYPOSTERFLAGS else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format(' Country Poster Maps', PGMA_COUNTRYPOSTERMAPS if PGMA_COUNTRYPOSTERMAPS else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('          Cast Faces', PGMA_CASTFACEFOLDER if PGMA_CASTFACEFOLDER else '** FAIL **'))
         log('START :: {0:<29} {1}'.format('        Cast Posters', PGMA_CASTPOSTERFOLDER if PGMA_CASTPOSTERFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('      Director Faces', PGMA_DIRECTORFACEFOLDER if PGMA_DIRECTORFACEFOLDER else '** FAIL **'))
         log('START :: {0:<29} {1}'.format('    Director Posters', PGMA_DIRECTORPOSTERFOLDER if PGMA_DIRECTORPOSTERFOLDER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('    Horizontal Flags', PGMA_HFLAGFOLDER if PGMA_HFLAGFOLDER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('      Vertical Flags', PGMA_VFLAGFOLDER if PGMA_VFLAGFOLDER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('        Country Maps', PGMA_MAPSFOLDER if PGMA_MAPSFOLDER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('              Genres', PGMA_GENRESFOLDER if PGMA_GENRESFOLDER else '** FAIL **'))
 
         # only contunue with setup if all folders are present
-        continueSetup = PGMA_FOLDER and PGMA_CASTPOSTERFOLDER and PGMA_DIRECTORPOSTERFOLDER and PGMA_HFLAGFOLDER and PGMA_VFLAGFOLDER and PGMA_MAPSFOLDER and PGMA_GENRESFOLDER
+        continueSetup = (PGMA_FOLDER and PGMA_SYSTEMFOLDER and PGMA_CASTFACEFOLDER and PGMA_DIRECTORFACEFOLDER and PGMA_CASTPOSTERFOLDER and 
+                         PGMA_DIRECTORPOSTERFOLDER and PGMA_COUNTRYART and PGMA_COUNTRYPOSTERFLAGS and PGMA_COUNTRYPOSTERMAPS and PGMA_GENREFOLDER)
 
     #   4. PGMA - On disk Cast and Director Collection Posters
     if continueSetup:
         log(LOG_SUBLINE)
         log('START :: 4.\tPGMA Cast and Director Collection Poster Dictionaries')
-        global PGMA_CASTDICT, PGMA_DIRECTORDICT
+        PGMA_CASTDICT = {}
+        PGMA_DIRECTORDICT = {}
         try:
             PGMA_CASTDICT = {x.rsplit('.', 1)[0]:os.path.join(PGMA_CASTPOSTERFOLDER, x) for x in os.listdir(PGMA_CASTPOSTERFOLDER)}
             log('START :: {0:<29} {1}'.format('Cast Collection Posters', '{0:>4} - {1}'.format(len(PGMA_CASTDICT), PGMA_CASTDICT)))
@@ -6930,7 +6997,7 @@ def setupStartVariables():
     if continueSetup:
         log(LOG_SUBLINE)
         log('START :: 5.\tPrepare Dictionary of Country Names and Flags')
-        global COUNTRYSET
+        COUNTRYSET = set() 
         try:
             countries_txt = os.path.join(PGMA_FOLDER, 'Countries.txt')
             txtfile = PlexLoadFile(countries_txt)
@@ -6949,7 +7016,7 @@ def setupStartVariables():
     if continueSetup:
         log(LOG_SUBLINE)
         log('START :: 6.\tPrepare Dictionary of Genres and Symbols')
-        global GENRESDICT
+        GENRESDICT = {}
         try:
             genres_txt = os.path.join(PGMA_FOLDER, 'Genres.txt')
             txtfile = PlexLoadFile(genres_txt)
@@ -6967,7 +7034,7 @@ def setupStartVariables():
                     log('START :: {0:<29} {1}'.format('Duplicate/Error Row', 'Row {0} - {1}'.format(idx, row)))
                     continue
 
-                value = os.path.join(PGMA_GENRESFOLDER, keyValue[1])
+                value = os.path.join(PGMA_GENREFOLDER, keyValue[1])
                 GENRESDICT[key] = value
 
             log('START :: {0:<29} {1}'.format('Genres Dictionary', '{0:>4} - {1}'.format(len(GENRESDICT), sorted(GENRESDICT))))
@@ -6982,7 +7049,7 @@ def setupStartVariables():
     if continueSetup:
         log(LOG_SUBLINE)
         log('START :: 7.\tPrepare Tidied Dictionary of Genres and Countries')
-        global TIDYDICT
+        TIDYDICT = {}
         tidiedCountriesSet = set()                              # used for debugging
         tidiedGenresSet = set()                                 # used for debugging
         tidiedNullSet = set()                                   # used for debugging
@@ -7030,10 +7097,8 @@ def setupStartVariables():
     if continueSetup:
         log(LOG_SUBLINE)
         log('START :: 8.\tRetrieve Plex Token')
-        global PLEXTOKEN
-        PLEXTOKEN = ''
-        if os.name == 'nt':
-            global MACHINEID
+        MACHINEID = ''
+        if not PLEXTOKEN and os.name == 'nt':
             try:
                 preferences_xml = os.path.join(PlexSupportPath, 'preferences.xml').replace('Plex', 'Plex\Plex')
                 log('START :: {0:<29} {1}'.format('Preference XML', preferences_xml))
@@ -7070,31 +7135,31 @@ def setupStartVariables():
         log(LOG_SUBLINE)
         log('START :: 9.\tRetrieve Agent and Default Posters')
         global AGENT_POSTER, COMPILATIONS_POSTER, IAFD_POSTER, NOTIAFD_POSTER, STACKED_POSTER, NOTSTACKED_POSTER, NOCAST_POSTER, NODIRECTOR_POSTER, WATERMARK
-        AGENT_POSTER = os.path.join(PGMA_FOLDER, '_Standard','{0}.png'.format(AGENT))
+        AGENT_POSTER = os.path.join(PGMA_SYSTEMFOLDER, '{0}.png'.format(AGENT))
         AGENT_POSTER = AGENT_POSTER if os.path.exists(AGENT_POSTER) else ''
 
-        COMPILATIONS_POSTER = os.path.join(PGMA_FOLDER, '_Standard','Compilations.png')
+        COMPILATIONS_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'Compilations.png')
         COMPILATIONS_POSTER = COMPILATIONS_POSTER if os.path.exists(COMPILATIONS_POSTER) else ''
 
-        IAFD_POSTER = os.path.join(PGMA_FOLDER, '_Standard','IAFD.png')
+        IAFD_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'IAFD.png')
         IAFD_POSTER = IAFD_POSTER if os.path.exists(IAFD_POSTER) else ''
 
-        NOTIAFD_POSTER = os.path.join(PGMA_FOLDER, '_Standard','NotIAFD.png')
+        NOTIAFD_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'NotIAFD.png')
         NOTIAFD_POSTER = NOTIAFD_POSTER if os.path.exists(NOTIAFD_POSTER) else ''
 
-        STACKED_POSTER = os.path.join(PGMA_FOLDER, '_Standard','Stacked.png')
+        STACKED_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'Stacked.png')
         STACKED_POSTER = STACKED_POSTER if os.path.exists(STACKED_POSTER) else ''
 
-        NOTSTACKED_POSTER = os.path.join(PGMA_FOLDER, '_Standard','NotStacked.png')
+        NOTSTACKED_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'NotStacked.png')
         NOTSTACKED_POSTER = NOTSTACKED_POSTER if os.path.exists(NOTSTACKED_POSTER) else ''
 
-        NOCAST_POSTER = os.path.join(PGMA_FOLDER, '_Standard','NoCast.png')
+        NOCAST_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'NoCast.png')
         NOCAST_POSTER = NOCAST_POSTER if os.path.exists(NOCAST_POSTER) else ''
 
-        NODIRECTOR_POSTER = os.path.join(PGMA_FOLDER, '_Standard','NoDirector.png')
+        NODIRECTOR_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'NoDirector.png')
         NODIRECTOR_POSTER = NODIRECTOR_POSTER if os.path.exists(NODIRECTOR_POSTER) else ''
 
-        #WATERMARK = os.path.join(PGMA_FOLDER, '_Standard','Watermark.png')
+        #WATERMARK = os.path.join(PGMA_SYSTEMFOLDER,'Watermark.png')
         #WATERMARK = WATERMARK if os.path.exists(WATERMARK) else ''
 
         WATERMARK = String.URLEncode(WATERMARK)

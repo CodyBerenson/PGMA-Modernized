@@ -262,7 +262,7 @@ Character -> Dancers / Strippers::Exhibitionism
 Character -> Delivery Person::Deliveries
 Character -> Detective::Role Play
 Character -> Family::Intergenerational
-Character -> Hustler::Prostitutes
+Character -> Hustler::Role Play
 Character -> Jocks / Athletes::Fit Guys
 Character -> Military::Fetish
 Character -> Skater Boys::Twinks/Young Men
@@ -643,8 +643,8 @@ Hot Gay Sex::x
 Humiliation::BDSM
 Humiliations::BDSM
 Hungarian::Hungary
-Hustler::Prostitutes
-Hustlers::Prostitutes
+Hustler::Role Play
+Hustlers::Role Play
 Hvy::Bears
 IA::United States
 Icelander::Iceland
@@ -1034,7 +1034,7 @@ Prince Edward Island::Canada
 Prison Sex::Role Play
 Prison::Role Play
 Pro Wrestling::Fit Guys
-Prostitutes/Hookers::Prostitutes
+Prostitutes/Hookers::Role Play
 Prowl::United States
 Public -> Exhibitionism::Exhibitionism
 Public -> Sex::Outdoors
@@ -1110,7 +1110,7 @@ Service::Oral Sex
 Settings -> Bathhouse / Sauna::Wet/Oiled
 Settings -> Beach::Outdoors
 Settings -> Boat::Outdoors
-Settings -> Bus / Van / Car::Vehicles
+Settings -> Bus / Van / Car::Other
 Settings -> Classroom::Intergenerational
 Settings -> College Campus::College/Frat/Studs
 Settings -> Dungeon::BDSM
@@ -1132,7 +1132,7 @@ Settings -> Prison/Jail::Role Play
 Settings -> Shower / Bathroom::Wet/Oiled
 Settings -> Spring Break / College Parties::College/Frat/Studs
 Settings::x
-Sex In Car::Vehicles
+Sex In Car::Other
 Sex Machines::Sex Toys
 Sex Party::Group Sex (3+)
 Sex Toy (Strap-On)::Sex Toys
@@ -1346,7 +1346,7 @@ Vaginal Sex::Other
 Valentines Day::x
 Vampires::Role Play
 Vanuatuan::Vanuatu
-Vehicle Sex::Vehicles
+Vehicle Sex::Other
 Venezuelan::Venezuela
 Verbal Abuse::BDSM
 Vermont::United States

@@ -39,57 +39,17 @@ AGENT = 'GEVI'
 # URLS
 BASE_URL = 'https://www.gayeroticvideoindex.com'
 BASE_SEARCH_URL = BASE_URL + '/shtt.php?draw=1&order[0][dir]=desc&start={0}&length=100&search[value]={1}&where={2}&_=1665855952743'
-#WATERMARK = 'https://cdn3.iconfinder.com/data/icons/ellegant/32x32/4.png'
 WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Date Formats used by website
 DATEFORMAT = '%Y%m%d'
+MATCHSITEDURATION = ''
 
 # Website Language
 SITE_LANGUAGE = 'en'
 
-# Preferences
-COLCAST = Prefs['castcollection']                   # add cast collections
-COLCOUNTRY = Prefs['countrycollection']             # add country collections
-COLDIRECTOR = Prefs['directorcollection']           # add director collections
-COLGENRE = Prefs['genrecollection']                 # add genres collections
-COLSERIES = Prefs['seriescollection']               # add series collections
-COLSTUDIO = Prefs['studiocollection']               # add studio name collections
-COLSYSTEM = Prefs['systemcollection']               # add system collections
-COUNTRYPOSTERTYPE = Prefs['countrypostertype']      # show poster as map or vertical flag
-DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-DOWNLOADPOSTER = Prefs['downloadposter']            # Down film poster to disk, (renamed as film title + image extension)
-DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
-DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
-MATCHIAFDDURATION = Prefs['matchiafdduration']      # Match against IAFD Duration value
-MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
-PLEXTOKEN = Prefs['plextoken']                      # Plex token from View XML of any library item
-PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
-RESETMETA = Prefs['resetmeta']                      # clear previously set metadata
-THUMBOR = Prefs['thumbor']                          # Thumbor Image manipulation URL
-USEBACKGROUNDART = Prefs['usebackgroundart']        # Use background art
-
 # dictionaries & Set for holding film variables, genres and countries
 FILMDICT = {}
-PGMA_FOLDER = ''
-PGMA_CASTPOSTERFOLDER = ''
-PGMA_DIRECTORPOSTERFOLDER = ''
-PGMA_HFLAGFOLDER = ''
-PGMA_VFLAGFOLDER = ''
-PGMA_CASTDICT = {}
-PGMA_DIRECTORDICT = {}
-COUNTRYSET = set()
-GENRESDICT = {}
-TIDYDICT = {}
-MACHINEID = ''
-AGENT_POSTER = ''
-COMPILATIONS_POSTER = ''
-IAFD_POSTER = ''
-NOTIAFD_POSTER = ''
-STACKED_POSTER = ''
-NOTSTACKED_POSTER = ''
-NOCAST_POSTER = ''
-NODIRECTOR_POSTER = ''
 
 # utils.log section separators
 LOG_BIGLINE = '-' * 140
@@ -217,7 +177,7 @@ class GEVI(Agent.Movies):
                 searchQuery = BASE_SEARCH_URL.format(startRecord, searchTitle, searchType)
                 utils.log('SEARCH:: Search Query: %s', searchQuery)
                 try:
-                    JSon = JSON.ObjectFromURL(searchQuery, timeout=20, sleep=DELAY)
+                    JSon = JSON.ObjectFromURL(searchQuery, timeout=20, sleep=utils.delay())
                     filmsList = JSon.get('data', '')
                     if not filmsList:
                         raise Exception('< No Film Titles! >')   # out of WHILE loop
@@ -295,7 +255,7 @@ class GEVI(Agent.Movies):
                     utils.log(LOG_BIGLINE)
                     try:
                         utils.log('SEARCH:: {0:<29} {1}'.format('Reading Site URL page', filmURL))
-                        fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=DELAY)
+                        fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=utils.delay())
                         FILMDICT['FilmHTML'] = fhtml
                     except Exception as e:
                         utils.log('SEARCH:: Error reading Site URL page: %s', e)
@@ -429,7 +389,7 @@ class GEVI(Agent.Movies):
                         for key in ['AEBNiii', 'GayHotMovies', 'GayDVDEmpire']:                  # access links in this order: break after processing first external link
                             if key in webLinks:
                                 vFilmURL = webLinks[key]
-                                vFilmHTML = HTML.ElementFromURL(vFilmURL, timeout=60, errors='ignore', sleep=DELAY)
+                                vFilmHTML = HTML.ElementFromURL(vFilmURL, timeout=60, errors='ignore', sleep=utils.delay())
                                 FILMDICT[key] = utils.getSiteInfo(key, FILMDICT, kwFilmURL=vFilmURL, kwFilmHTML=vFilmHTML)
 
                                 # change Compilation to 'Yes' if the result is not the default 'No'
@@ -483,7 +443,7 @@ class GEVI(Agent.Movies):
         utils.log(LOG_BIGLINE)
         try:
             utils.log('SEARCH:: Access Site URL Link:')
-            fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=DELAY)
+            fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=utils.delay())
             FILMDICT['FilmHTML'] = fhtml
             FILMDICT[AGENT] = utils.getSiteInfo(AGENT, FILMDICT, kwCompilation=FILMDICT['vCompilation'], kwReleaseDate=FILMDICT['vReleaseDate'], kwDuration=FILMDICT['vDuration'])
 
