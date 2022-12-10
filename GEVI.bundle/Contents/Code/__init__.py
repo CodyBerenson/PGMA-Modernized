@@ -5,36 +5,23 @@
                                                   Version History
                                                   ---------------
     Date            Version                         Modification
-    07 Oct 2020     2019.12.25.21   IAFD - change to https
-                                    GEVI now searches all returned results and stops if return is alphabetically greater than title
-    08 May 2021     2019.12.25.31   Use of duration matching
-    27 Jul 2021     2019.12.25.32   Use of review area for scene matching
-    21 Aug 2021     2019.12.25.33   IAFD will be only searched if film found on agent Catalogue
-    16 Jan 2021     2019.12.25.34   Gevi changed website design, xml had to change to reflect this, fields affected performers, directors, studio
-                                    added body type information to genres and corrected original code to cater for multiple genres as this was not split on commas
-    04 Feb 2022     2019.12.25.34   implemented change suggested by Cody: duration matching optional on IAFD matching
-                                    Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
-    21 Mar 2022     2019.12.25.35   #147: Implemented simple fix by fivedays555, to add website to Agents Header Referer
-    13 May 2022     2019.12.25.36   Use IAFD Synopsis if present and Site's missing
-                                    - corrected code as if no actors were listed on the site, it would not take those added to the filename on disk   
-                                    - #162: duration matching had an error in the code - corrected and enhanced
-                                    - improved logging
-                                    - fixed error if no cast recorded on GEVI
     13 May 2022     2019.12.25.37   Introduced error in search string logging
     19 Aug 2022     2019.12.25.38   Multiple Improvements and major rewrites
-                                    - using links to AEBN, GayDVDEmpre and GayHotMovies to garner,cast, directors, scenes, chapters, film durations and posters
+                                    - using links to AEBN, GayEmpre and GayHotMovies to garner,cast, directors, scenes, chapters, film durations and posters
                                     - tidy up of genres as they have different names across various websites.
                                     - tidy up of countries and locations
                                     - introduced Grouped Collections and Default to keep track of films
     07 Nov 2022     2019.12.25.39   Search String corrections taking in to account the new GEVI Search Engine
+    27 Nov 2022     2019.12.25.40   Updated to use latest version of utils.py
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.39'
+VERSION_NO = '2019.12.25.40'
 AGENT = 'GEVI'
+AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
 # URLS
 BASE_URL = 'https://www.gayeroticvideoindex.com'
@@ -43,10 +30,12 @@ WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-le
 
 # Date Formats used by website
 DATEFORMAT = '%Y%m%d'
-MATCHSITEDURATION = ''
 
 # Website Language
 SITE_LANGUAGE = 'en'
+
+# Preferences
+MATCHSITEDURATION = ''
 
 # dictionaries & Set for holding film variables, genres and countries
 FILMDICT = {}
@@ -55,6 +44,7 @@ FILMDICT = {}
 LOG_BIGLINE = '-' * 140
 LOG_SUBLINE = '      ' + '-' * 100
 LOG_ASTLINE = '*' * 140
+
 # ----------------------------------------------------------------------------------------------------------------------------------
 # imports placed here to use previously declared variables
 import utils
@@ -92,7 +82,7 @@ class GEVI(Agent.Movies):
         # convert to lower case and trim
         myString = myString.lower().strip()
 
-        # replace & with and
+        # replace &, and with space
         myString = myString.replace(' & ', ' ').replace(' and ', ' ')
         utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Replaced ampersands & " and " with ', 'Space')))
 
@@ -216,7 +206,7 @@ class GEVI(Agent.Movies):
                     # Site Title
                     try:
                         filmTitle = groups['FilmTitle']
-                        unwantedWords = ['[sic]']
+                        unwantedWords = ['[sic]', '(sic)']
                         for unwantedWord in unwantedWords:
                             if unwantedWord in filmTitle:
                                 filmTitle = filmTitle.replace(unwantedWord, '')
@@ -381,12 +371,12 @@ class GEVI(Agent.Movies):
                     try:
                         fhtmlURLs = fhtml.xpath('//td[@class="gsr"]/a/@href')
                         for idx, fhtmlURL in enumerate(fhtmlURLs, start=1):
-                            key = 'AEBNiii' if 'aebn' in fhtmlURL else 'GayHotMovies' if 'gayhotmovies' in fhtmlURL else 'GayDVDEmpire' if 'gaydvdempire' in fhtmlURL else ''
+                            key = 'AEBN' if 'aebn' in fhtmlURL else 'GayHotMovies' if 'gayhotmovies' in fhtmlURL else 'GayEmpire' if 'empire' in fhtmlURL else ''
                             utils.log('SEARCH:: {0:<29} {1}'.format('External Sites Found' if idx ==1 else '', '{0:>2} - {1:<15} - {2}'.format(idx, key, fhtmlURL)))
                             if key and key not in webLinks:
                                 webLinks[key] = fhtmlURL
 
-                        for key in ['AEBNiii', 'GayHotMovies', 'GayDVDEmpire']:                  # access links in this order: break after processing first external link
+                        for key in ['AEBN', 'GayHotMovies', 'GayEmpire']:                  # access links in this order: break after processing first external link
                             if key in webLinks:
                                 vFilmURL = webLinks[key]
                                 vFilmHTML = HTML.ElementFromURL(vFilmURL, timeout=60, errors='ignore', sleep=utils.delay())

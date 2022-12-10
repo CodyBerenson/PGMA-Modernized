@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>CFBundleDevelopmentRegion</key>
+        <string>English</string>
+        <key>CFBundleExecutable</key>
+        <string>AEBN</string>
+        <key>CFBundleIdentifier</key>
+        <string>com.plexapp.agents.AEBN</string>
+        <key>CFBundleInfoDictionaryVersion</key>
+        <string>6.0</string>
+        <key>CFBundleShortVersionString</key>
+        <string>1.0</string>
+        <key>CFBundleSignature</key>
+        <string>????</string>
+        <key>CFBundleVersion</key>
+        <string>1.0</string>
+        <key>PlexFrameworkVersion</key>
+        <string>2</string>
+        <key>PlexPluginClass</key>
+        <string>Agent</string>
+        <key>PlexPluginMode</key>
+        <string>AlwaysOn</string>
+        <key>PlexPluginCodePolicy</key>
+        <string>Elevated</string>
+        <key>PlexAgentAttributionText</key>
+        <string>
+            <![CDATA[
+                Adult Entertainment Broadcast Network [IAFD] (v2020-05-21)<br/>
+                <br/>
+                This plex metadata agent scrapes movie data from AEBN and related Actor thumbnails from IAFD<br/>
+                This agent is completely unafilliated with with either website in any way.<br/>
+                If you need any help please leave a message on the github repository.
+            ]]>
+        </string>
+    </dict>
+</plist>

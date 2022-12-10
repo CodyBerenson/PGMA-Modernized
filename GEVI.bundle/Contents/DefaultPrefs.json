@@ -55,6 +55,12 @@
         "default": "false"
     },
     {
+        "id": "prefixgenre",
+        "label": "Prefix Genres with Agent Sexuality Type (Useful for Mixed Content Libraries)",
+        "type": "bool",
+        "default": "false"
+    },
+    {
         "id": "postersourcedownload",
         "label": "Choose Poster Source and whether to download to Disk",
         "type": "enum",

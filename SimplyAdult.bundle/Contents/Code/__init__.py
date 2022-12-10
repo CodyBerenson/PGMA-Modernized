@@ -5,43 +5,29 @@
                                                   Version History
                                                   ---------------
     Date            Version                         Modification
-    15 Nov 2021   2021.11.15.01    Initial
-    04 Feb 2022   2021.11.15.02    implemented change suggested by Cody: duration matching optional on IAFD matching
-                                   Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
+    15 Nov 2021     2021.11.15.01   Initial
+    04 Feb 2022     2021.11.15.02   implemented change suggested by Cody: duration matching optional on IAFD matching
+                                    Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
+    19 Aug 2022     2020.11.15.03   Multiple Improvements and major rewrites
+                                    - tidy up of genres as they have different names across various websites.
+                                    - tidy up of countries and locations
+                                    - introduced Grouped Collections and Default to keep track of films
+    05 Dec 2022     2020.11.15.04   Updated to use latest version of utils.py
+
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
-import json, re
+import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2021.11.15.02'
-PLUGIN_LOG_TITLE = 'SimplyAdult'
-
-# log section separators
-LOG_BIGLINE = '--------------------------------------------------------------------------------'
-LOG_SUBLINE = '      --------------------------------------------------------------------------'
-
-# Preferences
-COLCAST = Prefs['castcollection']                   # add cast to collection
-COLCLEAR = Prefs['clearcollections']                # clear previously set collections
-COLCOUNTRY = Prefs['countrycollection']             # add country to collection
-COLDIRECTOR = Prefs['directorcollection']           # add director to collection
-COLGENRE = Prefs['genrecollection']                 # add genres to collection
-COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
-COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
-DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
-DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
-MATCHIAFDDURATION = Prefs['matchiafdduration']      # Match against IAFD Duration value
-MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
-PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
+VERSION_NO = '2021.11.15.04'
+AGENT = 'SimplyAdult'
+AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
 # URLS
 BASE_URL = 'https://www.simply-adult.com/'
-BASE_SEARCH_URL = BASE_URL + 'search.php'
-
-# dictionary holding film variables
-FILMDICT = {}   
+BASE_SEARCH_URL = BASE_URL + 'search.php?mode=search&page={0}'
+WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Date Formats used by website
 DATEFORMAT = '%d-%m-%Y'
@@ -49,39 +35,42 @@ DATEFORMAT = '%d-%m-%Y'
 # Website Language
 SITE_LANGUAGE = 'en'
 
+# Preferences
+MATCHSITEDURATION = ''
+
+# dictionaries & Set for holding film variables, genres and countries
+FILMDICT = {}
+
+# utils.log section separators
+LOG_BIGLINE = '-' * 140
+LOG_SUBLINE = '      ' + '-' * 100
+LOG_ASTLINE = '*' * 140
+# ----------------------------------------------------------------------------------------------------------------------------------
+# imports placed here to use previously declared variables
+import utils
+
 # ----------------------------------------------------------------------------------------------------------------------------------
 def Start():
     ''' initialise process '''
     HTTP.CacheTime = 0
-    HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.55 Safari/537.36 Edg/96.0.1054.34'
-    #HTTP.Headers['Set-Cookie'] = 'xid_509da=d3544e95f63a25f786d74ec818b41eae; path=/; domain=www.simply-adult.com; secure; httponly'
-    HTTP.Headers['Cookie'] = 'partner=51; RefererCookie=https://www.gaydvds.co.uk/; store_language=en; _ga=GA1.2.604161530.1634826735; partner_clickid=5815773; partner_time=1645891068; _gid=GA1.2.1143087968.1638115069; xid_509da=d3544e95f63a25f786d74ec818b41eae'
-    HTTP.Headers['Referer'] = 'https://www.simply-adult.com/search.php'
+    HTTP.Headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
+    HTTP.Headers['Accept-Encoding'] = 'gzip, deflate, br'
+    HTTP.Headers['Accept-Language'] = 'en-GB,en;q=0.9,en-US;q=0.8'
     HTTP.Headers['Cache-Control'] = 'max-age=0'
-    
+    HTTP.Headers['Content-Type'] = 'application/x-www-form-urlencoded'
+    HTTP.Headers['Cookie'] = 'RefererCookie=https://www.gaydvds.co.uk/; store_language=en; partner=51; partner_clickid=6800535; partner_time=1666373835; __utmc=108201344; __utmz=108201344.1661191760.2.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none); xid_509da=6267c503f5ac8fc781894366f057ece5; _ga=GA1.2.604161530.1634826735; _gid=GA1.2.1534648779.1661191770; __utma=108201344.604161530.1634826735.1661196433.1661200043.4; __utmt=1; __utmb=108201344.2.10.1661200043; _gat=1'
+    HTTP.Headers['Host'] = 'www.simply-adult.com'
+    HTTP.Headers['Origin'] = 'https://www.simply-adult.com'
+    HTTP.Headers['Referer'] = 'https://www.simply-adult.com/search.php'
+    HTTP.Headers['Upgrade-Insecure-Requests'] = 1
+    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.102 Safari/537.36 Edg/104.0.1293.63'
+    utils.setupStartVariables()
+    ValidatePrefs()
+
 # ----------------------------------------------------------------------------------------------------------------------------------
 def ValidatePrefs():
-    ''' validate changed user preferences '''
+    ''' Validate Changed Preferences '''
     pass
-# ----------------------------------------------------------------------------------------------------------------------------------
-def anyOf(iterable):
-    '''  used for matching strings in lists '''
-    for element in iterable:
-        if element:
-            return element
-    return None
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-def log(message, *args):
-    ''' log messages '''
-    if re.search('ERROR', message, re.IGNORECASE):
-        Log.Error(PLUGIN_LOG_TITLE + ' - ' + message, *args)
-    else:
-        Log.Info(PLUGIN_LOG_TITLE + '  - ' + message, *args)
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-# imports placed here to use previously declared variables
-import utils
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 class SimplyAdult(Agent.Movies):
@@ -95,7 +84,7 @@ class SimplyAdult(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def CleanSearchString(self, myString):
         ''' Prepare Title for search query '''
-        log('AGNT  :: Original Search Query        : {0}'.format(myString))
+        utils.log('AGENT :: {0:<29} {1}'.format('Original Search Query', myString))
 
         # convert to lower case and trim
         myString = myString.replace(' - ', ': ').replace('- ', ': ')
@@ -107,8 +96,8 @@ class SimplyAdult(Agent.Movies):
         myString = re.sub(pattern, ' ', myString, flags=re.IGNORECASE)
         myString = myString.replace('  ', ' ').strip()
 
-        log('AGNT  :: Returned Search Query        : {0}'.format(myString))
-        log(LOG_BIGLINE)
+        utils.log('AGENT :: {0:<29} {1}'.format('Returned Search Query', myString))
+        utils.log(LOG_BIGLINE)
 
         return myString
 
@@ -116,247 +105,202 @@ class SimplyAdult(Agent.Movies):
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
+            utils.log('SEARCH:: {0:<29} {1}'.format('Error: Missing Media Item File', 'QUIT'))
             return
 
-        utils.logHeaders('SEARCH', media, lang)
+        #clear-cache directive
+        if media.name == "clear-cache":  
+            HTTP.ClearCache()
+            results.Append(MetadataSearchResult(id='clear-cache', name='Plex web cache cleared', year=media.year, lang=lang, score=0))
+            utils.log('SEARCH:: {0:<29} {1}'.format('Warning: Clear Cache Directive Encountered', 'QUIT'))
+            return
+
+        utils.logHeader('SEARCH', media, lang)
 
         # Check filename format
         try:
             FILMDICT = utils.matchFilename(media)
+            FILMDICT['lang'] = lang
+            FILMDICT['Agent'] = AGENT
         except Exception as e:
-            log('SEARCH:: Error: %s', e)
+            utils.log('SEARCH:: Error: %s', e)
             return
 
-        log(LOG_BIGLINE)
+        utils.log(LOG_BIGLINE)
 
-        # Search Query - for use to search the internet, remove all non alphabetic characters etc..
+        # Search Query - for use to search the internet
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
         searchTitle = self.CleanSearchString(FILMDICT['SearchTitle'])
         searchQuery = BASE_SEARCH_URL
+
         # Here are all of our headers
-        posted_data = {'substring': '', 'including': 'phrase', 'by_title': 'on', 'categoryid': None, 'search_in_subcategories': 'on', 'price_min': None, 'price_max': None, 'weight_min': None, 'weight_max': None}
-        formData1 = {'mode': 'search', 'posted_data': posted_data}
+        posted_data = {'substring': searchTitle, 'including': 'phrase', 'by_title': 'on', 'categoryid': 2, 'search_in_subcategories': 'on', 
+                       'price_min': None, 'price_max': None, 'weight_min': None, 'weight_max': None}
+        formData = {'mode': 'search', 'posted_data': posted_data}
 
-        posted_data = {'by_title': 'Y', 'by_descr': 'Y', 'by_sku': 'Y', 'search_in_subcategories': 'Y', 'including': 'all', 'substring': '{0}'.format(searchTitle)}
-        formData = {'simple_search': 'Y', 'mode': 'search', 'posted_data': posted_data, 'x': 0, 'y': 0}
-
-        log('SEARCH:: Search Query: %s', formData)
-        try:
-            html = HTML.ElementFromURL(searchQuery, values=formData, headers=formData, timeout=20, sleep=DELAY)
-            # Finds the entire media enclosure
-            titleList = html.xpath('//div[@class="item-box"]')
-        except Exception as e:
-            log('SEARCH:: Error: Search Query did not pull any results: %s', e)
-            return
-
-        log('SEARCH:: Result Page No: 1, Titles Found %s', len(titleList))
-        log(LOG_BIGLINE)
-        for title in titleList:
-            # Site Title
+        morePages = True
+        pageNumber = 1
+        while morePages:
+            utils.log('SEARCH:: Search Query Form Data: %s', formData)
             try:
-                siteTitle = title.xpath('./div[@class="details"]/a/text()')[0]
-                utils.matchTitle(siteTitle, FILMDICT)
-                log(LOG_BIGLINE)
-            except Exception as e:
-                log('SEARCH:: Error getting Site Title: %s', e)
-                log(LOG_SUBLINE)
-                continue
+                html = HTML.ElementFromURL(searchQuery.format(pageNumber), headers=formData, timeout=20, sleep=DELAY)
+                # Finds the entire media enclosure
+                filmsList = html.xpath('//div[@class="item-box"]')
+                if not filmsList:
+                    raise Exception('< No Films! >')
 
-            # Studio Name
+            except Exception as e:
+                utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+                break
+
             try:
-                siteStudio = title.xpath('./div[@class="details"]/div[@class="manufacturer"]/text()')[0]
-                utils.matchStudio(siteStudio, FILMDICT)
-                log(LOG_BIGLINE)
-            except Exception as e:
-                log('SEARCH:: Error getting Site Studio: %s', e)
-                log(LOG_SUBLINE)
-                continue
+                pageNumber = int(html.xpath('//div[@class="nav-pages"]/span[contains(@title,"Current page:")]/text()')[0])
+                searchQuery = BASE_SEARCH_URL.format(pageNumber + 1)
+                utils.log('SEARCH:: Next Page Search Query: %s', searchQuery)
+                morePages = True if pageNumber <= 10 else False
+            except:
+                searchQuery = ''
+                utils.log('SEARCH:: No More Pages Found')
+                pageNumber = 1
+                morePages = False
 
-            # Site Title URL
-            try:
-                siteURL = title.xpath('./div[@class="details"]/a/@href')[0]
-                FILMDICT['SiteURL'] = siteURL
-                log('SEARCH:: Site Title url                %s', siteURL)
-                log(LOG_BIGLINE)
-            except Exception as e:
-                log('SEARCH:: Error getting Site Title Url: %s', e)
-                log(LOG_SUBLINE)
-                continue
+            filmsFound = len(filmsList)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
+            utils.log(LOG_BIGLINE)
+            myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
+            for idx, film in enumerate(filmsList, start=1):
+                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', '{0} of {1} for {2} - {3} {4}'.format(idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
+                utils.log(LOG_BIGLINE)
 
-            # NO Site Release Date recorded
+                # Site Title
+                try:
+                    filmTitle =  film.xpath('./div[@class="details"]/a/text()')[0]
+                    utils.matchTitle(filmTitle, FILMDICT)
+                except Exception as e:
+                    utils.log('SEARCH:: Error getting Site Title: %s', e)
+                    utils.log(LOG_SUBLINE)
+                    continue
 
-            # NO Duration recorded
+                # Site Title URL
+                utils.log(LOG_BIGLINE)
+                try:
+                    filmURL =  film.xpath('./div[@class="details"]/a/@href')[0]
+                    FILMDICT['FilmURL'] = filmURL
+                    utils.log('SEARCH:: {0:<29} {1}'.format('Site Title URL', filmURL))
+                except Exception as e:
+                    utils.log('SEARCH:: Error getting Site Title Url: %s', e)
+                    utils.log(LOG_SUBLINE)
+                    continue
 
-            # we should have a match on studio, title and year now. Find corresponding film on IAFD
-            log('SEARCH:: Check for Film on IAFD:')
-            utils.getFilmOnIAFD(FILMDICT)
+                # Studio Name
+                utils.log(LOG_BIGLINE)
+                try:
+                    filmStudio =  film.xpath('./div[@class="details"]/div[@class="manufacturer"]/text()')[0]
+                    utils.matchStudio(filmStudio, FILMDICT)
+                except Exception as e:
+                    utils.log('SEARCH:: Error getting Site Studio: %s', e)
+                    utils.log(LOG_SUBLINE)
+                    continue
 
-            results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
-            log(LOG_BIGLINE)
-            log('SEARCH:: Finished Search Routine')
-            log(LOG_BIGLINE)
-            return
+                # Site Release Date - None on Site
+                utils.log(LOG_BIGLINE)
+                vReleaseDate = FILMDICT['CompareDate']
+                utils.log('SEARCH:: {0:<29} {1}'.format('Release Date: Use Default', vReleaseDate))
+
+                # Site Film Duration - None on Site
+                utils.log(LOG_BIGLINE)
+                vDuration = FILMDICT['Duration']
+                utils.log('SEARCH:: {0:<29} {1}'.format('Duration: Use Default', vDuration))
+
+                FILMDICT['vCompilation'] = ''
+                FILMDICT['vDuration'] = vDuration
+                FILMDICT['vReleaseDate'] = vReleaseDate
+                del FILMDICT['FilmHTML']
+
+                myID = json.dumps(FILMDICT, default=utils.jsonDumper)
+                results.Append(MetadataSearchResult(id=myID, name=FILMDICT['Title'], score=100, lang=lang))
+
+                # Film Scraped Sucessfully - update status and break out!
+                FILMDICT['Status'] = True
+                break       # stop processing
+
+            if FILMDICT['Status']:      # if search and process sucessful stop processing
+                break
+
+        # End Search Routine
+        utils.logFooter('SEARCH', FILMDICT)
+        return FILMDICT['Status']
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
-        utils.logHeaders('UPDATE', media, lang)
+        utils.logHeader('UPDATE', media, lang)
 
-        # Fetch HTML.
-        FILMDICT = json.loads(metadata.id)
-        log('UPDATE:: Film Dictionary Variables:')
-        for key in sorted(FILMDICT.keys()):
-            log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
-        log(LOG_BIGLINE)
+        utils.log('UPDATE:: Convert Date Time & Set Objects:')
+        FILMDICT = json.loads(metadata.id, object_hook=utils.jsonLoader)
+        utils.log(LOG_BIGLINE)
 
-        html = HTML.ElementFromURL(FILMDICT['SiteURL'], timeout=60, errors='ignore', sleep=DELAY)
+        utils.printFilmInformation(FILMDICT)
 
-        #  The following bits of metadata need to be established and used to update the movie on plex
-        #    1.  Metadata that is set by Agent as default
-        #        a. Studio               : From studio group of filename - no need to process this as above
-        #        b. Title                : From title group of filename - no need to process this as is used to find it on website
-        #        c. Tag line             : Corresponds to the url of movie
-        #        d. Originally Available : set from metadata.id (search result)
-        #        e. Content Rating       : Always X
-        #        f. Content Rating Age   : Always 18
-        #        g. Collection Info      : From title group of filename 
+        FILMDICT['Status'] = True
 
-        # 1a.   Set Studio
-        metadata.studio = FILMDICT['Studio']
-        log('UPDATE:: Studio: %s' , metadata.studio)
-
-        # 1b.   Set Title
-        metadata.title = FILMDICT['Title']
-        log('UPDATE:: Title: %s' , metadata.title)
-
-        # 1c/d. Set Tagline/Originally Available from metadata.id
-        metadata.tagline = FILMDICT['SiteURL']
-        log('UPDATE:: Tagline: %s', metadata.tagline)
-        if FILMDICT['Year']:
-            metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-            metadata.year = metadata.originally_available_at.year
-            log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
-
-        # 1e/f. Set Content Rating to Adult/18 years
-        metadata.content_rating = 'X'
-        metadata.content_rating_age = 18
-        log('UPDATE:: Content Rating - Content Rating Age: X - 18')
-
-        # 1g. Collection
-        if COLCLEAR:
-            metadata.collections.clear()
-
-        collections = FILMDICT['Collection']
-        for collection in collections:
-            metadata.collections.add(collection)
-        log('UPDATE:: Collection Set From Filename: %s', collections)
-
-        #    2.  Metadata retrieved from website
-        #        a. Collections          : Alphabetic order
-        #        b. Countries            : Alphabetic order
-        #        c. Rating
-        #        d. Directors            : List of Directors (alphabetic order)
-        #        e. Cast                 : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
-        #        f. Posters/Background
-        #        g. Summary
-
-        # 2a.   Collections
-        log(LOG_BIGLINE)
+        # use general routine to get Metadata
+        utils.log(LOG_BIGLINE)
         try:
-            htmlcollections = html.xpath('//div[@class="property-name"][text()="Series"]/following-sibling::div[@class="property-value"]/a/text()[normalize-space()]')
-            htmlcollections = [x.strip() for x in htmlcollections if x.strip()]
-            log('UPDATE:: %s Collections Found: %s', len(htmlcollections), htmlcollections)
-            uniqueCollections = [x for x in htmlcollections if x.lower() not in (y.lower() for y in FILMDICT['Collection'])]
-            for collection in uniqueCollections:
-                metadata.collections.add(collection)
-                log('UPDATE:: Collection Added: %s', collection)
-        except Exception as e:
-            log('UPDATE:: Error getting Collections: %s', e)
-
-        # 2b.   Directors
-        log(LOG_BIGLINE)
-        try:
-            htmldirectors = html.xpath('//div[@class="property-name"][text()="Director"]/following-sibling::div[@class="property-value"]/a/text()')
-            htmldirectors = ['{0}'.format(x.strip()) for x in htmldirectors if x.strip()]
-            log('UPDATE:: Director List %s', htmldirectors)
-            directorDict = utils.getDirectors(htmldirectors, FILMDICT)
-            metadata.directors.clear()
-            for key in sorted(directorDict):
-                newDirector = metadata.directors.new()
-                newDirector.name = key
-                newDirector.photo = directorDict[key]
-                # add director to collection
-                if COLDIRECTOR:
-                    metadata.collections.add(key)
+            utils.log('SEARCH:: Access Site URL Link:')
+            fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=utils.delay())
+            FILMDICT['FilmHTML'] = fhtml
+            FILMDICT[AGENT] = utils.getSiteInfo(AGENT, FILMDICT, kwCompilation=FILMDICT['vCompilation'], kwReleaseDate=FILMDICT['vReleaseDate'], kwDuration=FILMDICT['vDuration'])
 
         except Exception as e:
-            log('UPDATE:: Error getting Director(s): %s', e)
+            utils.log('SEARCH:: Error Accessing Site URL page: %s', e)
+            FILMDICT['Status'] = False
 
-        # 2c.   Cast: get thumbnails from IAFD as they are right dimensions for plex cast list
-        log(LOG_BIGLINE)
+        # we should have a match on studio, title and year now. Find corresponding film on IAFD
+        utils.log(LOG_BIGLINE)
         try:
-            htmlcast = html.xpath('//div[@class="property-name"][text()="Cast:"]/following-sibling::div[@class="property-value"]/a/text()')
-            htmlcast = ['{0}'.format(x.strip()) for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
-            log('UPDATE:: Cast List %s', htmlcast)
-            
-            castDict = utils.getCast(htmlcast, FILMDICT)
+            utils.log(LOG_BIGLINE)
+            utils.log('SEARCH:: Check for Film on IAFD:')
+            utils.getFilmOnIAFD(FILMDICT)
 
-            # sort the dictionary and add key(Name)- value(Photo, Role) to metadata
-            metadata.roles.clear()
-            for key in sorted(castDict):
-                newRole = metadata.roles.new()
-                newRole.name = key
-                newRole.photo = castDict[key]['Photo']
-                newRole.role = castDict[key]['Role']
-                # add cast name to collection
-                if COLCAST:
-                    metadata.collections.add(key)
+        except:
+            pass
 
-        except Exception as e:
-            log('UPDATE:: Error getting Cast: %s', e)
+        # update the metadata
+        utils.log(LOG_BIGLINE)
+        if FILMDICT['Status']:
+            utils.log(LOG_BIGLINE)
+            '''
+            The following bits of metadata need to be established and used to update the movie on plex
+            1.  Metadata that is set by Agent as default
+                a. id.                 : Plex media id setting
+                b. Studio              : From studio group of filename - no need to process this as above
+                c. Title               : From title group of filename - no need to process this as is used to find it on website
+                d. Tag line            : Corresponds to the url of film
+                e. Originally Available: set from metadata.id (search result)
+                f. Content Rating      : Always X
+                g. Content Rating Age  : Always 18
 
-        # 2d.   Posters/Background Art
-        #       Simply Adult only stores the poster image and poster+background art as the second image
-        #       apply the poster image to both
-        log(LOG_BIGLINE)
-        try:
-            htmlimages = html.xpath('//img[@id="product_thumbnail"]/@src')
-            for i, htmlimage in enumerate(htmlimages):
-                htmlimages[i] = htmlimage if 'https:' in htmlimage else 'https:' + htmlimage
+            2.  Metadata retrieved from website
+                a. Originally Availiable Date
+                b. Ratings
+                c. Genres                           : List of Genres (alphabetic order)
+                d. Countries
+                e. Cast                             : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
+                f. Directors                        : List of Directors (alphabetic order)
+                g. Collections                      : retrieved from FILMDICT, Genres, Countries, Cast Directors
+                h. Posters
+                i. Art (Background)
+                j. Reviews
+                k. Chapters
+                l. Summary
+            '''
+            utils.setMetadata(metadata, media, FILMDICT)
 
-            if len(htmlimages) == 1:    # if only one image duplicate it
-                htmlimages.append(htmlimages[0])
+        # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
+        if not FILMDICT['Status']:
+            metadata.originally_available_at = None
+            metadata.year = 0
 
-            image = htmlimages[0]
-            log('UPDATE:: Poster Image Found: [1] - %s', image)
-            metadata.posters[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-            metadata.posters.validate_keys([image])
-
-            image = htmlimages[1]
-            log('UPDATE:: Art Image Found: [2] - %s', image)
-            metadata.art[image] = Proxy.Media(HTTP.Request(image).content, sort_order=1)
-            metadata.art.validate_keys([image])
-
-        except Exception as e:
-            log('UPDATE:: Error getting Poster/Art: %s', e)
-
-        # 2e.   Summary = Synopsis with IAFD Legend
-        log(LOG_BIGLINE)
-        try:
-            synopsis = html.xpath('//div[@class="product_description"]/text()')[0].strip()
-            log('UPDATE:: Synopsis Found: %s', synopsis)
-            synopsis = utils.TranslateString(synopsis, SITE_LANGUAGE, lang, DETECT)
-        except Exception as e:
-            synopsis = ''
-            log('UPDATE:: Error getting Synopsis: %s', e)
-
-        # combine and update
-        log(LOG_SUBLINE)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
-        summary = summary.replace('\n\n', '\n')
-        log('UPDATE:: Summary with Legend: %s', summary)
-        metadata.summary = summary
-
-        log(LOG_BIGLINE)
-        log('UPDATE:: Finished Update Routine')
-        log(LOG_BIGLINE)
+        utils.logFooter('UPDATE', FILMDICT)
+        return FILMDICT['Status']

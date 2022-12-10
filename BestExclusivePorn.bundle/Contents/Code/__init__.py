@@ -1,44 +1,25 @@
 #!/usr/bin/env python
-# pylint: disable=line-too-long
-# pylint: disable=W0702, W0703, C0103, C0410
 # encoding=utf8
 '''
 # BestExclusivePorn - (IAFD)
                                                   Version History
                                                   ---------------
     Date            Version                         Modification
-    09 Aug 2020     2020.08.09.01  Creation
-    07 Sep 2020     2020.08.09.02  Improved matching on film titles with apostrophes
-                                   added cast scraping - actors restricted to 2 names
-    15 Sep 2020     2020.08.09.03  removed enquotes around search string
-    25 Sep 2020     2020.08.09.04  search string can only have a max of 59 characters
-    07 Oct 2020     2020.08.09.05  IAFD - change to https
-                                   get cast names from statting label if present
-    22 Nov 2020     2020.08.09.06  leave words attached to commas in search string
-    23 Dec 2020     2020.08.09.07  Save film in Title Case mode... as this agent detects actor names from the title as they have initial caps
-    26 Dec 2020     2020.08.09.08  Improved on IAFD search, actors sexual roles if recorded are returned, if not shows a red circle.
-                                   if actor is not credited on IAFD but is on Agent Site it shows as a Yellow Box below the actor
-                                   sped up search by removing search by actor/director... less hits on IAFD per actor...
-    28 Feb 2021     2020.08.09.10  Moved IAFD and general functions to other py files
-                                   Enhancements to IAFD search routine, including Levenshtein Matching on Cast names
-                                   Added iafd legend to summary
-    11 May 2021     2020.08.09.11  Further code reorganisation
-    30 May 2021     2020.08.09.12  Further code reorganisation
-    04 Feb 2022     2020.08.09.13  implemented change suggested by Cody: duration matching optional on IAFD matching
-                                   Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
-    03 Mar 2022     2020.08.09.14  BASE URL changed from http: to https:
     19 Aug 2022     2020.08.09.15  Multiple Improvements and major rewrites
                                    - tidy up of genres as they have different names across various websites.
                                    - tidy up of countries and locations
                                    - introduced Grouped Collections and Default to keep track of films
------------------------------------------------------------------------------------------------------------------------------------
+    30 Nov 2022     2020.08.09.16   Updated to use latest version of utils.py
+
+---------------------------------------------------------------------------------------------------------------
 '''
-import json, re
+import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
 VERSION_NO = '2020.08.09.15'
 AGENT = 'BestExclusivePorn'
+AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
 # Date Format used by website
 DATEFORMAT = '%B %d, %Y'
@@ -46,31 +27,16 @@ DATEFORMAT = '%B %d, %Y'
 # URLS
 BASE_URL = 'https://bestexclusiveporn.com/'
 BASE_SEARCH_URL = BASE_URL + '?s={0}'
+WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Website Language
 SITE_LANGUAGE = 'en'
 
 # Preferences
-COLCAST = Prefs['castcollection']                   # add cast to collection
-COLCOUNTRY = Prefs['countrycollection']             # add country to collection
-COLDIRECTOR = Prefs['directorcollection']           # add director to collection
-COLGENRE = Prefs['genrecollection']                 # add genres to collection
-COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
-COLSERIES = Prefs['seriescollection']               # add series to collection
-DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
-DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
-GROUPCOL = Prefs['groupcollections']                # group collections by Genre, Directors, and Cast
-MATCHIAFDDURATION = Prefs['matchiafdduration']      # Match against IAFD Duration value
-MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
-PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
-RESETMETA = Prefs['resetmeta']                      # clear previously set metadata
-USEBACKGROUNDART = Prefs['usebackgroundart']        # Use background art
+MATCHSITEDURATION = ''
 
 # dictionaries & Set for holding film variables, genres and countries
 FILMDICT = {}
-TIDYDICT = {}
-COUNTRYSET = set()
 
 # utils.log section separators
 LOG_BIGLINE = '-' * 140
@@ -84,7 +50,8 @@ import utils
 def Start():
     ''' initialise process '''
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
+    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.102 Safari/537.36 Edg/104.0.1293.63'
+
     utils.setupStartVariables()
     ValidatePrefs()
 
@@ -138,30 +105,37 @@ class BestExclusivePorn(Agent.Movies):
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
+            utils.log(LOG_ASTLINE)
             utils.log('SEARCH:: {0:<29} {1}'.format('Error: Missing Media Item File', 'QUIT'))
+            utils.log(LOG_ASTLINE)
             return
 
         #clear-cache directive
-        if media.name == "clear-cache":  
+        if media.name == "clear-cache":
             HTTP.ClearCache()
             results.Append(MetadataSearchResult(id='clear-cache', name='Plex web cache cleared', year=media.year, lang=lang, score=0))
+            utils.log(LOG_ASTLINE)
             utils.log('SEARCH:: {0:<29} {1}'.format('Warning: Clear Cache Directive Encountered', 'QUIT'))
+            utils.log(LOG_ASTLINE)
             return
 
         utils.logHeader('SEARCH', media, lang)
 
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media)
+            FILMDICT = copy.deepcopy(utils.matchFilename(media))
             FILMDICT['lang'] = lang
             FILMDICT['Agent'] = AGENT
+            FILMDICT['Status'] = False
         except Exception as e:
+            utils.log(LOG_ASTLINE)
             utils.log('SEARCH:: Error: %s', e)
+            utils.log(LOG_ASTLINE)
             return
 
         utils.log(LOG_BIGLINE)
 
-        # Search Query - for use to search the internet, remove all non alphabetic characters etc..
+        # Search Query - for use to search the internet, remove all non alphabetic characters.
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
         searchTitle = self.CleanSearchString(FILMDICT['SearchTitle'])
         searchQuery = BASE_SEARCH_URL.format(searchTitle)
@@ -170,7 +144,7 @@ class BestExclusivePorn(Agent.Movies):
         while morePages:
             utils.log('SEARCH:: Search Query: %s', searchQuery)
             try:
-                html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
+                html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=utils.delay())
                 # Finds the entire media enclosure
                 filmsList = html.xpath('//div[contains(@class,"type-post status-publish")]')
                 if not filmsList:
@@ -294,28 +268,10 @@ class BestExclusivePorn(Agent.Movies):
                     utils.log(LOG_SUBLINE)
                     continue
 
-                # Access Site URL
-                utils.log(LOG_BIGLINE)
-                try:
-                    utils.log('SEARCH:: {0:<29} {1}'.format('Reading Site URL page', filmURL))
-                    fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=DELAY)
-                    FILMDICT['FilmHTML'] = fhtml
-                except Exception as e:
-                    utils.log('SEARCH:: Error reading Site URL page: %s', e)
-                    utils.log(LOG_SUBLINE)
-                    continue
+                FILMDICT['vCompilation'] = ''
+                FILMDICT['vDuration'] = ''
+                FILMDICT['vReleaseDate'] = vReleaseDate
 
-                # use general routine to get Release Date, Genres, Countries, IsCompilation, Poster & Art Images, Scene and Chapter information
-                utils.log(LOG_BIGLINE)
-                utils.log('SEARCH:: Access Site URL Link:')
-                FILMDICT[AGENT] = utils.getSiteInfo(AGENT, FILMDICT, kwReleaseDate=vReleaseDate, kwDuration=vDuration)
-
-                # we should have a match on studio, title and year now. Find corresponding film on IAFD
-                utils.log(LOG_BIGLINE)
-                utils.log('SEARCH:: Check for Film on IAFD:')
-                utils.getFilmOnIAFD(FILMDICT)
-
-                FILMDICT['id'] = media.id
                 myID = json.dumps(FILMDICT, default=utils.jsonDumper)
                 results.Append(MetadataSearchResult(id=myID, name=FILMDICT['Title'], score=100, lang=lang))
 
@@ -340,9 +296,66 @@ class BestExclusivePorn(Agent.Movies):
         utils.log(LOG_BIGLINE)
 
         utils.printFilmInformation(FILMDICT)
-        utils.log(LOG_BIGLINE)
 
-        utils.setMetadata(metadata, FILMDICT)
+        FILMDICT['Status'] = True
+
+        # use general routine to get Metadata
+        utils.log(LOG_BIGLINE)
+        try:
+            utils.log('SEARCH:: Access Site URL Link:')
+            fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=utils.delay())
+            FILMDICT['FilmHTML'] = fhtml
+            FILMDICT[AGENT] = utils.getSiteInfo(AGENT, FILMDICT, kwCompilation=FILMDICT['vCompilation'], kwReleaseDate=FILMDICT['vReleaseDate'], kwDuration=FILMDICT['vDuration'])
+
+        except Exception as e:
+            utils.log('SEARCH:: Error Accessing Site URL page: %s', e)
+            FILMDICT['Status'] = False
+
+        # we should have a match on studio, title and year now. Find corresponding film on IAFD
+        utils.log(LOG_BIGLINE)
+        try:
+            utils.log(LOG_BIGLINE)
+            utils.log('SEARCH:: Check for Film on IAFD:')
+            utils.getFilmOnIAFD(FILMDICT)
+
+        except:
+            pass
+
+        # update the metadata
+        utils.log(LOG_BIGLINE)
+        if FILMDICT['Status']:
+            utils.log(LOG_BIGLINE)
+            '''
+            The following bits of metadata need to be established and used to update the movie on plex
+            1.  Metadata that is set by Agent as default
+                a. id.                 : Plex media id setting
+                b. Studio              : From studio group of filename - no need to process this as above
+                c. Title               : From title group of filename - no need to process this as is used to find it on website
+                d. Tag line            : Corresponds to the url of film
+                e. Originally Available: set from metadata.id (search result)
+                f. Content Rating      : Always X
+                g. Content Rating Age  : Always 18
+
+            2.  Metadata retrieved from website
+                a. Originally Availiable Date
+                b. Ratings
+                c. Genres                           : List of Genres (alphabetic order)
+                d. Countries
+                e. Cast                             : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
+                f. Directors                        : List of Directors (alphabetic order)
+                g. Collections                      : retrieved from FILMDICT, Genres, Countries, Cast Directors
+                h. Posters
+                i. Art (Background)
+                j. Reviews
+                k. Chapters
+                l. Summary
+            '''
+            utils.setMetadata(metadata, media, FILMDICT)
+
+        # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
+        if not FILMDICT['Status']:
+            metadata.originally_available_at = None
+            metadata.year = 0
 
         utils.logFooter('UPDATE', FILMDICT)
         return FILMDICT['Status']

@@ -5,102 +5,56 @@
                                                   Version History
                                                   ---------------
     Date            Version                         Modification
-    22 Apr 2020   2020.04.22.01    Creation
-    15 May 2020   2020.04.22.02    Corrected search string to account for titles that have a Colon in them
-                                   added/merge matching string routines - filename, studio, release date
-                                   included cast with non-sexual roles
-    19 May 2020   2020.04.22.03    Corrected search to look past the results page and get the movie title page to find
-                                   studio/release date as the results page only listed the distributor/production year
-                                   updated date match function
-    01 Jun 2020   2020.04.22.04    Implemented translation of summary
-                                   put back scrape from local media assets
-    27 Jun 2020   2020.04.22.05    Improvement to Summary Translation: Translate into Plex Library Language
-                                   stripping of intenet domain suffixes from studio names when matching
-                                   handling of unicode characters in film titles and comparision string normalisation
-    12 Sep 2020   2020.04.22.06    Titles with hyphens failing as these were converted to ":"
-                                   corrected by splitting and using string upto that position as search...
-    20 Sep 2020   2020.04.22.07    Titles with '[', '(' were corrected by splitting and using string upto that position as search...
-    07 Oct 2020   2020.04.22.08    IAFD - change to https
-    07 Mar 2021   2020.04.22.10    Moved IAFD and general functions to other py files
-                                   Enhancements to IAFD search routine, including Levenshtein Matching on Cast names
-                                   Added iafd legend to summary
-    28 Mar 2021   2020.04.22.11    Added code to create actor collections
-    27 Jul 2021   2020.04.22.12    Merged all libraries into utils.py
-                                   improvements to film matching within iafd and scraping data at match
-                                   Fix Issue: IAFD Unable to match three titles #105
-    17 Jan 2021   2020.04.22.13    IAFD was not assigning SiteURL dictionary entry so was failing on update
-                                   set duration DX to preferences - had left it as 60 mins after testing in previous version
-                                   This error was found whilst trying to sort issue #115
-    04 Feb 2022   2020.04.22.14    implemented change suggested by Cody: duration matching optional on IAFD matching
-                                   Cast list if used in filename becomes the default that is matched against IAFD, useful in case no cast is listed in agent
-    04 Apr 2022   2020.04.22.15    #151 - Fixed: No Match when checking against No Duration on IAFD
----------------------------------------------------------------------------------------------------------------
+    19 Aug 2022     2020.04.22.17   Multiple Improvements and major rewrites
+                                    - tidy up of genres as they have different names across various websites.
+                                    - tidy up of countries and locations
+                                    - introduced Grouped Collections and Default to keep track of films
+    05 Dec 2022     2020.04.22.18   Updated to use latest version of utils.py
+
+-----------------------------------------------------------------------------------------------------------------------------------
 '''
-import json, re
+import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.04.22.15'
-PLUGIN_LOG_TITLE = 'IAFD'
+VERSION_NO = '2020.04.22.18'
+AGENT = 'IAFD'
+AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
-# log section separators
-LOG_BIGLINE = '--------------------------------------------------------------------------------'
-LOG_SUBLINE = '      --------------------------------------------------------------------------'
-
-# Preferences
-COLCAST = Prefs['castcollection']                   # add cast to collection
-COLCLEAR = Prefs['clearcollections']                # clear previously set collections
-COLCOUNTRY = Prefs['countrycollection']             # add country to collection
-COLDIRECTOR = Prefs['directorcollection']           # add director to collection
-COLGENRE = Prefs['genrecollection']                 # add genres to collection
-COLSTUDIO = Prefs['studiocollection']               # add studio name to collection
-COLTITLE = Prefs['titlecollection']                 # add title [parts] to collection
-DELAY = int(Prefs['delay'])                         # Delay used when requesting HTML, may be good to have to prevent being banned from the site
-DETECT = Prefs['detect']                            # detect the language the summary appears in on the web page
-DURATIONDX = int(Prefs['durationdx'])               # Acceptable difference between actual duration of video file and that on agent website
-MATCHIAFDDURATION = Prefs['matchiafdduration']      # Match against IAFD Duration value
-MATCHSITEDURATION = Prefs['matchsiteduration']      # Match against Site Duration value
-PREFIXLEGEND = Prefs['prefixlegend']                # place cast legend at start of summary or end
-
-# dictionary holding film variables
-FILMDICT = {}
-
-# Date Formats used by website
-DATEFORMAT = '%b %d, %Y'
+# URLS
+WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Website Language
 SITE_LANGUAGE = 'en'
+
+# Preferences
+MATCHSITEDURATION = ''
+
+# dictionaries & Set for holding film variables, genres and countries
+FILMDICT = {}
+
+# utils.log section separators
+LOG_BIGLINE = '-' * 140
+LOG_SUBLINE = '      ' + '-' * 100
+LOG_ASTLINE = '*' * 140
+# ----------------------------------------------------------------------------------------------------------------------------------
+# imports placed here to use previously declared variables
+import utils
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def Start():
     ''' initialise process '''
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
+    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
+    HTTP.Headers['Referer'] =  'https://www.iafd.com'
+
+    utils.setupStartVariables()
+    ValidatePrefs()
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def ValidatePrefs():
-    ''' validate changed user preferences '''
+    ''' Validate Changed Preferences '''
     pass
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-def anyOf(iterable):
-    '''  used for matching strings in lists '''
-    for element in iterable:
-        if element:
-            return element
-    return None
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-def log(message, *args):
-    ''' log messages '''
-    if re.search('ERROR', message, re.IGNORECASE):
-        Log.Error(PLUGIN_LOG_TITLE + ' - ' + message, *args)
-    else:
-        Log.Info(PLUGIN_LOG_TITLE + '  - ' + message, *args)
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-# imports placed here to use previously declared variables
-import utils
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 class IAFD(Agent.Movies):
@@ -114,222 +68,95 @@ class IAFD(Agent.Movies):
     accepts_from = ['com.plexapp.agents.localmedia']
 
     #-------------------------------------------------------------------------------------------------------------------------------
-    def CleanSearchString(self, myString):
-        ''' Prepare Title for search query '''
-        log('AGNT  :: Original Search Query        : {0}'.format(myString))
-
-        myString = myString.strip().lower()
-
-        # split and take up to first occurence of character
-        splitChars = ['-', '[', '(', ur'\u2013', ur'\u2014']
-        pattern = u'[{0}]'.format(''.join(splitChars))
-        matched = re.search(pattern, myString)  # match against whole string
-        if matched:
-            numPos = matched.start()
-            log('SELF:: Search Query:: Splitting at position [{0}]. Found one of these {1}'.format(numPos, pattern))
-            myString = myString[:numPos]
-            log('SELF:: Amended Search Query [{0}]'.format(myString))
-        else:
-            log('SELF:: Search Query:: Split not attempted. String has none of these {0}'.format(pattern))
-
-        myString = String.StripDiacritics(myString)
-        myString = String.URLEncode(myString)
-
-        # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string 
-        myString = myString.replace('%25', '%').replace('*', '')
-
-        log('AGNT  :: Returned Search Query        : {0}'.format(myString))
-
-        return myString
-
-    # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
+            utils.log('SEARCH:: {0:<29} {1}'.format('Error: Missing Media Item File', 'QUIT'))
             return
 
-        utils.logHeaders('SEARCH', media, lang)
+        #clear-cache directive
+        if media.name == "clear-cache":  
+            HTTP.ClearCache()
+            results.Append(MetadataSearchResult(id='clear-cache', name='Plex web cache cleared', year=media.year, lang=lang, score=0))
+            utils.log('SEARCH:: {0:<29} {1}'.format('Warning: Clear Cache Directive Encountered', 'QUIT'))
+            return
+
+        utils.logHeader('SEARCH', media, lang)
 
         # Check filename format
         try:
             FILMDICT = utils.matchFilename(media)
+            FILMDICT['lang'] = lang
+            FILMDICT['Agent'] = AGENT
         except Exception as e:
-            log('SEARCH:: Error: %s', e)
+            utils.log('SEARCH:: Error: %s', e)
             return
 
-        log(LOG_BIGLINE)
-        log('SEARCH:: Check for Film on IAFD:')
+        utils.log(LOG_BIGLINE)
+        utils.log('SEARCH:: Check for Film on IAFD:')
         utils.getFilmOnIAFD(FILMDICT)
+        utils.log(LOG_BIGLINE)
 
         if FILMDICT['FoundOnIAFD'] == 'Yes':
-            FILMDICT['SiteURL'] = FILMDICT['IAFDFilmURL']
-            results.Append(MetadataSearchResult(id=json.dumps(FILMDICT), name=FILMDICT['Title'], score=100, lang=lang))
+                FILMDICT['id'] = media.id
+                myID = json.dumps(FILMDICT, default=utils.jsonDumper)
+                results.Append(MetadataSearchResult(id=myID, name=FILMDICT['Title'], score=100, lang=lang))
 
-        log(LOG_BIGLINE)
-        log('SEARCH:: Finished Search Routine')
-        log(LOG_BIGLINE)
-        return
+                # Film Scraped Sucessfully - update status and break out!
+                FILMDICT['Status'] = True
+
+        # End Search Routine
+        utils.logFooter('SEARCH', FILMDICT)
+        return FILMDICT['Status']
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
-        utils.logHeaders('UPDATE', media, lang)
+        utils.logHeader('UPDATE', media, lang)
 
-        # Fetch FILMDICT
-        FILMDICT = json.loads(metadata.id)
-        log('UPDATE:: Film Dictionary Variables:')
-        for key in sorted(FILMDICT.keys()):
-            log('UPDATE:: {0: <29}: {1}'.format(key, FILMDICT[key]))
-        log(LOG_BIGLINE)
+        utils.log('UPDATE:: Convert Date Time & Set Objects:')
+        FILMDICT = json.loads(metadata.id, object_hook=utils.jsonLoader)
+        utils.log(LOG_BIGLINE)
 
-        #  The following bits of metadata need to be established and used to update the movie on plex
-        #    1.  Metadata that is set by Agent as default
-        #        a. Studio               : From studio group of filename - no need to process this as above
-        #        b. Title                : From title group of filename - no need to process this as is used to find it on website
-        #        c. Tag line             : Corresponds to the url of movie
-        #        d. Originally Available : set from metadata.id (search result)
-        #        e. Content Rating       : Always X
-        #        f. Content Rating Age   : Always 18
-        #        g. Collection Info      : From title group of filename 
+        utils.printFilmInformation(FILMDICT)
 
-        # 1a.   Set Studio
-        metadata.studio = FILMDICT['Studio']
-        log('UPDATE:: Studio: %s' , metadata.studio)
+        FILMDICT['Status'] = True
 
-        # 1b.   Set Title
-        metadata.title = FILMDICT['Title']
-        log('UPDATE:: Title: %s' , metadata.title)
+        # update the metadata
+        utils.log(LOG_BIGLINE)
+        if FILMDICT['Status']:
+            utils.log(LOG_BIGLINE)
+            '''
+            The following bits of metadata need to be established and used to update the movie on plex
+            1.  Metadata that is set by Agent as default
+                a. id.                 : Plex media id setting
+                b. Studio              : From studio group of filename - no need to process this as above
+                c. Title               : From title group of filename - no need to process this as is used to find it on website
+                d. Tag line            : Corresponds to the url of film
+                e. Originally Available: set from metadata.id (search result)
+                f. Content Rating      : Always X
+                g. Content Rating Age  : Always 18
 
-        # 1c/d. Set Tagline/Originally Available from metadata.id
-        metadata.tagline = FILMDICT['SiteURL']
-        metadata.originally_available_at = datetime.strptime(FILMDICT['CompareDate'], DATEFORMAT)
-        metadata.year = metadata.originally_available_at.year
-        log('UPDATE:: Tagline: %s', metadata.tagline)
-        log('UPDATE:: Default Originally Available Date: %s', metadata.originally_available_at)
+            2.  Metadata retrieved from website
+                a. Originally Availiable Date
+                b. Ratings
+                c. Genres                           : List of Genres (alphabetic order)
+                d. Countries
+                e. Cast                             : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
+                f. Directors                        : List of Directors (alphabetic order)
+                g. Collections                      : retrieved from FILMDICT, Genres, Countries, Cast Directors
+                h. Posters
+                i. Art (Background)
+                j. Reviews
+                k. Chapters
+                l. Summary
+            '''
+            utils.setMetadata(metadata, media, FILMDICT)
 
-        # 1e/f. Set Content Rating to Adult/18 years
-        metadata.content_rating = 'X'
-        metadata.content_rating_age = 18
-        log('UPDATE:: Content Rating - Content Rating Age: X - 18')
+        # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
+        if not FILMDICT['Status']:
+            metadata.originally_available_at = None
+            metadata.year = 0
 
-        # 1g. Collection
-        if COLCLEAR:
-            metadata.collections.clear()
-
-        collections = FILMDICT['Collection']
-        for collection in collections:
-            metadata.collections.add(collection)
-        log('UPDATE:: Collection Set From filename: %s', collections)
-
-        #    2.  Metadata retrieved from website
-        #        a. Directors
-        #        b. Cast                 : List of Actors and Photos (alphabetic order)
-        #        c. Summary              : Synopsis, Scene Breakdown and Comments
-
-        # 2a.   Directors
-        log(LOG_BIGLINE)
-        if FILMDICT['Directors']:
-            directorDict = FILMDICT['Directors']
-            log('UPDATE:: Director List %s', directorDict.keys())
-            metadata.directors.clear()
-            for key in sorted(directorDict):
-                newDirector = metadata.directors.new()
-                newDirector.name = key
-                newDirector.photo = directorDict[key]
-                # add director to collection
-                if COLDIRECTOR:
-                    metadata.collections.add(key)
-        else:
-            log('UPDATE:: Error No Directors Recorded')
-
-
-        # 2b.   Cast
-        log(LOG_BIGLINE)
-        if FILMDICT['Cast']:
-            castDict = FILMDICT['Cast']
-            log('UPDATE:: Cast List %s', castDict.keys())
-
-            # sort the dictionary and add kv to metadata
-            metadata.roles.clear()
-            for key in sorted(castDict):
-                cast = metadata.roles.new()
-                cast.name = key
-                cast.photo = castDict[key]['Photo']
-                cast.role = castDict[key]['Role']
-                # add cast name to collection
-                if COLCAST:
-                    metadata.collections.add(key)
-        else:
-            log('UPDATE:: Error No Cast Recorded')
-
-        # 2c.   Reviews - Put all Scene Information here
-        log(LOG_BIGLINE)
-        if FILMDICT['Scenes']:
-            htmlscenes = FILMDICT['Scenes'].split('##')
-            log('UPDATE:: Possible Number of Scenes [%s]', len(htmlscenes))
-
-            metadata.reviews.clear()
-            sceneCount = 0 # avoid enumerating the number of scenes as some films have empty scenes
-            for count, scene in enumerate(htmlscenes, start=1):
-                log('UPDATE:: Scene No %s', count)
-                if '. ' in scene:
-                    title, writing = scene.split('. ', 1)
-                else:
-                    title = scene
-                    writing = ''
-
-                # if no title and no scene write up
-                if not title and not writing:
-                    continue
-                sceneCount += 1
-
-                newReview = metadata.reviews.new()
-                newReview.author = 'IAFD'
-                newReview.link  = FILMDICT['SiteURL']
-                if len(title) > 40:
-                    for i in range(40, -1, -1):
-                        if title[i] == ' ':
-                            title = title[0:i]
-                            break
-                newReview.source = '{0}. {1}...'.format(sceneCount, title if title else FILMDICT['Title'])
-                if len(writing) > 275:
-                    for i in range(275, -1, -1):
-                        if writing[i] in ['.', '!', '?']:
-                            writing = writing[0:i + 1]
-                            break
-                newReview.text = utils.TranslateString(writing, SITE_LANGUAGE, lang, DETECT)
-                log(LOG_SUBLINE)
-        else:
-            log('UPDATE:: Error No Scenes Recorded')
-
-        # 2d.   Summary (IAFD Legend + synopsis + Comments)
-        log(LOG_BIGLINE)
-        # synopsis
-        if FILMDICT['Synopsis']:
-            synopsis = FILMDICT['Synopsis']
-            log('UPDATE:: Synopsis Found: %s', synopsis)
-        else:
-            synopsis = ''
-            log('UPDATE:: Error No Synopsis Recorded')
-
-        # comments
-        log(LOG_SUBLINE)
-        if FILMDICT['Comments']:
-            comments = FILMDICT['Comments'].replace('##', '\n')
-            log('UPDATE:: Comments Found: %s', comments)
-        else:
-            comments = ''
-            log('UPDATE:: Error No Comments Recorded')
-
-        # combine and update
-        log(LOG_SUBLINE)
-        summary = ('{0}\n{1}').format(synopsis.strip(), comments.strip())
-        summary = utils.TranslateString(summary, SITE_LANGUAGE, lang, DETECT)
-        summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], summary)
-        summary = summary.replace('\n\n', '\n')
-        log('UPDATE:: Summary with Legend: %s', summary)
-        metadata.summary = summary
-
-        log(LOG_BIGLINE)
-        log('UPDATE:: Finished Update Routine')
-        log(LOG_BIGLINE)
+        utils.logFooter('UPDATE', FILMDICT)
+        return FILMDICT['Status']

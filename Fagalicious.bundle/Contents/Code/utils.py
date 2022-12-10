@@ -44,11 +44,14 @@ General Functions found in all agents
                     implemented Collection Grouping - Preference based
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
-import cloudscraper, fake_useragent, os, platform, re, subprocess, unicodedata
+import cloudscraper, fake_useragent, os, platform, random, re, requests, subprocess, time, unicodedata
 from datetime import datetime, timedelta
+from collections import OrderedDict
 from unidecode import unidecode
 from urlparse import urlparse
 from textwrap import wrap
+from io import BytesIO
+from PIL import Image
 
 # IAFD Related variables
 IAFD_BASE = 'https://www.iafd.com'
@@ -56,10 +59,19 @@ IAFD_SEARCH_URL = IAFD_BASE + '/results.asp?searchtype=comprehensive&searchstrin
 IAFD_FILTER = '&FirstYear={0}&LastYear={1}&Submit=Filter'
 IAFD_ABSENT = u'\U0000274C'        # red cross mark - not on IAFD
 IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
+BISEXUAL = u'\U000026A5'           # ⚥ - bisexual films
+HOMOSEXUAL =  u'\U000026A5'        # ⚣ - gay films
+HETEROSEXUAL = u'\U000026A4'       # ⚤ - straight films
+NOBREAK_HYPHEN = u'\U00002011'     # Non Breaking Hyphen
+NOBREAK_SPACE = u'\U000000A0'      # Non Breaking Space
+EN_SPACE = u'\U00002002'           # Non Breaking Space
+THIN_SPACE = u'\U00002009'         # Thin Space (Non-Breaking)
+MONTHS = {1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May', 6: 'June', 7: 'July', 8: 'August', 9: 'September', 10: 'October', 11: 'November', 12: 'December'}
 
 # Plex System Variables/Methods
 PlexSupportPath = Core.app_support_path
 PlexLoadFile = Core.storage.load
+PlexSaveFile = Core.storage.save
 
 # log section separators
 LOG_BIGLINE = '-' * 140
@@ -69,12 +81,16 @@ LOG_ASTLINE = '*' * 140
 # getHTTPRequest variable
 scraper = None
 # ----------------------------------------------------------------------------------------------------------------------------------
+def delay():
+    delayList = [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
+    delay = random.choice(delayList)
+    return delay
+
+# ----------------------------------------------------------------------------------------------------------------------------------
 def findTidy(myItem):
-    myItem = myItem.lower()
-    myNewItem = TIDYDICT[myItem] if myItem in TIDYDICT else ''
-    if myNewItem == 'x':
-        myNewItem = None
-    return myNewItem
+    myItem = TIDYDICT.get(myItem.lower(), '')
+    myItem = None if myItem == 'x' else myItem
+    return myItem
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def getCast(agntCastList, FILMDICT):
@@ -154,22 +170,19 @@ def getDirectors(agntDirectorList, FILMDICT):
     return directorDict
 
 # -------------------------------------------------------------------------------------------------------------------------------
-def getFilmImages(imageType, imageURL, whRatio):
+def getFilmImages(imageType, imageLocation, whRatio):
     ''' Only for Scene Agents: get Film images - posters/background art and crop if necessary '''
-    from io import BytesIO
-    from PIL import Image
+    Thumbor = THUMBOR + "/0x0:{0}x{1}/{2}"
+    vbScript = os.path.join(PlexSupportPath, 'Plug-ins', '{0}.bundle'.format(AGENT), 'Contents', 'Code', 'ImageCropper.vbs')
+    Cropper = r'CScript.exe "{0}" "{1}" "{2}" "{3}"'
 
-    Thumbor = Prefs['thumbor'] + "/0x0:{0}x{1}/{2}"
-    Cropper = r'CScript.exe "{0}/Plex Media Server/Plug-ins/{1}.bundle/Contents/Code/ImageCropper.vbs" "{2}" "{3}" "{4}" "{5}"'
-
-    pic = imageURL
-    picContent = HTTP.Request(pic).content
-    picInfo = Image.open(BytesIO(HTTP.Request(pic).content))
-    width, height = picInfo.size
+    imageContent = HTTP.Request(imageLocation).content
+    myImage = Image.open(BytesIO(imageContent))
+    width, height = myImage.size
     dispWidth = '{:,d}'.format(width)       # thousands separator
     dispHeight = '{:,d}'.format(height)     # thousands separator
 
-    log('UTILS :: {0} Found: Width ({1}) x Height ({2}); URL: {3}'.format(imageType, dispWidth, dispHeight, imageURL))
+    log('UTILS :: {0} Found: Width ({1}) x Height ({2}); URL: {3}'.format(imageType, dispWidth, dispHeight, imageLocation))
 
     maxHeight = float(width * whRatio)      # Maximum allowable height
 
@@ -179,7 +192,7 @@ def getFilmImages(imageType, imageURL, whRatio):
     DxHeight = 0.0 if cropHeight == height else (abs(cropHeight - height) / height) * 100.0
     DxWidth = 0.0 if cropWidth == width else (abs(cropWidth - width) / width) * 100.0
 
-    cropRequired = True if DxWidth >= 10 or DxHeight >=10 else False
+    cropRequired = True if DxWidth >= 15 or DxHeight >=15 else False
     cropWidth = int(cropWidth)
     cropHeight = int(cropHeight)
     desiredWidth = '{0:,d}'.format(cropWidth)     # thousands separator
@@ -189,25 +202,31 @@ def getFilmImages(imageType, imageURL, whRatio):
     log('UTILS :: Crop {0} {1}: Actual (w{2} x h{3}), Desired (w{4} x h{5}), % Dx = w[{6}%] x h[{7}%]'.format("Required:" if cropRequired else "Not Required:", imageType, dispWidth, dispHeight, desiredWidth, desiredHeight, DxWidth, DxHeight))
     if cropRequired:
         try:
-            log('UTILS :: Using Thumbor to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
-            pic = Thumbor.format(cropWidth, cropHeight, imageURL)
-            picContent = HTTP.Request(pic).content
+            imageLocation = Thumbor.format(cropWidth, cropHeight, imageLocation)
+            log('UTILS :: Thumbor - Crop Image: {0}'.format(imageLocation))
+            log('UTILS ::   Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
+            imageContent = HTTP.Request(imageLocation).content
+
         except Exception as e:
-            log('UTILS :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, pic, e))
-            try:
-                if os.name == 'nt':
-                    log('UTILS :: Using Script to crop image to: {0} x {1}'.format(desiredWidth, desiredHeight))
+            log('UTILS :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, imageLocation, e))
+            if os.name == 'nt':
+                try:
                     envVar = os.environ
                     TempFolder = envVar['TEMP']
-                    LocalAppDataFolder = envVar['LOCALAPPDATA']
-                    pic = os.path.join(TempFolder, imageURL.split("/")[-1])
-                    cmd = Cropper.format(LocalAppDataFolder, AGENT, imageURL, pic, cropWidth, cropHeight)
+                    imageLocation = os.path.join(TempFolder, imageLocation.split("/")[-1])
+                    PlexSaveFile(imageLocation, imageContent)
+                    cmd = Cropper.format(vbScript, imageLocation, cropWidth, cropHeight)
+                    log('UTILS ::')
+                    log('UTILS :: Script - Crop Image: {0}'.format(imageLocation))
+                    log('UTILS ::  Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
+                    log('UTILS ::        Command Line: {0}'.format(cmd))
                     subprocess.call(cmd)
-                    picContent = PlexLoadFile(pic)
-            except Exception as e:
-                log('UTILS :: Error Script Failed to Crop Image to: {0} x {1}'.format(desiredWidth, desiredHeight))
+                    time.sleep(2)
+                    imageContent = PlexLoadFile(imageLocation)
+                except Exception as e:
+                    log('UTILS :: Error Script Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, imageLocation, e))
 
-    return pic, picContent
+    return imageLocation, imageContent
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def getFilmOnIAFD(FILMDICT):
@@ -240,7 +259,7 @@ def getFilmOnIAFD(FILMDICT):
             try:
                 siteTitle = film.xpath('./td[1]/a/text()')[0].strip()
                 # IAFD sometimes adds (I), (II), (III) to differentiate scenes from full movies - strip these out before matching - assume a max of 19 (XIX)
-                pattern = ' \(X{0,1}(?:V?I{0,3}|I[VX])\)$'
+                pattern = ' \(X{0,1}(?:V?I{0,3}I[VX])\)$'
                 matched = re.search(pattern, siteTitle)  # match against whole string
                 siteTitle = re.sub(pattern, '', siteTitle).strip() if matched else siteTitle
                 matchTitle(siteTitle, FILMDICT)
@@ -253,7 +272,7 @@ def getFilmOnIAFD(FILMDICT):
             try:
                 filmAKA = film.xpath('./td[4]/text()')[0].strip()
                 if not matchedTitle:
-                    pattern = ' \(X{0,1}(?:V?I{0,3}|I[VX])\)$'
+                    pattern = ' \(X{0,1}(?:V?I{0,3}I[VX])\)$'
                     matched = re.search(pattern, filmAKA)  # match against whole string
                     filmAKA = re.sub(pattern, '', filmAKA).strip() if matched else filmAKA
                     matchTitle(filmAKA, FILMDICT)
@@ -327,47 +346,48 @@ def getFilmOnIAFD(FILMDICT):
             # IAFD has links to External Sites for the Title - These sites may have different Release Dates and Duration Times
             # Release Dates and Durations must be retrieved - whether matching against them is needed
             # if matching match against all data returned and considered passed if any match
-            log(LOG_BIGLINE)
-            log('UTILS :: Access External Links in IAFD: Skip Current Agent Links: %s', FILMDICT['Agent'])
-            externalIAFDSites = {'AdultEmpire': 'GayDVDEmpire', 'HotMovies': 'GayHotMovies', 'CD Universe': 'CDUniverse'}
-            externalDict = {}
-            try:
-                webLinks = fhtml.xpath('//a[contains(@href, "/shopclick")]')[0]      # will error if none
-                webLinks = fhtml.xpath('//a[contains(@href, "/shopclick")]')
-                for idx, webLink in enumerate(webLinks, start=1):
-                    webURL = webLink.xpath('./@href')[0]
-                    webURL = '{0}{1}'.format(IAFD_BASE, webURL)
-                    webName = webLink.xpath('./text()')[0]
-                    log('UTILS :: {0:<29} {1}'.format('External Sites Found' if idx ==1 else '', '{0:>2} - {1:<15} - {2}'.format(idx, webName, webURL)))
-                    if webName not in externalIAFDSites:
-                        continue
-                    if externalIAFDSites[webName] == FILMDICT['Agent']:
-                        continue
-
-                    externalDict[webName] = webURL
-
-            except Exception as e:
-                log('UTILS :: Error getting External Links: %s', e)
-
-            log('UTILS :: {0:<29} {1}'.format('Valid Sites Left', '{0:>2} - {1}'.format(len(externalDict), sorted(externalDict.keys()))))
-            for key in externalDict.keys():
-                if key in FILMDICT:                    # only run once per External Site - VOD vs DVD
-                    continue
-
+            if FILMDICT['Agent'] == 'IAFD':
+                log(LOG_BIGLINE)
+                log('UTILS :: Access External Links in IAFD:')
+                externalIAFDSites = {'AdultEmpire': 'GayEmpire', 'HotMovies': 'GayHotMovies', 'CD Universe': 'CDUniverse'}
+                externalDict = {}
                 try:
-                    value = externalDict[key]
-                    ################################ needs looking at to get Location response header - ask group.......
-                    xSiteHTML = HTML.ElementFromURL(value, timeout=60, errors='ignore', sleep=DELAY)
-                    # xhtml = HTML.ElementFromURL(value, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36"},timeout=60, errors='ignore', sleep=DELAY)
-                    # xhtml = getURLElement(value)
-                    FILMDICT[key] = getSiteInfo(key, FILMDICT, kwFilmURL=value, kwFilmHTML=xSiteHTML)
-                    # change Compilation to 'Yes' if one result is not the default 'No'
-                    if 'Compilation' in FILMDICT[key] and FILMDICT[key]['Compilation'] == 'Yes':
-                        FILMDICT['Compilation'] = FILMDICT[key]['Compilation'] 
+                    webLinks = fhtml.xpath('//a[contains(@href, "/shopclick")]')[0]      # will error if none
+                    webLinks = fhtml.xpath('//a[contains(@href, "/shopclick")]')
+                    for idx, webLink in enumerate(webLinks, start=1):
+                        webURL = webLink.xpath('./@href')[0]
+                        webURL = '{0}{1}'.format(IAFD_BASE, webURL)
+                        webName = webLink.xpath('./text()')[0]
+                        log('UTILS :: {0:<29} {1}'.format('External Sites Found' if idx ==1 else '', '{0:>2} - {1:<15} - {2}'.format(idx, webName, webURL)))
+                        if webName not in externalIAFDSites:
+                            continue
+                        if externalIAFDSites[webName] == FILMDICT['Agent']:
+                            continue
+
+                        externalDict[webName] = webURL
 
                 except Exception as e:
-                    log('UTILS :: Error reading External %s URL Link: %s', key, e)
-                    continue
+                    log('UTILS :: Error getting External Links: %s', e)
+
+                log('UTILS :: {0:<29} {1}'.format('Valid Sites Left', '{0:>2} - {1}'.format(len(externalDict), sorted(externalDict.keys()))))
+                for key in externalDict.keys():
+                    if key in FILMDICT:                    # only run once per External Site - VOD vs DVD
+                        continue
+
+                    try:
+                        value = externalDict[key]
+                        ################################ needs looking at to get Location response header - ask group.......
+                        xSiteHTML = HTML.ElementFromURL(value, timeout=60, errors='ignore', sleep=delay())
+                        # xhtml = HTML.ElementFromURL(value, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36"},timeout=60, errors='ignore', sleep=delay())
+                        # xhtml = getURLElement(value)
+                        FILMDICT[key] = getSiteInfo(key, FILMDICT, kwFilmURL=value, kwFilmHTML=xSiteHTML)
+                        # change Compilation to 'Yes' if one result is not the default 'No'
+                        if 'Compilation' in FILMDICT[key] and FILMDICT[key]['Compilation'] == 'Yes':
+                            FILMDICT['Compilation'] = FILMDICT[key]['Compilation'] 
+
+                    except Exception as e:
+                        log('UTILS :: Error reading External %s URL Link: %s', key, e)
+                        continue
 
             # Release Date Information: IAFD Fromat = MM DD, YYYY
             log(LOG_BIGLINE)
@@ -394,16 +414,17 @@ def getFilmOnIAFD(FILMDICT):
                 log('UTILS :: {0:<29} {1}'.format('Release Dates', '{0} - {1}'.format(len(productionDates), sorted(productionDates))))
 
                 # add external dates to list
-                externalDates = False
-                for value in externalIAFDSites.values():
-                    try:
-                        if value in FILMDICT and 'ReleaseDate' in FILMDICT[value] and FILMDICT[value]['ReleaseDate']:
-                            productionDates.add(FILMDICT[value]['ReleaseDate'])
-                            externalDates = True
-                    except: pass
+                if FILMDICT['Agent'] == 'IAFD':
+                    externalDates = False
+                    for value in externalIAFDSites.values():
+                        try:
+                            if value in FILMDICT and 'ReleaseDate' in FILMDICT[value] and FILMDICT[value]['ReleaseDate']:
+                                productionDates.add(FILMDICT[value]['ReleaseDate'])
+                                externalDates = True
+                        except: pass
 
-                if externalDates == True:
-                    log('UTILS :: {0:<29} {1}'.format('Release Dates (+ External)', '{0} - {1}'.format(len(productionDates), sorted(productionDates))))
+                    if externalDates == True:
+                        log('UTILS :: {0:<29} {1}'.format('Release Dates (+ External)', '{0} - {1}'.format(len(productionDates), sorted(productionDates))))
 
                 # match against list
                 try:
@@ -492,7 +513,7 @@ def getHTTPRequest(url, **kwargs):
     global scraper
 
     if 'User-Agent' not in headers:
-        headers['User-Agent'] = (fake_useragent.UserAgent(fallback=HTTP.Headers['User-agent'])).random
+        headers['User-Agent'] = (fake_useragent.UserAgent(fallback=HTTP.Headers['User-Agent'])).random
 
     # clean up url....
     ClearURL = url
@@ -515,6 +536,7 @@ def getHTTPRequest(url, **kwargs):
             scraper.headers.update(headers)
             scraper.cookies.update(cookies)
 
+        time.sleep(random.randint(1, 7))
         HTTPRequest = scraper.request('GET', url, timeout=timeout, proxies=proxies)
         if not HTTPRequest.ok:
             msg = ('< CloudScraper Failed Request Status Code: %s >', HTTPRequest.status_code)
@@ -530,6 +552,198 @@ def getHTTPRequest(url, **kwargs):
     return HTTPRequest
 
 # -------------------------------------------------------------------------------------------------------------------------------
+def getIAFDArtist(artistURL):
+    # get artist country of origin
+    artist = {}
+    artistRealName = ''
+    artistPhoto = ''
+    artistNationality = ''
+    artistBirthNationality = ''
+    artistAwards = []
+    artistBio = {'IAFD URL': artistURL}
+
+    try:
+        artistType = 'Director' if 'gender=d' in artistURL else 'Cast'
+        ahtml = getURLElement(artistURL)
+        ahtmlBio = ahtml.xpath('//*[@class="bioheading"]')
+        xpath = '//table[@id="{0}"]/tbody/tr[position()<=15]'.format('directoral' if artistType == 'Director' else 'personal')
+        ahtmlFilms = ahtml.xpath(xpath)
+
+        artistRealName = ahtml.xpath('//h1/text()[normalize-space()]')[0].strip()
+        artistPhoto = ahtml.xpath('//div[@id="headshot"]/img/@src')[0].strip()
+        if 'nophoto' in artistPhoto and artistType == 'Director':               # if no photo check if he has a performer page
+            try:
+                bhtml = getURLElement(artistURL.replace('gender=d', 'gender=m'))
+                artistPhoto = bhtml.xpath('//div[@id="headshot"]/img/@src')[0].strip()
+                if not re.search(r'(?:jpg|jpeg|png|gif|bmp|webp)$', artistPhoto, re.IGNORECASE):
+                    artistPhoto = ''
+
+            except Exception as e:
+                log('UTILS :: Error getting Director Photo from "As Performer" Details Page: %s', e)
+
+    except Exception as e:
+        log('UTILS :: Error getting Artist Details Page: %s', e)
+
+    try:
+        for item in ahtmlBio:
+            bioheading = ' '.join(item.text.split()).replace('Color', 'Colour')
+            biodata = item.xpath('./following-sibling::*[@class="biodata"][1]//text()')
+            biodata = ' '.join(biodata)
+            biodata = re.sub('\s', ' ', biodata).strip()                                # replace all whitespace with actual space
+            biodata = re.sub('\(\s*details\s*\)', '', biodata).strip()                  # replace all links with null
+
+            if re.search(r'No Data|None|No Known', biodata, re.IGNORECASE) or not biodata:
+                continue
+
+            if re.search(r'Nationality', bioheading, re.IGNORECASE):                    # tidy the nationality
+                nations = [x.strip() for x in biodata.split(',') if x]
+                for idx, nation in enumerate(nations):
+                    tidy = findTidy(nation)
+                    nations[idx] = tidy if tidy else nation
+
+                artistNationality = nations[-1]                                         # use last country in the list for artist's art
+                biodata = ', '.join(nations)
+                artistBio[bioheading] = biodata
+
+            elif re.search(r'Birthplace', bioheading, re.IGNORECASE):                   # Birthplace format = town, state, country
+                artistBirthNationality = biodata.split(',')[-1].strip()
+                tidy = findTidy(artistBirthNationality)
+                artistBirthNationality = tidy if tidy else artistBirthNationality
+                artistBio[bioheading] = biodata
+
+            elif biodata.count('/') == 2:                                               # date format mm/dd/yyyy convert to mmm dd, yyyy - cater for years such as 19??
+                try:
+                    m, d, y = biodata.split('/')
+                    biodata = '{0} {1}, {2}'.format(MONTHS[int(m)], d, y)
+                except:
+                    pass
+                artistBio[bioheading] = biodata
+
+            elif re.search(r'kg', biodata, re.IGNORECASE):                              # weight
+                biodataList = [int(x) for x in re.findall(r'\d+', biodata)]
+                usImperialWeight = '{0} lbs'.format(biodataList[0])
+                ukImperialStones, ukImperialLbs = divmod(biodataList[0], 14)
+                ukImperialWeight = "{0} st {1}".format(ukImperialStones, '{0} lbs'.format(ukImperialLbs) if ukImperialLbs else '').strip()
+                metricWeight = '{0} Kgs'.format(biodataList[1])
+                biodata = '{0} ({1} / {2})'.format(metricWeight, ukImperialWeight, usImperialWeight)
+                artistBio[bioheading] = biodata
+
+            elif re.search(r'feet', biodata, re.IGNORECASE):                            # height
+                biodataList =  [int(x) for x in re.findall(r'\d+', biodata)]
+                metricHeight = '{0} cms'.format(biodataList[2])
+                imperialHeight = "{0}'{1}".format(biodataList[0], '{0}"'.format(biodataList[1]) if biodataList[1] else '').strip()
+                biodata = '{0} ({1})'.format(metricHeight, imperialHeight)
+                artistBio[bioheading] = biodata
+
+            elif re.search(r'award|gayvn', bioheading, re.IGNORECASE) or re.search(r'nominee', biodata, re.IGNORECASE):
+                award = '{0} - {1}'.format(bioheading, biodata)
+                award = re.sub(r'\s+', NOBREAK_SPACE, award).replace('-', NOBREAK_HYPHEN)
+                award = award.ljust(100)[:100] + ' '
+                artistAwards.append(award)
+
+            else:
+                artistBio[bioheading] = biodata
+
+            artistNationality = artistNationality if artistNationality else artistBirthNationality
+            artistAwards.sort(key = lambda x: x.lower())
+
+            # ALL AKA entries put in a simplified AKA Header
+            akas = ''
+            for key in artistBio.keys():
+                if re.search(r'AKA', key, re.IGNORECASE):
+                    akas = '{0},{1}'.format(akas, artistBio[key])
+            if akas:
+                akas = akas.split(',')
+                akas = [x.strip() for x in akas if x.strip()]
+                akas = list(set(akas))
+                akas = ', '.join(akas)
+                for key in artistBio.keys():
+                    if re.search(r'AKA', key, re.IGNORECASE):
+                        del artistBio[key]
+                artistBio['AKA'] = akas
+
+        artistFilms = []
+        for artistFilm in ahtmlFilms:
+            artistFilmLine = artistFilm.xpath('./td//text()')
+            if artistType == 'Director':
+                artistFilmStudio = re.sub('.com|.net|.org|.tv|\(\s*\)', '', artistFilmLine[2], re.IGNORECASE).strip()       # remove internet domains and bracketed information
+                artistFilmTitle = artistFilmLine[0]
+                artistFilmYear = artistFilmLine[3]
+            else:
+                artistFilmStudio = re.sub('.com|.net|.org|.tv|\(\s*\)', '', artistFilmLine[2], re.IGNORECASE).strip()       # remove internet domains and bracketed information
+                artistFilmStudio = artistFilmStudio.split('(')[-1].replace(')', '')
+                artistFilmTitle = artistFilmLine[0]
+                artistFilmYear = artistFilmLine[1]
+
+            film = '({0}) - {1} ({2})'.format(artistFilmStudio, artistFilmTitle, artistFilmYear)
+            film = re.sub(r'\s+', NOBREAK_SPACE, film).replace('-', NOBREAK_HYPHEN)
+            film = film.ljust(100)[:100] + ' '
+            artistFilms.append(film)
+
+            artistFilms.sort(key = lambda x: x.lower())
+
+    except Exception as e:
+        log('UTILS :: Error processing Artist Details Page: %s', e)
+        artist = {'Awards': [], 'Bio': {}, 'Films': [], 'Photo': '', 'Nationality': '', 'RealName': ''}
+
+    else:
+        artist = {'Awards': artistAwards, 'Bio': artistBio, 'Films': artistFilms, 'Photo': artistPhoto, 'Nationality': artistNationality, 'RealName': artistRealName}
+
+    return artist
+# -------------------------------------------------------------------------------------------------------------------------------
+def getImage(imageLocation, entry, picType):
+    ''' Used for getting flag images, actors and directors pictures - Deceased Actors/Directors shown in GrayScale'''
+
+    imageContent = None
+    fileOnDisk = False if 'http' in imageLocation else True
+    if not fileOnDisk:
+        imageLocation = imageLocation.replace(' ', '%20').strip()
+        ImageContent = HTTP.Request(imageLocation).content
+        myImage = Image.open(BytesIO(ImageContent))
+        width, height = myImage.size
+        width = int(width)
+        height = int(width * 1.5)
+
+    log('UTILS :: {0:<29} {1}'.format('Location', 'On Disk' if fileOnDisk else 'On Web'))
+
+    # Countries & System - IAFD, Stacked, Agent are stored on disk, AND posters under _PGMA + Agent.jpg
+    if fileOnDisk:
+        log('UTILS :: {0:<29} {1}'.format('{0} Image Location'.format(picType), imageLocation))
+        imageContent = PlexLoadFile(imageLocation)
+
+    # Cast from IAFD
+    elif COLCAST in entry:
+        if '[d]' in entry:
+            imageLocation = r'{0}/{1}x{2}/filters:stretch():grayscale()/{3}'.format(THUMBOR, width, height, imageLocation)
+        else:
+            imageLocation = r'{0}/{1}x{2}/filters:stretch()/{3}'.format(THUMBOR, width, height, imageLocation)
+
+        imageContent = HTTP.Request(imageLocation).content
+        log('UTILS :: {0:<29} {1}'.format('{0}Cast {1} Image URL'.format('Deceased ' if '[d]' in entry else '', picType), imageLocation))
+
+    # Directors from IAFD - GrayScale + Watermark if deceased else just Watermark
+    elif COLDIRECTOR in entry:
+        if '[d]' in entry:
+            imageLocation = r'{0}/{1}x{2}/filters:stretch():grayscale():watermark({3},1,1,0)/{4}'.format(THUMBOR, width, height, WATERMARK, imageLocation)
+        else:
+            imageLocation = r'{0}/{1}x{2}/filters:stretch():watermark({3},1,1,0)/{4}'.format(THUMBOR, 128, 192, WATERMARK, imageLocation)
+
+        imageContent = HTTP.Request(imageLocation).content
+        log('UTILS :: {0:<29} {1}'.format('{0}Director {1} Image URL'.format('Deceased ' if '[d]' in entry else '', picType), imageLocation))
+
+    # all other internet images need to be ratio wxh = 1x1.5
+    else:
+        ImageContent = HTTP.Request(imageLocation).content
+        ImageInfo = Image.open(BytesIO(ImageContent))
+        width, height = ImageInfo.size
+        height = int(width * 1.5)
+        imageLocation = r'{0}/fit-in/{1}x{2}/{3}'.format(THUMBOR, width, height, imageLocation)
+        imageContent = HTTP.Request(imageLocation).content
+        log('UTILS :: {0:<29} {1}'.format('{0} Genre Image URL'.format(picType), imageLocation))
+
+    return imageContent
+
+# -------------------------------------------------------------------------------------------------------------------------------
 def getRecordedCast(html):
     ''' retrieve film cast from IAFD film page'''
     filmCast = {}
@@ -540,8 +754,6 @@ def getRecordedCast(html):
             castName = cast.xpath('./a/text()[normalize-space()]')[0].strip()
             castName = 'Unknown Actor' if 'Unknown' in castName else castName
             castURL = IAFD_BASE + cast.xpath('./a/@href')[0].strip()
-            castPhoto = cast.xpath('./a/img/@src')[0].strip()
-            castPhoto = '' if 'nophoto' in castPhoto or 'th_iafd_ad' in castPhoto else castPhoto
 
             # cast roles are sometimes not filled in
             try:
@@ -553,28 +765,41 @@ def getRecordedCast(html):
             # cast alias in current film may be missing
             try:
                 castAlias = cast.xpath('./i/text()')[0].split(':')[1].replace(')', '').strip()
+                castAlias = castAlias.replace(' or ', ',').split(',')
+                castAlias = ', '.join(castAlias)
             except:
                 castAlias = ''
 
+            # get cast biography and filmography etc
+            castDetails = getIAFDArtist(castURL)
+            castAwards = castDetails['Awards']
+            castBio = castDetails['Bio']
+            castFilms = castDetails['Films']
+            castNationality = castDetails['Nationality']
+            castPhoto = castDetails['Photo']
+            castRealName = castDetails['RealName']
+
+            castCompareName = re.sub(r'[\W\d_]', '', castName).strip().lower()
+            castCompareAlias = re.sub(r'[\W\d_]', '', castAlias).strip().lower()
             castRole = castRole if castRole else 'AKA: {0}'.format(castAlias) if castAlias else IAFD_FOUND
 
             # log cast details
-            log('UTILS :: {0:<29} {1}'.format('Cast Name', castName))
+            log('UTILS :: {0:<29} {1}'.format('Recorded Cast Details:', ''))
+            log('UTILS :: {0:<29} {1}'.format('Cast Real Name', castRealName))
             log('UTILS :: {0:<29} {1}'.format('Cast Alias', castAlias if castAlias else 'No Cast Alias Recorded'))
-            log('UTILS :: {0:<29} {1}'.format('Cast URL', castURL))
+            log('UTILS :: {0:<29} {1}'.format('Cast Awards', castAwards))
+            log('UTILS :: {0:<29} {1}'.format('Cast Bio', castBio))
+            log('UTILS :: {0:<29} {1}'.format('Cast Films', castFilms))
+            log('UTILS :: {0:<29} {1}'.format('Cast Name', castName))
+            log('UTILS :: {0:<29} {1}'.format('Cast Nationality', castNationality))
             log('UTILS :: {0:<29} {1}'.format('Cast Photo', castPhoto))
             log('UTILS :: {0:<29} {1}'.format('Cast Role', castRole))
+            log('UTILS :: {0:<29} {1}'.format('Cast URL', castURL))
+            log(LOG_SUBLINE)
 
             # Assign values to dictionary
-            myDict = {}
-            myDict['Photo'] = castPhoto
-            myDict['Role'] = castRole
-            myDict['Alias'] = castAlias
-            myDict['CompareName'] = re.sub(r'[\W\d_]', '', castName).strip().lower()
-            myDict['CompareAlias'] = re.sub(r'[\W\d_]', '', castAlias).strip().lower()
-            myDict['URL'] = castURL
-            filmCast[castName] = myDict
-            log(LOG_SUBLINE)
+            filmCast[castName] = {'Alias': castAlias, 'Awards': castAwards,'Bio': castBio, 'CompareName': castCompareName, 'CompareAlias': castCompareAlias, 
+                                  'Films': castFilms, 'Nationality': castNationality, 'Photo': castPhoto, 'RealName': castRealName, 'Role': castRole, 'URL': castURL}
 
     except Exception as e:
         log('UTILS :: Error: Processing IAFD Film Cast: %s', e)
@@ -591,38 +816,35 @@ def getRecordedDirectors(html):
         for director in directorList:
             directorName = director.xpath('./text()')[0]
             directorURL = director.xpath('./@href')[0]
-            try:
-                dhtml = getURLElement(directorURL)
-                try:
-                    directorPhoto = dhtml.xpath('//div[@id="headshot"]/img/@src')[0]
-                    directorPhoto = '' if 'nophoto' in directorPhoto else directorPhoto
-                except:
-                    directorPhoto = ''
-                try:
-                    directorAliasList = dhtml.xpath('//p[@class="bioheading" and text()="Director AKA"]//following-sibling::p[1]/text()[normalize-space()]')
-                    directorAliasList = [x.replace('No known aliases', '').strip() for x in directorAliasList]
-                except:
-                    directorAliasList = []
 
-            except Exception as e:
-                log('UTILS :: Error getting Director Page: %s', e)
+            # get director biography and filmography etc
+            directorDetails = getIAFDArtist(directorURL)
+            directorAwards = directorDetails['Awards']
+            directorBio = directorDetails['Bio']
+            directorFilms = directorDetails['Films']
+            directorNationality = directorDetails['Nationality']
+            directorPhoto = directorDetails['Photo']
+            directorRealName = directorDetails['RealName']
 
+            directorCompareName = re.sub(r'[\W\d_]', '', directorName).strip().lower()
+
+            log('UTILS :: {0:<29} {1}'.format('Recorded Director Details:', ''))
+            log('UTILS :: {0:<29} {1}'.format('Director Awards', directorAwards))
+            log('UTILS :: {0:<29} {1}'.format('Director Bio', directorBio))
+            log('UTILS :: {0:<29} {1}'.format('Director Films', directorFilms))
             log('UTILS :: {0:<29} {1}'.format('Director Name', directorName))
-            log('UTILS :: {0:<29} {1}'.format('Director Alias', directorAliasList if directorAliasList else 'No Director Alias Recorded'))
-            log('UTILS :: {0:<29} {1}'.format('Director URL', directorURL))
+            log('UTILS :: {0:<29} {1}'.format('Director Nationality', directorNationality))
             log('UTILS :: {0:<29} {1}'.format('Director Photo', directorPhoto))
+            log('UTILS :: {0:<29} {1}'.format('Director Real Name', directorRealName))
+            log('UTILS :: {0:<29} {1}'.format('Director URL', directorURL))
             log(LOG_SUBLINE)
 
             # Assign values to dictionary
-            myDict = {}
-            myDict['Photo'] = directorPhoto
-            myDict['Alias'] = directorAliasList
-            myDict['CompareName'] = re.sub(r'[\W\d_]', '', directorName).strip().lower()
-            myDict['CompareAlias'] = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in directorAliasList]
-            filmDirectors[directorName] = myDict
+            filmDirectors[directorName] = {'Alias': '', 'Awards': directorAwards, 'Bio': directorBio, 'CompareName': directorCompareName, 'CompareAlias': '', 'Films': directorFilms, 
+                                           'Nationality': directorNationality, 'RealName': directorRealName, 'Photo': directorPhoto, 'URL': directorURL}
 
     except Exception as e:
-        log('UTILS :: Error getting Film Director(s): %s', e)
+        log('UTILS :: Error Processing IAFD Film Director(s): %s', e)
 
     return filmDirectors
 
@@ -638,25 +860,26 @@ def getSiteInfo(myAgent, FILMDICT, **kwargs):
     log(LOG_BIGLINE)
     log('UTILS ::')
     kwFilmURL = kwargs.get('kwFilmURL')
-    listHeaders = [' << {0}: Get Site Information >> '.format(myAgent), 
-                   ' ({0}) - {1} ({2}) >> '.format(FILMDICT['Studio'], FILMDICT['Title'], FILMDICT['Year']),
-                   ' {0} '.format(FILMDICT['FilmURL'] if kwFilmURL is None else kwFilmURL)]
+    listHeaders = [' << {0}: Get Site Information >> '.format(myAgent),
+                   ' << ({0}) - {1} ({2}) >> '.format(FILMDICT['Studio'], FILMDICT['Title'], FILMDICT['Year']),
+                   ' << {0} >> '.format(FILMDICT['FilmURL'] if kwFilmURL is None else kwFilmURL)]
     for header in listHeaders:
-        log('UTILS :: %s', header.center(140, '*'))
+        log('UTILS :: %s', header.center(131, '*'))
+
     log('UTILS ::')
 
     if myAgent == 'AdultFilmDatabase':
         siteInfoDict = getSiteInfoAdultFilmDatabase(FILMDICT, **kwargs)
-    elif myAgent == 'AEBNiii':
-        siteInfoDict = getSiteInfoAEBNiii(FILMDICT, **kwargs)
+    elif myAgent == 'AEBN':
+        siteInfoDict = getSiteInfoAEBN(FILMDICT, **kwargs)
     elif myAgent == 'AVEntertainments':
         siteInfoDict = getSiteInfoAVEntertainments(FILMDICT, **kwargs)
     elif myAgent == 'BestExclusivePorn':
         siteInfoDict = getSiteInfoBestExclusivePorn(FILMDICT, **kwargs)
     elif myAgent == 'CDUniverse':
         siteInfoDict = getSiteInfoCDUniverse(FILMDICT, **kwargs)
-    elif myAgent == 'GayDVDEmpire':
-        siteInfoDict = getSiteInfoGayDVDEmpire(FILMDICT, **kwargs)
+    elif myAgent == 'GayEmpire':
+        siteInfoDict = getSiteInfoGayEmpire(FILMDICT, **kwargs)
     elif myAgent == 'Fagalicious':
         siteInfoDict = getSiteInfoFagalicious(FILMDICT, **kwargs)
     elif myAgent == 'GayHotMovies':
@@ -689,8 +912,12 @@ def getSiteInfo(myAgent, FILMDICT, **kwargs):
         siteInfoDict = getSiteInfoWolffVideo(FILMDICT, **kwargs)
 
     log('UTILS ::')
-    footer = ' >> {0}: Site Information Retrieved << '.format(myAgent)
-    log('UTILS :: %s', footer.center(140, '*'))
+    listFooters = [' >> {0}: Site Information Retrieved << '.format(myAgent),
+                   ' >> ({0}) - {1} ({2}) << '.format(FILMDICT['Studio'], FILMDICT['Title'], FILMDICT['Year']),
+                   ' >> {0} << '.format(FILMDICT['FilmURL'] if kwFilmURL is None else kwFilmURL)]
+    for footer in listFooters:
+        log('UTILS :: %s', footer.center(131, '*'))
+
     log('UTILS ::')
     return siteInfoDict
 
@@ -748,7 +975,7 @@ def getSiteInfoAdultFilmDatabase(FILMDICT, **kwargs):
             htmlcollections = [x.strip() for x in htmlcollections if x.strip()]
             collections = list(set(htmlcollections))
             collections.sort(key = lambda x: x.lower())
-            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} {1}'.format(len(collections), collections)))
+            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} - {1}'.format(len(collections), collections)))
             siteInfoDict['Collections'] = collections[:]
 
         except Exception as e:
@@ -790,7 +1017,6 @@ def getSiteInfoAdultFilmDatabase(FILMDICT, **kwargs):
             siteInfoDict['Genres'] = genresSet
             siteInfoDict['Countries'] = countriesSet
             siteInfoDict['Compilation'] = compilation
-
 
         #   6.  Release Date - ADF Format = (YYYY)
         kwReleaseDate = kwargs.get('kwReleaseDate')
@@ -835,14 +1061,14 @@ def getSiteInfoAdultFilmDatabase(FILMDICT, **kwargs):
             try:
                 htmlimages = html.xpath('//img[@title]/@src')
                 htmlimages = [('' if kwBaseURL in x else kwBaseURL) + x for x in htmlimages]
-                poster = htmlimages[0]
-                art = htmlimages[1]
+                poster = [htmlimages[0]]
+                art = [htmlimages[1]]
                 log('UTILS :: {0:<29} {1}'.format('Poster', poster))
                 log('UTILS :: {0:<29} {1}'.format('Art', art))
 
             except Exception as e:
-                poster = ''
-                art = ''
+                poster = []
+                art = []
                 log('UTILS :: Error getting Images: %s', e)
 
             finally:
@@ -868,9 +1094,9 @@ def getSiteInfoAdultFilmDatabase(FILMDICT, **kwargs):
         return siteInfoDict if siteInfoDict != {} else None
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-def getSiteInfoAEBNiii(FILMDICT, **kwargs):
+def getSiteInfoAEBN(FILMDICT, **kwargs):
     ''' get Release Date, Genres, Countries, IsCompilation, Poster & Art Images, Scene and Chapter information '''
-    mySource = 'AEBNiii'
+    mySource = 'AEBN'
     siteInfoDict = {}
     kwFilmHTML = kwargs.get('kwFilmHTML')
     html = FILMDICT['FilmHTML'] if kwFilmHTML is None else kwFilmHTML
@@ -920,7 +1146,7 @@ def getSiteInfoAEBNiii(FILMDICT, **kwargs):
             htmlcollections = [x.strip() for x in htmlcollections if x.strip()]
             collections = list(set(htmlcollections))
             collections.sort(key = lambda x: x.lower())
-            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} {1}'.format(len(collections), collections)))
+            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} - {1}'.format(len(collections), collections)))
             siteInfoDict['Collections'] = collections[:]
 
         except Exception as e:
@@ -943,7 +1169,7 @@ def getSiteInfoAEBNiii(FILMDICT, **kwargs):
                 log('UTILS :: Error Reading Site Info Genres: %s', e)
 
             try:
-                htmlsexacts = html.xpath('//a[contains(@href,"sexActFilters")]/text()') # use sex acts as genresDict
+                htmlsexacts = html.xpath('//a[contains(@href,"sexActFilters")]/text()') # use sex acts as genres
                 htmlsexacts.sort(key = lambda x: x.lower())
                 log('UTILS :: {0:<29} {1}'.format('Sex Acts', '{0:>2} - {1}'.format(len(htmlsexacts), htmlsexacts)))
 
@@ -1024,16 +1250,16 @@ def getSiteInfoAEBNiii(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         try:
             htmlimages = html.xpath('//*[contains(@class,"dts-movie-boxcover")]//img/@src')
-            htmlimages = [x.replace('293', '1000') for x in htmlimages]
+            htmlimages = [x.replace('=293', '=1000') for x in htmlimages]
             htmlimages = ['http:{0}'.format(x) if 'http:' not in x else x for x in htmlimages]
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -1044,7 +1270,7 @@ def getSiteInfoAEBNiii(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         kwFilmURL = kwargs.get('kwFilmURL')
         filmURL = kwFilmURL if kwFilmURL is not None else FILMDICT['FilmURL']
-        scenesDict = {}
+        scenesDict = {'Link': filmURL}
         chaptersDict = {}
         try:
             htmlscenes = html.xpath('//div[@class="dts-scene-info dts-list-attributes"]')
@@ -1101,7 +1327,7 @@ def getSiteInfoAEBNiii(FILMDICT, **kwargs):
                         else:
                             mySource = 'N/A'
                             reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
-                            log('UTILS :: Warning No Review Source (Used Film Title)')
+                            log('UTILS :: Warning: No Review Source (Used Film Title)')
 
                         log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
 
@@ -1109,7 +1335,7 @@ def getSiteInfoAEBNiii(FILMDICT, **kwargs):
                         log('UTILS :: Error getting Review Source (Cast): %s', e)
 
                     # Review Author - composed of Settings
-                    reviewAuthor = 'AEBNiii'
+                    reviewAuthor = 'AEBN'
                     try:
                         reviewAuthor = htmlscene.xpath('./ul/li[descendant::span[text()="Settings:"]]/a/text()')
                         reviewAuthor = [x for x in reviewAuthor if x]
@@ -1155,8 +1381,7 @@ def getSiteInfoAEBNiii(FILMDICT, **kwargs):
 
 
                     # save Review - scene
-                    scenesDict[sceneNo] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText, 'Link': filmURL}
-
+                    scenesDict[str(sceneNo)] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText}
                     chapterTitle = reviewSource
                     chapterStartTime = (timeOffsetTime.hour * 60 * 60 + timeOffsetTime.minute * 60 + timeOffsetTime.second) * 1000
                     (mm, ss) = htmlduration.strip().split(':')
@@ -1170,7 +1395,7 @@ def getSiteInfoAEBNiii(FILMDICT, **kwargs):
                     log('UTILS :: {0:<29} {1}'.format('Time', '{0} - {1}'.format(datetime.fromtimestamp(chapterStartTime/1000).strftime('%H:%M:%S'), datetime.fromtimestamp(chapterEndTime/1000).strftime('%H:%M:%S'))))
 
                     # save chapter
-                    chaptersDict[sceneNo] = {'Title': chapterTitle, 'StartTime': chapterStartTime, 'EndTime': chapterEndTime}
+                    chaptersDict[str(sceneNo)] = {'Title': chapterTitle, 'StartTime': chapterStartTime, 'EndTime': chapterEndTime}
 
                 except Exception as e:
                     log('UTILS :: Error getting Scene No. %s: %s', sceneNo, e)
@@ -1243,7 +1468,7 @@ def getSiteInfoAVEntertainments(FILMDICT, **kwargs):
             htmlcollections = [x.strip() for x in htmlcollections if x.strip()]
             collections = list(set(htmlcollections))
             collections.sort(key = lambda x: x.lower())
-            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} {1}'.format(len(collections), collections)))
+            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} - {1}'.format(len(collections), collections)))
             siteInfoDict['Collections'] = collections[:]
 
         except Exception as e:
@@ -1278,13 +1503,13 @@ def getSiteInfoAVEntertainments(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -1351,14 +1576,14 @@ def getSiteInfoAVEntertainments(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         try:
             htmlimage = html.xpath('//a[text()="Cover Jacket"]/@href')[0]
-            poster = htmlimage.replace('bigcover', 'jacket_images')     # replace text of dvd cover url to get poster
-            art = htmlimage.replace('bigcover', 'screen_shot')          # replace text of dvd cover url to get background
+            poster = [htmlimage.replace('bigcover', 'jacket_images')]     # replace text of dvd cover url to get poster
+            art = [htmlimage.replace('bigcover', 'screen_shot')]          # replace text of dvd cover url to get background
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -1522,15 +1747,15 @@ def getSiteInfoBestExclusivePorn(FILMDICT, **kwargs):
         FILMDICT['SceneAgent'] = True                 # notify update routine to crop images
         try:
             htmlimages = html.xpath('//div[@class="entry"]/p//img/@src')
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
 
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -1663,14 +1888,14 @@ def getSiteInfoCDUniverse(FILMDICT, **kwargs):
         #   8.  Poster and Art URLs
         log(LOG_SUBLINE)
         try:
-            poster = html.xpath('//img[@id="PIMainImg"]/@src')[0]
-            art = html.xpath('//img[@id="0"]/@src')[0]
+            poster = [html.xpath('//img[@id="PIMainImg"]/@src')[0]]
+            art = [html.xpath('//img[@id="0"]/@src')[0]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -1681,7 +1906,7 @@ def getSiteInfoCDUniverse(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         kwFilmURL = kwargs.get('kwFilmURL')
         filmURL = kwFilmURL if kwFilmURL is not None else FILMDICT['FilmURL']
-        scenesDict = {}
+        scenesDict = {'Link': filmURL}
         chaptersDict = {}               # always null in CDUniverse
         try:
             htmlscenes = html.xpath('//table[@id="singlereview"]')
@@ -1716,7 +1941,7 @@ def getSiteInfoCDUniverse(FILMDICT, **kwargs):
                         else:
                             mySource = 'N/A'
                             reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
-                            log('UTILS :: Warning No Review Source (Used Film Title)')
+                            log('UTILS :: Warning: No Review Source (Used Film Title)')
 
                         log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
 
@@ -1766,7 +1991,7 @@ def getSiteInfoCDUniverse(FILMDICT, **kwargs):
                         log('UTILS :: {0:<29} {1}'.format('Review Text', reviewText if reviewText else 'None Recorded'))
 
                     # save Review - scene
-                    scenesDict[sceneNo] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText, 'Link': filmURL}
+                    scenesDict[str(sceneNo)] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText}
 
                 except Exception as e:
                     log('UTILS :: Error getting Scene No. %s: %s', sceneNo, e)
@@ -1878,13 +2103,13 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -1936,15 +2161,15 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
         try:
             htmlimages = html.xpath('//div[@class="mypicsgallery"]/a//img/@src')
             htmlimages = [x for x in htmlimages if 'data:image' not in x]
-            poster = htmlimages[0]
-            art = htmlimages[0] if len(htmlimages) == 1 else htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[0] if len(htmlimages) == 1 else htmlimages[1]]
 
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -1966,7 +2191,7 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
         return siteInfoDict if siteInfoDict != {} else None
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-def getSiteInfoGayDVDEmpire(FILMDICT, **kwargs):
+def getSiteInfoGayEmpire(FILMDICT, **kwargs):
     ''' get Release Date, Genres, Countries, IsCompilation, Poster & Art Images, Scene and Chapter information '''
     mySource = 'Gay DVD Empire'
     siteInfoDict = {}
@@ -2020,7 +2245,7 @@ def getSiteInfoGayDVDEmpire(FILMDICT, **kwargs):
             htmlcollections = [x.strip() for x in htmlcollections if x.strip()]
             collections = list(set(htmlcollections))
             collections.sort(key = lambda x: x.lower())
-            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} {1}'.format(len(collections), collections)))
+            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} - {1}'.format(len(collections), collections)))
             siteInfoDict['Collections'] = collections[:]
 
         except Exception as e:
@@ -2063,7 +2288,7 @@ def getSiteInfoGayDVDEmpire(FILMDICT, **kwargs):
             siteInfoDict['Countries'] = countriesSet
             siteInfoDict['Compilation'] = compilation
 
-        #   6.  Release Date - GayDVDEmpire Format = mmm dd YYYY
+        #   6.  Release Date - GayEmpire Format = mmm dd YYYY
         #       First retrieve Production Year, then if release date is within the same year use it as the plex release date as it has month and day data
         kwReleaseDate = kwargs.get('kwReleaseDate')
         if kwReleaseDate is None:
@@ -2099,7 +2324,7 @@ def getSiteInfoGayDVDEmpire(FILMDICT, **kwargs):
         else:
             siteInfoDict['ReleaseDate'] = kwReleaseDate
 
-        #   7.  Duration - GayDVDEmpire Format = h hrs. m mins.
+        #   7.  Duration - GayEmpire Format = h hrs. m mins.
         kwDuration = kwargs.get('kwDuration')
         if kwDuration is None:
             log(LOG_SUBLINE)
@@ -2124,16 +2349,20 @@ def getSiteInfoGayDVDEmpire(FILMDICT, **kwargs):
 
         #   8.  Poster and Art URLs
         log(LOG_SUBLINE)
-        poster = ''
-        art = ''
         try:
-            htmlimage = html.xpath('//*[@id="front-cover"]/img/@src')[0]
-            poster = htmlimage
-            art = htmlimage.replace('h.jpg', 'bh.jpg')
+            # some films do not have a back cover - so replace with poster
+            htmlimages = html.xpath('//img[@itemprop="image"]/@src')
+            poster = [htmlimages[0]] if htmlimages else []
+            htmlimages = html.xpath('//a[@id="back-cover"]/@href')
+            art = [htmlimages[0]] if htmlimages else []         # empty list if nowt found
+            art = [poster[0]] if not art and poster else art    # use poster element if empty
+
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -2144,7 +2373,7 @@ def getSiteInfoGayDVDEmpire(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         kwFilmURL = kwargs.get('kwFilmURL')
         filmURL = kwFilmURL if kwFilmURL is not None else FILMDICT['FilmURL']
-        scenesDict = {}
+        scenesDict = {'Link': filmURL}
         chaptersDict = {}
         try:
             htmlscenes = html.xpath('//div[@class="col-sm-6 m-b-1"]/h3/a[@label="Scene Title"]/text()[normalize-space()]')
@@ -2181,10 +2410,10 @@ def getSiteInfoGayDVDEmpire(FILMDICT, **kwargs):
                     # scene No
                     log('UTILS :: {0:<29} {1}'.format('Scene', sceneNo))
 
-                    # Review Source - GayDVDEmpire has no Cast List per Scene, use iafd scenes cast or Film title in that order of preference
+                    # Review Source - GayEmpire has no Cast List per Scene, use iafd scenes cast or Film title in that order of preference
                     reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
                     mySource = 'N/A'
-                    log('UTILS :: Warning No Review Source (Used Film Title)')
+                    log('UTILS :: Warning: No Review Source (Used Film Title)')
                     log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
 
                     # Review Author - default to website name
@@ -2210,7 +2439,7 @@ def getSiteInfoGayDVDEmpire(FILMDICT, **kwargs):
                         log('UTILS :: {0:<29} {1}'.format('Review Text', reviewText if reviewText else 'None Recorded'))
 
                     # save Review - scene
-                    scenesDict[sceneNo] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText, 'Link': filmURL}
+                    scenesDict[str(sceneNo)] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText}
 
                     chapterTitle = reviewSource
                     chapterStartTime = (timeOffsetTime.hour * 60 * 60 + timeOffsetTime.minute * 60 + timeOffsetTime.second) * 1000
@@ -2225,7 +2454,7 @@ def getSiteInfoGayDVDEmpire(FILMDICT, **kwargs):
                     log('UTILS :: {0:<29} {1}'.format('Time', '{0} - {1}'.format(datetime.fromtimestamp(chapterStartTime/1000).strftime('%H:%M:%S'), datetime.fromtimestamp(chapterEndTime/1000).strftime('%H:%M:%S'))))
 
                     # save chapter
-                    chaptersDict[sceneNo] = {'Title': chapterTitle, 'StartTime': chapterStartTime, 'EndTime': chapterEndTime}
+                    chaptersDict[str(sceneNo)] = {'Title': chapterTitle, 'StartTime': chapterStartTime, 'EndTime': chapterEndTime}
 
                 except Exception as e:
                     log('UTILS :: Error getting Scene No. %s: %s', sceneNo, e)
@@ -2256,10 +2485,15 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
         #   1.  Synopsis
         log(LOG_SUBLINE)
         try:
-            htmlsynopsis = html.xpath('//span[contains(@class,"video_description")]//text()')[0]
+            htmlsynopsis = html.xpath('//article//text()')
+            htmlsynopsis = ' '.join(htmlsynopsis)
             htmlsynopsis = re.sub('<[^<]+?>', '', htmlsynopsis).strip()
 
             regex = r'The movie you are enjoying was created by consenting adults.*'
+            pattern = re.compile(regex, re.DOTALL | re.IGNORECASE)
+            htmlsynopsis = re.sub(pattern, '', htmlsynopsis)
+
+            regex = r'This title ships*'
             pattern = re.compile(regex, re.DOTALL | re.IGNORECASE)
             htmlsynopsis = re.sub(pattern, '', htmlsynopsis)
 
@@ -2273,7 +2507,7 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
         #   2.  Directors
         log(LOG_SUBLINE)
         try:
-            htmldirectors = html.xpath('//a[contains(@href,"https://www.gayhotmovies.com/director/")]/span/text()[normalize-space()]')
+            htmldirectors = html.xpath('//a[@label="Director"]/text()[normalize-space()]')
             htmldirectors = [x.strip() for x in htmldirectors if x.strip()]
             directors = list(set(htmldirectors))
             directors.sort(key = lambda x: x.lower())
@@ -2287,7 +2521,7 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
         #   3.  Cast
         log(LOG_SUBLINE)
         try:
-            htmlcast = html.xpath('//div[@class="name"]/a/text()[normalize-space()]')
+            htmlcast = html.xpath('//a[@label="Performer"]/text()[normalize-space()]')
             htmlcast = [x.strip() for x in htmlcast if x.strip()]
             cast = list(set(htmlcast))
             cast.sort(key = lambda x: x.lower())
@@ -2301,11 +2535,11 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
         #   4.  Collections
         log(LOG_SUBLINE)
         try:
-            htmlcollections = html.xpath('//a[contains(@href,"https://www.gayhotmovies.com/series/")]/text()[normalize-space()]')
+            htmlcollections = html.xpath('//strong[text()="Series:"]/following-sibling::text()[1]')[0].strip()
             htmlcollections = [x.strip() for x in htmlcollections if x.strip()]
             collections = list(set(htmlcollections))
             collections.sort(key = lambda x: x.lower())
-            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} {1}'.format(len(collections), collections)))
+            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} - {1}'.format(len(collections), collections)))
             siteInfoDict['Collections'] = collections[:]
 
         except Exception as e:
@@ -2318,12 +2552,13 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
         countriesSet = set()
         compilation = 'No'
         try:
-            htmlgenres = html.xpath('//a[contains(@href,"https://www.gayhotmovies.com/category/")]/@title[normalize-space()]')
-            htmlgenres = [x.strip() for x in htmlgenres if x.strip()]
-            htmlgenres.sort(key = lambda x: x.lower())
-            log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(htmlgenres), htmlgenres)))
-            compilation = 'Yes' if 'Compilation' in htmlgenres else 'No'
-            for idx, item in enumerate(htmlgenres, start=1):
+            htmlgenres = html.xpath('//a[@label="Category"]/text()[normalize-space()]')
+            genres = list(set(htmlgenres))
+            genres = [x.strip() for x in genres if x.strip()]
+            genres.sort(key = lambda x: x.lower())
+            log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(genres), genres)))
+            compilation = 'Yes' if 'Compilation' in genres else 'No'
+            for idx, item in enumerate(genres, start=1):
                 newItem = findTidy(item)
                 log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
 
@@ -2354,7 +2589,7 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
         if kwReleaseDate is None:
             log(LOG_SUBLINE)
             try:
-                htmlproductionyear = html.xpath('//strong[text()="Released:"]/following::text()[normalize-space()]')[0].strip()
+                htmlproductionyear = html.xpath('//strong[text()="Release Year:"]/following-sibling::text()[1]')[0].strip()
                 htmlproductionyear = '{0}1231'.format(htmlproductionyear)
                 htmlproductionyear = datetime.strptime(htmlproductionyear, '%Y%m%d')
                 siteInfoDict['ReleaseDate'] = htmlproductionyear
@@ -2365,10 +2600,8 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
                 log('UTILS :: Warning, No Production Year: %s', e)
 
             try:
-                htmldate = html.xpath('//strong[text()="Date Added:"]/following::text()[normalize-space()]')[0].strip()
-                htmldate = datetime.strptime(htmldate, '%Y-%m-%d')
-                siteInfoDict['ReleaseDate'] = htmldate
-
+                htmldate = html.xpath('//strong[text()="Released:"]/following-sibling::text()[1]')[0].strip()
+                htmldate = datetime.strptime(htmldate, '%b %d %Y')
                 if htmlproductionyear and htmlproductionyear.year == htmldate.year:
                     siteInfoDict['ReleaseDate'] = htmldate
                     msg = 'Film Date set to Release Date'
@@ -2389,9 +2622,11 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
         if kwDuration is None:
             log(LOG_SUBLINE)
             try:
-                htmlduration = html.xpath('//span[text()="Running Time:"]/parent::li/text()|//span[@datetime]/text()')[0].strip()
-                htmlduration = '1970-01-01 {0}'.format(htmlduration)                                        # prefix with 1970-01-01 to conform to timestamp
-                htmlduration = datetime.strptime(htmlduration, '%Y-%m-%d %H:%M:%S')                         # turn to date time object
+                htmlduration = html.xpath('//strong[text()="Run Time: "]/following-sibling::text()[1]')[0].strip()
+                htmlduration = htmlduration.replace(' hrs.', '').replace(' mins.', '').split()
+                htmlduration = [int(x) for x in htmlduration if x.strip()]
+                htmlduration = htmlduration[0] * 3600 + htmlduration[1] * 60 if len(htmlduration) == 2 else htmlduration[0] * 60
+                htmlduration = datetime.fromtimestamp(htmlduration)
                 siteInfoDict['Duration'] = htmlduration
                 log('UTILS :: {0:<29} {1}'.format('Duration', htmlduration.strftime('%H:%M:%S')))
 
@@ -2407,24 +2642,20 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
         #                                                                      - just one image (old style)
         log(LOG_SUBLINE)
         try:
-            poster = html.xpath('//div[@class="lg_inside_wrap"]/@data-front')[0]
-            art = html.xpath('//div[@class="lg_inside_wrap"]/@data-back')[0]
+            poster = html.xpath('//img[@label="Front Boxcover"]/@src')
+            art = html.xpath('//a[@class="fancy"]/@href')
 
         except Exception as e:
-            log('UTILS :: Error getting Images, Try Old Style: %s', e)
-            try:
-                # sometimes no back cover exists... on some old movies/ so use cover photo for both poster/art
-                htmlimage = html.xpath('//img[@id="cover" and @class="cover"]/@src')[0]
-                log('UTILS ::{0:<29} {1}'.format('Old Style Image', 'Using Old Style Image'))
-            except Exception as e:
-                poster = ''
-                art = ''
-                log('UTILS :: Error getting Old Style Images: %s', e)
-            else:
-                poster = htmlimage
-                art = htmlimage
+            log('UTILS :: Error getting Images: %s', e)
+            poster = []
+            art = []
 
         finally:
+            if not art and poster:
+                art = [poster[0]]
+            if not poster and art:
+                poster = [art[0].replace('bh', 'h')]
+
             siteInfoDict['Poster'] = poster
             siteInfoDict['Art'] = art
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
@@ -2434,26 +2665,26 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         kwFilmURL = kwargs.get('kwFilmURL')
         filmURL = kwFilmURL if kwFilmURL is not None else FILMDICT['FilmURL']
-        scenesDict = {}
+        scenesDict = {'Link': filmURL}
         chaptersDict = {}
         try:
-            htmlscenes = html.xpath('//div[@class="scene_details_sm"]')
+            htmlscenes = html.xpath('//a[@label="Scene Title"]')
             log('UTILS :: {0:<29} {1}'.format('Possible Number of Scenes', len(htmlscenes)))
             if len(htmlscenes) == 0:
                 raise Exception ('< No Scenes Found! >')
 
-            # scene headings format = Clip 4 - 24 mins 38 secs
-            htmltemp = html.xpath('//span[@class="right time"]/text()[normalize-space()]')
-            htmlheadings = [x.split(' - ')[0].strip() for x in htmltemp]
-            htmldurations = [x.split(' - ')[1] for x in htmltemp]   # extract time strings
-            htmldurations = [x.split(' sec')[0] for x in htmldurations]   # extract time strings
-            htmldurations = [x.strip().replace(' mins ', ':') for x in htmldurations]   # extract time strings
+            # scene headings format = Scene 1..2..3..
+            htmltemp = html.xpath('//a[@label="Scene Title"]/text()[normalize-space()]')
+            htmlheadings = [x.strip() for x in htmltemp]
 
-            # sum up the scenes' length: Gay Hot Movies uses xx Mins xx Secs format
+            # scene durations format = 99 min
+            htmltemp = html.xpath('//small[@class="badge"]/text()[normalize-space()]')
+            htmldurations = [x.split()[0] for x in htmltemp]   # extract time strings
+
+            # sum up the scenes' length: Gay Hot Movies uses xx Mins format
             scenesDelta = timedelta()
             for htmlduration in htmldurations:
-                (mm, ss) = htmlduration.split(':')
-                scenesDelta += timedelta(minutes=int(mm), seconds=int(ss))
+                scenesDelta += timedelta(minutes=int(htmlduration))
 
             # subtract the total scene length from the total films length to establish where the first scene begins: i.e the offset
             # TimeOffset = dx of duration of film - total of all scenes length, or 0 if film is stacked or scenes are strangely longer than the actual film
@@ -2474,30 +2705,8 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
                     log('UTILS :: {0:<29} {1}'.format('Scene', sceneNo))
 
                     # Review Source - composed of cast list or iafd scenes cast or Film title in that order of preference
-                    reviewSource = ''
-                    try:
-                        # fill with Cast names from external website
-                        reviewSource = htmlscene.xpath('./div/span[@class="scene_stars"]/a/text()[normalize-space()]')
-                        reviewSource = [x.split('(')[0] for x in reviewSource]
-                        reviewSource = ', '.join(reviewSource)
-
-                        # prep for review metadata
-                        if len(reviewSource) > 40:
-                            for i in range(40, -1, -1):
-                                if reviewSource[i] == ' ':
-                                    reviewSource = reviewSource[0:i]
-                                    break
-                        if reviewSource:
-                            reviewSource = '{0}. {1}...'.format(sceneNo, reviewSource)
-                        else:
-                            mySource = 'N/A'
-                            reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
-                            log('UTILS :: Warning No Review Source (Used Film Title)')
-
-                        log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
-
-                    except Exception as e:
-                        log('UTILS :: Error getting Review Source (Cast): %s', e)
+                    reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
+                    log('UTILS :: Warning: No Review Source (Used Film Title)')
 
                     # Review Author - composed of Settings
                     reviewAuthor = 'Gay Hot Movies'
@@ -2505,52 +2714,25 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
 
                     # Review Text - composed of Sexual Acts / tidy genres
                     reviewText = ''
-                    try:
-                        reviewList = htmlscene.xpath('/div/span[@class="list_attributes"]/a/text()[normalize-space()]')
-                        reviewList = [x.strip() for x in reviewList if x.strip()]
-                        reviewList.sort(key = lambda x: x.lower())
-                        mySet = set()
-                        for idx, item in enumerate(reviewList, start=1):
-                            newItem = findTidy(item)
-                            log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                            if newItem is None:
-                                continue
-                            mySet.add(newItem if newItem else item)
-
-                        reviewList = list(mySet)
-                        reviewList.sort(key = lambda x: x.lower())
-                        reviewText = ', '.join(reviewList)
-
-                    except Exception as e:
-                        log('UTILS :: Error getting Review Text (Sex Acts): %s', e)
-
-                    finally:
-                        # prep for review metadata
-                        if len(reviewText) > 275:
-                            for i in range(275, -1, -1):
-                                if reviewText[i] in ['.', '!', '?']:
-                                    reviewText = reviewText[0:i + 1]
-                                    break
-                        log('UTILS :: {0:<29} {1}'.format('Review Text', reviewText if reviewText else 'None Recorded'))
-
+                    log('UTILS :: {0:<29} {1}'.format('Review Text', reviewText if reviewText else 'None Recorded'))
 
                     # save Review - scene
-                    scenesDict[sceneNo] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText, 'Link': filmURL}
+                    scenesDict[str(sceneNo)] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText}
 
                     chapterTitle = reviewSource
                     chapterStartTime = (timeOffsetTime.hour * 60 * 60 + timeOffsetTime.minute * 60 + timeOffsetTime.second) * 1000
-                    (mm, ss) = htmlduration.strip().split(':')
-                    timeOffsetTime += timedelta(minutes=int(mm), seconds=int(ss))
+                    timeOffsetTime += timedelta(minutes=int(htmlduration))
                     chapterEndTime = (timeOffsetTime.hour * 60 * 60 + timeOffsetTime.minute * 60 + timeOffsetTime.second) * 1000
+
                     # next scene starts a second after last scene
                     timeOffsetTime += timedelta(seconds=1)
 
-                    log('UTILS :: {0:<29} {1}'.format('Chapter', '{0} - {1}:{2}'.format(sceneNo, mm, ss)))
+                    log('UTILS :: {0:<29} {1}'.format('Chapter', '{0} - {1}:00'.format(sceneNo, htmlduration)))
                     log('UTILS :: {0:<29} {1}'.format('Title', chapterTitle))
                     log('UTILS :: {0:<29} {1}'.format('Time', '{0} - {1}'.format(datetime.fromtimestamp(chapterStartTime/1000).strftime('%H:%M:%S'), datetime.fromtimestamp(chapterEndTime/1000).strftime('%H:%M:%S'))))
 
                     # save chapter
-                    chaptersDict[sceneNo] = {'Title': chapterTitle, 'StartTime': chapterStartTime, 'EndTime': chapterEndTime}
+                    chaptersDict[str(sceneNo)] = {'Title': chapterTitle, 'StartTime': chapterStartTime, 'EndTime': chapterEndTime}
 
                 except Exception as e:
                     log('UTILS :: Error getting Scene No. %s: %s', sceneNo, e)
@@ -2633,13 +2815,13 @@ def getSiteInfoGayFetishandBDSM(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -2688,8 +2870,8 @@ def getSiteInfoGayFetishandBDSM(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -2774,13 +2956,13 @@ def getSiteInfoGayMovie(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -2829,8 +3011,8 @@ def getSiteInfoGayMovie(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -2970,14 +3152,14 @@ def getSiteInfoGayRado(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         try:
             htmlimages = html.xpath('//a[contains(@class,"magictoolbox")]/@href')
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -3062,13 +3244,13 @@ def getSiteInfoGayWorld(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -3117,8 +3299,8 @@ def getSiteInfoGayWorld(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -3167,7 +3349,7 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
 
         finally:
             if not synopsis:
-                for key in ['AEBNiii', 'GayDVDEmpire', 'GayHotMovies']:
+                for key in ['AEBN', 'GayEmpire', 'GayHotMovies']:
                     if key in FILMDICT and FILMDICT[key] != {}:
                         if 'Synopsis' in FILMDICT[key] and FILMDICT[key]['Synopsis']:
                             synopsis = FILMDICT[key]['Synopsis']
@@ -3178,24 +3360,32 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
         #   2.  Directors
         log(LOG_SUBLINE)
         try:
-            # GEVI has access to external websites: AEBN, GayHotMovies, then GayDVDEmpire
+            # GEVI has access to external websites: AEBN, GayHotMovies, then GayEmpire
             htmldirectors = html.xpath('//a[contains(@href, "/director/")]/text()')
-            htmldirectors = [x.strip() for x in htmldirectors if x.strip()]
+            htmldirectors = [x.split('(')[0].strip() for x in htmldirectors if x.strip()]
             directors = list(set(htmldirectors))
             directorsLength = len(directors)
             directors.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('GEVI Directors', '{0:>2} - {1}'.format(len(directors), sorted(directors))))
-
-            for key in ['AEBNiii', 'GayHotMovies', 'GayDVDEmpire']:
-                if key in FILMDICT and FILMDICT[key] != {}:
-                    if 'Directors' in FILMDICT[key] and FILMDICT[key]['Directors'] != set():
-                        if len(FILMDICT[key]['Directors']) > directorsLength:
-                            directors = FILMDICT[key]['Directors']
-                            log('UTILS :: {0:<29} {1}'.format('External Directors', '{0} - {1}'.format(key), directors))
-                            break
+            for key in ['AEBN', 'GayHotMovies', 'GayEmpire']:
+                myExternalAgentDict = FILMDICT.get(key, '')
+                if myExternalAgentDict:
+                    myExternalDirectors = myExternalAgentDict.get('Directors', '')
+                    if myExternalDirectors:
+                        log('UTILS :: {0:<29} {1}'.format('{0} Directors'.format(key), '{0:>2} - {1}'.format(len(myExternalDirectors), sorted(myExternalDirectors))))
+                        directors = list(set(directors + myExternalDirectors))
+                        # combine both lists and create a case insensitive List
+                        combinedDirectors = list(set(directors + myExternalDirectors))
+                        s = set()
+                        directors = []
+                        for x in combinedDirectors:
+                            if x.lower() not in s:
+                                s.add(x.lower())
+                                directors.append(x)                        
+                        directors.sort(key = lambda x: x.lower())
 
             siteInfoDict['Directors'] = directors[:]
-            log('UTILS :: {0:<29} {1}'.format('Director(s)', '{0:>2} - {1}'.format(len(directors), directors)))
+            log('UTILS :: {0:<29} {1}'.format('Combined Director(s)', '{0:>2} - {1}'.format(len(directors), directors)))
 
         except Exception as e:
             siteInfoDict['Directors'] = []
@@ -3204,24 +3394,31 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
         #   3.  Cast
         log(LOG_SUBLINE)
         try:
-            # GEVI has access to external websites: AEBN, GayHotMovies, then GayDVDEmpire
+            # GEVI has access to external websites: AEBN, GayHotMovies, then GayEmpire
             htmlcast = html.xpath('//a[contains(@href, "/performer/")]//text()')
-            htmlcast = [x.strip() for x in htmlcast if x.strip()]
+            htmlcast = [x.split('(')[0].strip() for x in htmlcast if x.strip()]
             cast = list(set(htmlcast))
             castLength = len(cast)
             cast.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('GEVI Cast', '{0:>2} - {1}'.format(castLength, cast)))
-
-            for key in ['AEBNiii', 'GayHotMovies', 'GayDVDEmpire']:
-                if key in FILMDICT and FILMDICT[key] != {}:
-                    if 'Cast' in FILMDICT[key] and FILMDICT[key]['Cast'] != set():
-                        if len(FILMDICT[key]['Cast']) > castLength:
-                            cast = FILMDICT[key]['Cast']
-                            log('UTILS :: {0:<29} {1}'.format('External Cast', '{0} - {1}'.format(key), sorted(cast)))
-                            break
+            for key in ['AEBN', 'GayHotMovies', 'GayEmpire']:
+                myExternalAgentDict = FILMDICT.get(key, '')
+                if myExternalAgentDict:
+                    myExternalCast = myExternalAgentDict.get('Cast', '')
+                    if myExternalCast:
+                        log('UTILS :: {0:<29} {1}'.format('{0} Cast'.format(key), '{0:>2} - {1}'.format(len(myExternalCast), sorted(myExternalCast))))
+                        # combine both lists and create a case insensitive List
+                        combinedCast = list(set(cast + myExternalCast))
+                        s = set()
+                        cast = []
+                        for x in combinedCast:
+                            if x.lower() not in s:
+                                s.add(x.lower())
+                                cast.append(x)                        
+                        cast.sort(key = lambda x: x.lower())
 
             siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+            log('UTILS :: {0:<29} {1}'.format('Combined Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
         except Exception as e:
             siteInfoDict['Cast'] = []
@@ -3234,11 +3431,13 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
+        countriesSet = set()
+        genresSet = set()
         try:
             try:
                 htmlbodytypes = html.xpath('//td[contains(text(),"body types")]//following-sibling::td[1]/text()')[0].strip()           # add GEVI body type to genres
                 htmlbodytypes = htmlbodytypes.replace(';', ',')
-                htmlbodytypes = [x.strip() for x in htmlbodytypes.split(',')]
+                htmlbodytypes = [x.strip() for x in htmlbodytypes.split(',') if x.strip()]
                 log('UTILS :: {0:<29} {1}'.format('Body Types', '{0:>2} - {1}'.format(len(htmlbodytypes), htmlbodytypes)))
 
             except Exception as e:
@@ -3247,7 +3446,7 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
 
             try:
                 htmlcategories = html.xpath('//td[contains(text(),"category")]//following-sibling::td[1]/text()')[0].strip()            # add GEVI categories to genres
-                htmlcategories = [x.strip() for x in htmlcategories.split(',')]
+                htmlcategories = [x.strip() for x in htmlcategories.split(',') if x.strip()]
                 log('UTILS :: {0:<29} {1}'.format('Categories', '{0:>2} - {1}'.format(len(htmlcategories), htmlcategories)))
 
             except Exception as e:
@@ -3257,16 +3456,15 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
             try:
                 htmltypes = html.xpath('//td[contains(text(),"type")]//following-sibling::td[1]/text()')[0].strip()                     # add GEVI types
                 htmltypes = htmltypes.replace(';', ',')
-                htmltypes = [x.strip() for x in htmltypes.split(',')]
+                htmltypes = [x.strip() for x in htmltypes.split(',') if x.strip()]
                 log('UTILS :: {0:<29} {1}'.format('Types', '{0:>2} - {1}'.format(len(htmltypes), htmltypes)))
 
             except Exception as e:
                 htmltypes = []
                 log('UTILS :: Error getting Types: %s', e)
 
-            # GEVI has access to external websites: AEBN, GayHotMovies, GayDVDEmpire
-            genresSet = set()
-            for key in ['AEBNiii', 'GayHotMovies', 'GayDVDEmpire']:
+            # GEVI has access to external websites: AEBN, GayHotMovies, GayEmpire
+            for key in ['AEBN', 'GayHotMovies', 'GayEmpire']:
                 if key in FILMDICT and FILMDICT[key] != {}:
                     if 'Genres' in  FILMDICT[key] and FILMDICT[key]['Genres'] != set():
                         genresSet.update(FILMDICT[key]['Genres'])
@@ -3285,6 +3483,23 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
 
                 genresSet.add(newItem if newItem else item)
 
+            # also use synopsis to populate genres/countries as GEVI usually uses general hardcore as a Genre..
+            if siteInfoDict['Synopsis']:
+                synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
+                synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
+                setSynopsis = set(synopsis.split())
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
+                for idx, item in enumerate(setSynopsis, start=1):
+                    newItem = findTidy(item)
+                    if not newItem or newItem is None:        # Don't process
+                        continue
+
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    if newItem in COUNTRYSET:
+                        countriesSet.add(newItem)
+                    else:
+                        genresSet.add(newItem)
+
             log('UTILS :: {0:<29} {1}'.format('Combined Genres', '{0:>2} - {1}'.format(len(genresSet), sorted(genresSet))))
             siteInfoDict['Genres'] = genresSet
 
@@ -3295,16 +3510,15 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
         #   5b.   Countries
         log(LOG_SUBLINE)
         try:
-            # GEVI has access to external websites: AEBN, GayHotMovies, then GayDVDEmpire
-            countriesSet = set()
-            for key in ['AEBNiii', 'GayHotMovies', 'GayDVDEmpire']:
+            # GEVI has access to external websites: AEBN, GayHotMovies, then GayEmpire
+            for key in ['AEBN', 'GayHotMovies', 'GayEmpire']:
                 if key in FILMDICT and FILMDICT[key] != {}:
                     if 'Countries' in FILMDICT[key] and FILMDICT[key]['Countries'] != set():
                         countriesSet.update(FILMDICT[key]['Countries'])
 
             log('UTILS :: {0:<29} {1}'.format('External Countries', '{0:>2} - {1}'.format(len(countriesSet), sorted(countriesSet))))
 
-            htmlcountries = html.xpath('//td[contains(text(),"location")]//following-sibling::td[1]/text()')[0].strip()
+            htmlcountries = html.xpath('//td[text()="location"]//following-sibling::td[1]/text()')[0].strip()
             htmlcountries = [x.strip() for x in htmlcountries.split(',')]
             log('UTILS :: {0:<29} {1}'.format('GEVI Countries', '{0:>2} - {1}'.format(len(htmlcountries), htmlcountries)))
             for idx, item in enumerate(htmlcountries, start=1):
@@ -3395,24 +3609,27 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Images', '{0:>} - {1}'.format(len(htmlimages), htmlimages)))
             images = []
             [images.append(x) for x in htmlimages if x not in images]
-            poster = images[0]
-            art = images[1] if len(images) > 1 else poster
+            poster = [images[0]]
+            art = [images[1] if len(images) > 1 else poster[0]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
-            log('UTILS :: Check if Better Quality External Poster/Art Exits')
+            log('UTILS :: Add External Poster/Art')
 
-            for key in ['AEBNiii', 'GayDVDEmpire', 'GayHotMovies']:
-                if key in FILMDICT and FILMDICT[key] != {}:
-                    if FILMDICT[key]['Poster'] != FILMDICT[key]['Art']:     # old gayhotmovies sometimes dont have background art - might as well use GEVI if that old
-                        poster = FILMDICT[key]['Poster'] 
-                        art = FILMDICT[key]['Art']
-                        break
-            log('UTILS :: {0:<29} {1}'.format('Possible External Poster', poster))
-            log('UTILS :: {0:<29} {1}'.format('Possible External Art', art))
+            for key in ['AEBN', 'GayEmpire', 'GayHotMovies']:
+                myExternalDict = FILMDICT.get(key, '')
+                if myExternalDict:
+                    externalPoster = myExternalDict.get('Poster', '')
+                    poster += externalPoster
+                    externalArt = myExternalDict.get('Art', '')
+                    art += externalArt
+                    break
+
+            log('UTILS :: {0:<29} {1}'.format('Poster - After Addition', poster))
+            log('UTILS :: {0:<29} {1}'.format('Art - After Addition', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -3423,7 +3640,7 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         kwFilmURL = kwargs.get('kwFilmURL')
         filmURL = kwFilmURL if kwFilmURL is not None else FILMDICT['FilmURL']
-        scenesDict = {}
+        scenesDict = {'Link': filmURL}
         chaptersDict = {}
         try:
             htmlscenes = html.xpath('//td[@class="scene"]')
@@ -3455,7 +3672,7 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
                         else:
                             mySource = 'N/A'
                             reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
-                            log('UTILS :: Warning No Review Source (Used Film Title)')
+                            log('UTILS :: Warning: No Review Source (Used Film Title)')
 
                         log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
 
@@ -3479,13 +3696,13 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
                         log('UTILS :: {0:<29} {1}'.format('Review Text', reviewText if reviewText else 'None Recorded'))
 
                     # save Review - scene
-                    scenesDict[sceneNo] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText, 'Link': filmURL}
+                    scenesDict[str(sceneNo)] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText}
 
                 except Exception as e:
                     log('UTILS :: Error getting Scene No. %s: %s', sceneNo, e)
 
             # External Reviews / Scenes
-            for key in ['AEBNiii', 'GayHotMovies', 'GayDVDEmpire']:
+            for key in ['AEBN', 'GayHotMovies', 'GayEmpire']:
                 if key in FILMDICT and FILMDICT[key] != {}:
                     if scenesDict == {}:
                         log('UTILS :: {0:<29} {1}'.format('External Scenes', '{0} - {1}'.format('Yes', key)))
@@ -3516,7 +3733,7 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
                 log('UTILS :: {0:<29} {1}'.format('Film Rating', rating))
                 siteInfoDict['Rating'] = rating
             else:
-                raise Exception('< No Rated! >')
+                raise Exception('< Not Rated! >')
         except Exception as e:
             siteInfoDict['Rating'] = 0.0
             log('UTILS :: Error getting Rating: %s', e)
@@ -3689,14 +3906,14 @@ def getSiteInfoHFGPM(FILMDICT, **kwargs):
             if len(htmlimages) == 1:    # if only one image duplicate it
                 htmlimages.append(htmlimages[0])
 
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -3779,13 +3996,13 @@ def getSiteInfoHomoActive(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     genresSet.add(newItem)
 
                 showSetData(genresSet, 'Genres (set*)')
@@ -3864,14 +4081,14 @@ def getSiteInfoHomoActive(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         try:
             htmlimages = html.xpath('//img[@class="gallery-image"]/@src')
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -3956,13 +4173,13 @@ def getSiteInfoIAFD(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -3970,14 +4187,17 @@ def getSiteInfoIAFD(FILMDICT, **kwargs):
             else:
                 log('UTILS :: No Synopsis Recorded: %s', e)
 
-            #   IAFD lists the sexual activities of the cast memebrs under their pictures at times
+            #   IAFD lists the sexual activities of the cast members under their pictures at times
             if siteInfoDict['Cast']:
-                roles = ' '.join({cast[x]['Role'] for x in siteInfoDict['Cast'].keys()})            # add all roles to string
-                rolesSet = set(roles.split())                                                       # split into words and remove duplicates
+                rolesSet = {cast[x]['Role'] for x in siteInfoDict['Cast'].keys()}
+                rolesSet = {x for x in rolesSet if 'AKA' not in x and x != IAFD_FOUND}
+                rolesSet = set(' '.join(rolesSet).split())
                 log('UTILS :: {0:<29} {1}'.format('Roles Word Count', '{0:>2} - {1}'.format(len(rolesSet), rolesSet)))
                 for idx, item in enumerate(rolesSet, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
+                        continue
+                    if newItem in COUNTRYSET:
                         continue
 
                     log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
@@ -4000,7 +4220,7 @@ def getSiteInfoIAFD(FILMDICT, **kwargs):
         if kwCompilation is None:
             log(LOG_SUBLINE)
             try:
-                # if already set to yes by possible checking of external sources [AEBN, GayDVDMovies, GayHotMovies], dont change with IAFD value
+                # if already set to yes by possible checking of external sources [AEBN, GayEmpire, GayHotMovies], dont change with IAFD value
                 htmlcompilation = html.xpath('//p[@class="bioheading" and text()="Compilation"]//following-sibling::p[1]/text()')[0].strip()
                 log('UTILS :: {0:<29} {1}'.format('Compilation?', htmlcompilation))
             except Exception as e:
@@ -4070,7 +4290,7 @@ def getSiteInfoIAFD(FILMDICT, **kwargs):
         kwFilmURL = kwargs.get('kwFilmURL')
         filmURL = kwFilmURL if kwFilmURL is not None else FILMDICT['FilmURL']
         siteInfoDict['Chapters'] = {}
-        scenesDict = {}
+        scenesDict = {'Link': filmURL}
         try:
             scene = html.xpath('//div[@id="sceneinfo"]/ul/li//text()')[0] # will error if no scene breakdown
             htmlscenes = html.xpath('//div[@id="sceneinfo"]/ul/li//text()[normalize-space()]')
@@ -4096,7 +4316,7 @@ def getSiteInfoIAFD(FILMDICT, **kwargs):
                 log('UTILS :: {0:<29} {1}'.format('Review Text', reviewText if reviewText else 'None Recorded'))
 
                 # save Review - scene
-                scenesDict[sceneNo] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText, 'Link': filmURL}
+                scenesDict[str(sceneNo)] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText}
 
         except Exception as e:
             log('UTILS :: Error getting Scenes: %s', e)
@@ -4200,13 +4420,13 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -4257,15 +4477,15 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
         FILMDICT['SceneAgent'] = True                 # notify update routine to crop images
         try:
             htmlimages = html.xpath('.//a[@class="aimg"]/img/@data-lazy-src|.//p/img/@data-lazy-src')
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
 
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -4339,7 +4559,7 @@ def getSiteInfoSimplyAdult(FILMDICT, **kwargs):
             htmlcollections = [x.strip() for x in htmlcollections if x.strip()]
             collections = list(set(htmlcollections))
             collections.sort(key = lambda x: x.lower())
-            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} {1}'.format(len(collections), collections)))
+            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} - {1}'.format(len(collections), collections)))
             siteInfoDict['Collections'] = collections[:]
 
         except Exception as e:
@@ -4356,13 +4576,13 @@ def getSiteInfoSimplyAdult(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -4408,14 +4628,14 @@ def getSiteInfoSimplyAdult(FILMDICT, **kwargs):
             if len(htmlimages) == 1:    # if only one image duplicate it
                 htmlimages.append(htmlimages[0])
 
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -4529,13 +4749,13 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
                 synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
                 synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
                 setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>3} - {1}'.format(len(setSynopsis), setSynopsis)))
+                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
                 for idx, item in enumerate(setSynopsis, start=1):
                     newItem = findTidy(item)
                     if not newItem or newItem is None:        # Don't process
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>3} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
                     if newItem in COUNTRYSET:
                         countriesSet.add(newItem)
                     else:
@@ -4589,15 +4809,15 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
             if len(htmlimages) == 1:
                 htmlimages.append(htmlimages[0])
 
-            poster = htmlimages[0]
-            art = htmlimages[1]
+            poster = [htmlimages[0]]
+            art = [htmlimages[1]]
 
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -4671,7 +4891,7 @@ def getSiteInfoWolffVideo(FILMDICT, **kwargs):
             htmlcollections = [x.strip() for x in htmlcollections if x.strip()]
             collections = list(set(htmlcollections))
             collections.sort(key = lambda x: x.lower())
-            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} {1}'.format(len(collections), collections)))
+            log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Collections'), '{0:>2} - {1}'.format(len(collections), collections)))
             siteInfoDict['Collections'] = collections[:]
 
         except Exception as e:
@@ -4744,14 +4964,14 @@ def getSiteInfoWolffVideo(FILMDICT, **kwargs):
             htmlimage = html.xpath('//a[@id="view_cover"]/@href')[0]
             htmlimage = ('' if BASE_URL in htmlimage else BASE_URL) + htmlimage
 
-            poster = htmlimage
-            art = htmlimage
+            poster = [htmlimage]
+            art = [htmlimage]
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
         except Exception as e:
-            poster = ''
-            art = ''
+            poster = []
+            art = []
             log('UTILS :: Error getting Images: %s', e)
 
         finally:
@@ -4762,7 +4982,7 @@ def getSiteInfoWolffVideo(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         kwFilmURL = kwargs.get('kwFilmURL')
         filmURL = kwFilmURL if kwFilmURL is not None else FILMDICT['FilmURL']
-        scenesDict = {}
+        scenesDict = {'Link': filmURL}
         chaptersDict = {}               # always null in Wolff Video
         try:
             htmlscenes = html.xpath('//table[@class="scene_holder"]')
@@ -4797,7 +5017,7 @@ def getSiteInfoWolffVideo(FILMDICT, **kwargs):
                         else:
                             mySource = 'N/A'
                             reviewSource = '{0}. {1}...'.format(sceneNo, FILMDICT['Title'])
-                            log('UTILS :: Warning No Review Source (Used Film Title)')
+                            log('UTILS :: Warning: No Review Source (Used Film Title)')
 
                         log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
 
@@ -4824,7 +5044,7 @@ def getSiteInfoWolffVideo(FILMDICT, **kwargs):
                         log('UTILS :: {0:<29} {1}'.format('Review Text', reviewText if reviewText else 'None Recorded'))
 
                     # save Review - scene
-                    scenesDict[sceneNo] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText, 'Link': filmURL}
+                    scenesDict[str(sceneNo)] = {'Author': reviewAuthor, 'Source': reviewSource, 'Text': reviewText}
 
                 except Exception as e:
                     log('UTILS :: Error getting Scene No. %s: %s', sceneNo, e)
@@ -4927,37 +5147,42 @@ def log(message, *args):
 # ----------------------------------------------------------------------------------------------------------------------------------
 def logHeader(myFunc, media, lang):
     ''' log header for search and update functions '''
-    log(LOG_BIGLINE)
-    log('%s:: Version:                      v.%s', myFunc, VERSION_NO)
-    log('%s:: Python:                       %s %s', myFunc, platform.python_version(), platform.python_build())
-    log('%s:: Platform:                     %s - %s %s', myFunc, platform.machine(), platform.system(), platform.release())
+    log(LOG_ASTLINE)
+    log(LOG_ASTLINE)
+    log('%s:: Version:                              v.%s', myFunc, VERSION_NO)
+    log('%s:: Python:                               %s (%s): %s', myFunc, platform.python_version(), platform.architecture()[0], platform.python_build())
+    log('%s:: Platform:                             %s - %s %s', myFunc, platform.machine(), platform.system(), platform.release())
     log('%s:: Preferences:', myFunc)
-    log('%s::  > Legend Before Summary:     %s', myFunc, PREFIXLEGEND)
-    log('%s::  > Reset Metadata:            %s', myFunc, RESETMETA)
-    log('%s::  > Collection Gathering', myFunc)
-    log('%s::      > Cast:                  %s', myFunc, COLCAST)
-    log('%s::      > Director(s):           %s', myFunc, COLDIRECTOR)
-    log('%s::      > Studio:                %s', myFunc, COLSTUDIO)
-    log('%s::      > Film Title:            %s', myFunc, COLSERIES)
-    log('%s::      > Genres:                %s', myFunc, COLGENRE)
-    log('%s::  > Match IAFD Duration:       %s', myFunc, MATCHIAFDDURATION)
-    log('%s::  > Match Site Duration:       %s', myFunc, MATCHSITEDURATION)
-    log('%s::  > Duration Dx                ±%s Minutes', myFunc, DURATIONDX)
-    log('%s::  > Language Detection:        %s', myFunc, DETECT)
-    log('%s::  > Library:Site Language:     (%s:%s)', myFunc, lang, SITE_LANGUAGE)
-    log('%s::  > Network Request Delay:     %s Seconds', myFunc, DELAY)
-    log('%s:: Media Title:                  %s', myFunc, media.title)
-    log('%s:: File Path:                    %s', myFunc, media.items[0].parts[0].file)
-    log(LOG_BIGLINE)
+    log('%s::  > Legend Before Summary:             %s', myFunc, PREFIXLEGEND)
+    log('%s::  > Reset Metadata:                    %s', myFunc, RESETMETA)
+    log('%s::  > Collection Gathering Order', myFunc)
+    log('%s::      > System:                        %s', myFunc, COLSYSTEM)
+    log('%s::      > Genres:                        %s, Prefix genres with %s symbol?: %s', myFunc, COLGENRE, AGENT_TYPE, PREFIXGENRE)
+    log('%s::      > Countries                      %s, Display poster as %s', myFunc, COLCOUNTRY, COUNTRYPOSTERTYPE)
+    log('%s::      > Studio:                        %s', myFunc, COLSTUDIO)
+    log('%s::      > Series:                        %s', myFunc, COLSERIES)
+    log('%s::      > Directors:                     %s', myFunc, COLDIRECTOR)
+    log('%s::      > Cast:                          %s', myFunc, COLCAST)
+    log('%s::  > Poster Source - Download?          %s', myFunc, POSTERSOURCEDOWNLOAD)
+    log('%s::  > Match IAFD Duration:               %s', myFunc, MATCHIAFDDURATION)
+    log('%s::  > Match Site Duration:               %s', myFunc, MATCHSITEDURATION)
+    log('%s::  > Duration Dx                        ±%s Minutes', myFunc, DURATIONDX)
+    log('%s::  > Language Detection:                %s', myFunc, DETECT)
+    log('%s::  > Library:Site Language:             (%s:%s)', myFunc, lang, SITE_LANGUAGE)
+    log('%s:: Media Title:                          %s', myFunc, media.title)
+    log('%s:: File Path:                            %s', myFunc, media.items[0].parts[0].file)
+    log(LOG_ASTLINE)
+    log(LOG_ASTLINE)
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def logFooter(myFunc, FILMDICT):
     ''' log footer for search and update functions '''
     log(LOG_ASTLINE)
-    for footer in [' << {0}: Finished {1} Routine >> '.format(FILMDICT['Agent'], myFunc.title()), 
-                   ' << ({0}) - {1} ({2}) >> '.format(FILMDICT['Studio'], FILMDICT['Title'], FILMDICT['Year']),
-                   ' << {0} >> '.format('Sucessful!!' if FILMDICT['Status'] else 'Failed')]:
-        log('%s:: %s', myFunc, footer.center(140, '*'))
+    for footer in [' >> {0}: Finished {1} Routine << '.format(FILMDICT['Agent'], myFunc.title()), 
+                   ' >> ({0}) - {1} ({2}) << '.format(FILMDICT['Studio'], FILMDICT['Title'], FILMDICT['Year']),
+                   ' >> {0} << '.format(FILMDICT['FilmURL']),
+                   ' >> {0} << '.format('Successful!!' if FILMDICT['Status'] else 'Failed')]:
+        log('%s:: %s', myFunc, footer.center(131, '*'))
     log(LOG_ASTLINE)
 
 # -------------------------------------------------------------------------------------------------------------------------------
@@ -5004,6 +5229,10 @@ def matchCast(unmatchedCastList, FILMDICT):
     for idx, unmatchedCast in enumerate(unmatchedCastList, start=1):
         compareUnmatchedCast = re.sub(r'[\W\d_]', '', unmatchedCast).strip().lower()
         log('UTILS :: {0:<29} {1}'.format('Unmatched Cast Name', '{0:>2} - {1}/{2}'.format(idx, unmatchedCast, compareUnmatchedCast)))
+
+        # the cast on the website has not matched to those listed against the film in IAFD. So search for the cast's entry on IAFD
+        matchedCastDict[unmatchedCast] = {'Awards': [], 'Bio': {}, 'CompareName': '', 'CompareAlias': [], 'Films': [],
+                                          'Nationality': '', 'Photo': '', 'RealName': '', 'Role': IAFD_ABSENT, 'URL': ''}   # initialise cast member's dictionary
 
         # compare against IAFD Cast List - retrieved from the film's url page
         matchedName = False
@@ -5095,21 +5324,18 @@ def matchCast(unmatchedCastList, FILMDICT):
         if matchedName: # we have a match, on to the next cast
             continue
 
-        # the cast on the website has not matched to those listed against the film in IAFD. So search for the cast's entry on IAFD
-        matchedCastDict[unmatchedCast] = {'Photo': '', 'Role': IAFD_ABSENT, 'Alias': '', 'CompareName': '', 'CompareAlias': ''} # initialise cast member's dictionary
-        xPathMale = '//table[@id="tblMal"]/tbody/tr'
-        xPathGirl = '//table[@id="tblFem"]/tbody/tr'
-        if 'AllMale' in FILMDICT and FILMDICT['AllMale'] == 'Yes':
-            xPath = xPathMale
+        if FILMDICT['AllMale'] == 'Yes':
+            xPath = '//table[@id="tblMal"]/tbody/tr'
             xType = 'Gay'
-        elif 'AllGirl' in FILMDICT and FILMDICT['AllGirl'] == 'Yes':
-            xPath = xPathGirl
+        elif FILMDICT['AllGirl'] == 'Yes':
+            xPath = '//table[@id="tblFem"]/tbody/tr'
             xType = 'Lesbian'
         else:
-            xPath = '{0}|{1}'.format(xPathMale, xPathGirl)
-            xType = 'Straight'
+            xPath = '//table[@id="tblFem" or @id="tblMal"]/tbody/tr'
+            xType = 'Bisexual/Straight'
+
         try:
-            html = getURLElement(IAFD_SEARCH_URL.format(String.URLEncode(unmatchedCast)), FilterYear = myYear)
+            html = getURLElement(IAFD_SEARCH_URL.format(String.URLEncode(unmatchedCast)), FilterYear = myYear) # remove full stops before encoding
             castList = html.xpath(xPath)
             log('UTILS :: {0:<29} {1}'.format('{0} Cast xPath'.format(xType), xPath))
 
@@ -5125,8 +5351,8 @@ def matchCast(unmatchedCastList, FILMDICT):
                 # get cast details and compare to Agent cast
                 try:
                     castName = cast.xpath('./td[2]/a/text()[normalize-space()]')[0]
-                    compareCastName = re.sub(r'[\W\d_]', '', castName).strip().lower()
-                    log('UTILS :: {0:<29} {1}'.format('Matching Cast Name', '{0:>2} - {1} / {2}'.format(idx2, castName, compareCastName)))
+                    castCompareName = re.sub(r'[\W\d_]', '', castName).strip().lower()
+                    log('UTILS :: {0:<29} {1}'.format('Matching Cast Name', '{0:>2} - {1} / {2}'.format(idx2, castName, castCompareName)))
                 except Exception as e:
                     log('UTILS :: Error: Could not read Cast Name: %s', e)
                     log(LOG_SUBLINE)
@@ -5141,13 +5367,26 @@ def matchCast(unmatchedCastList, FILMDICT):
                     continue   # next cast 
 
                 try:
-                    castAliasList = cast.xpath('./td[3]/text()[normalize-space()]')[0].split(',')
-                    castAliasList = [x.strip() for x in castAliasList if x]
-                    compareCastAliasList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in castAliasList]
+                    castAliasList = cast.xpath('./td[3]/text()[normalize-space()]')[0].replace(' or ', ',')
+                    castAliasList = castAliasList.split(',')
+                    castAliasList = [x.strip() for x in castAliasList if x.strip()]
+                    castAlias = ', '.join(castAliasList)
+                    castCompareAliasList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in castAliasList]
                     log('UTILS :: {0:<29} {1}'.format('Alias', castAliasList if castAliasList else 'No Cast Alias Recorded'))
                 except:
+                    castAlias = ''
                     castAliasList = []
-                    compareCastAliasList = []
+                    castCompareAliasList = []
+
+                try:
+                    startCareer = int(cast.xpath('./td[4]/text()[normalize-space()]')[0]) - 1 # set start of career to 1 year before for pre-releases
+                except:
+                    startCareer = 0
+
+                try:
+                    endCareer = int(cast.xpath('./td[5]/text()[normalize-space()]')[0]) + 1   # set end of career to 1 year after to cater for late releases
+                except:
+                    endCareer = 0
 
                 if FILMDICT['FoundOnIAFD'] == 'Yes':                # look through FILMDICT['Cast']
                     previouslyMatched = False                       # check if the actor is in a move that has been found in IAFD
@@ -5164,7 +5403,7 @@ def matchCast(unmatchedCastList, FILMDICT):
                             checkAlias = value['Alias']
                             checkCompareAlias = value['CompareAlias']
                             checkURL = value['URL']
-                            if checkCompareAlias in compareCastAliasList:
+                            if checkCompareAlias in castCompareAliasList:
                                 previouslyMatched = True
                                 log('UTILS :: {0:<29} {1}'.format('Note', '{0} AKA {1} also known by this name: {2}'.format(checkName, checkAlias, castName)))
                                 break
@@ -5175,60 +5414,45 @@ def matchCast(unmatchedCastList, FILMDICT):
                         continue
 
                 # Check that cast member has acted in a gay film
-                if FILMDICT['AllMale'] == 'Yes' or FILMDICT['AllGirl'] == 'Yes':
-                    try:
-                        chtml = getURLElement(castURL)
-                        # if using a scene agent scraper include scenes.... Need to think this through!!!!!!
-                    except Exception as e:
-                        log('UTILS :: Error getting Cast Member Page, Cast Member: %s', e)
-
-                    else:
-                        xPath = '//table[@id="personal"]/tbody/tr[@class="ga" or @class="we"]' if FILMDICT['SceneAgent'] else '//table[@id="personal"]/tbody/tr[@class="ga"]'
-                        gayFilmsList = chtml.xpath(xPath)
-                        gayFilmsFound = len(gayFilmsList)
-                        log('UTILS :: {0:<29} {1}'.format('Filmography', '{0:>2} - Gay/Bi Films'.format(gayFilmsFound)))
-                        noCount = 0
-                        for idx, gayFilm in enumerate(gayFilmsList, start=1):
-                            gaySiteTitle = gayFilm.xpath('./td//text()')
-                            gayNotes = gaySiteTitle[3].lower()
-                            # log('UTILS :: {0:<29} {1}'.format('', '{0:>2}. {1:<35}\t - {2} - {3}'.format(idx, gaySiteTitle[0], gaySiteTitle[1], gaySiteTitle[3])))
-                            if [x for x in ['mastonly', 'nonsex'] if (x in gayNotes)]:   # appeared in gay film in possible non gay role
-                                noCount += 1
-
-                        if noCount == gayFilmsFound:                        # all films in list were nonsex or masturbation only
-                            log('UTILS :: {0:<29} {1}'.format('Skipped', 'Appeared in Zero Films or as Non Sex / Masturbation Roles Only'))
-                            log(LOG_SUBLINE)
-                            continue    # next cast in cast list
-
                 try:
-                    startCareer = int(cast.xpath('./td[4]/text()[normalize-space()]')[0]) - 1 # set start of career to 1 year before for pre-releases
-                except:
-                    startCareer = 0
+                    chtml = getURLElement(castURL)
+                    xPath = '//table[@id="personal"]/tbody/tr[@class="ga" or @class="we"]' if FILMDICT['SceneAgent'] else '//table[@id="personal"]/tbody/tr[@class="ga"]'
+                    gayFilmsList = chtml.xpath(xPath)
+                    gayFilmsFound = len(gayFilmsList)
+                    log('UTILS :: {0:<29} {1}'.format('Filmography', '{0:>2} - Gay/Bi Films'.format(gayFilmsFound)))
+                    noCount = 0
+                    for idx, gayFilm in enumerate(gayFilmsList, start=1):
+                        gaySiteTitle = gayFilm.xpath('./td//text()')
+                        gayNotes = gaySiteTitle[3].lower()
+                        if [x for x in ['mastonly', 'nonsex'] if (x in gayNotes)]:   # appeared in gay film in possible non gay role
+                            noCount += 1
 
-                try:
-                    endCareer = int(cast.xpath('./td[5]/text()[normalize-space()]')[0]) + 1   # set end of career to 1 year after to cater for late releases
-                except:
-                    endCareer = 0
+                    if noCount == gayFilmsFound:                        # all films in list were nonsex or masturbation only
+                        log('UTILS :: {0:<29} {1}'.format('Skipped', 'Appeared in Zero Films or as Non Sex / Masturbation Roles Only'))
+                        log(LOG_SUBLINE)
+                        continue    # next cast in cast list
+                except Exception as e:
+                    log('UTILS :: Error getting Cast Member Page, Cast Member: %s', e)
 
                 log('UTILS :: {0:<29} {1}'.format('Career', '{0} - {1}'.format(startCareer if startCareer > 0 else 'N/A', endCareer if endCareer > 0 else 'N/A')))
 
                 matchedUsing = ''
 
                 # match iafd row with Agent Cast entry
-                matchedCast = True if compareUnmatchedCast == compareCastName else False
+                matchedCast = True if compareUnmatchedCast == castCompareName else False
                 if matchedCast:
                     matchedUsing = 'Name' 
                 else:
-                    log('UTILS :: {0:<29} {1}'.format('Failed Name Matching', '{0} != {1}'.format(compareUnmatchedCast, compareCastName)))
+                    log('UTILS :: {0:<29} {1}'.format('Failed Name Matching', '{0} != {1}'.format(compareUnmatchedCast, castCompareName)))
 
                 # match iafd row with Agent Cast Alias entry
                 if not matchedCast and castAliasList:
-                    matchedItem = [x for x in compareCastAliasList if compareUnmatchedCast in x]
+                    matchedItem = [x for x in castCompareAliasList if compareUnmatchedCast in x]
                     matchedCast = True if matchedItem else False
                     if matchedCast:
                         matchedUsing = 'Alias' 
                     else:
-                        log('UTILS :: {0:<29} {1}'.format('Failed Alias List Matching', '{0} not in {1}'.format(compareUnmatchedCast, compareCastAliasList)))
+                        log('UTILS :: {0:<29} {1}'.format('Failed Alias List Matching', '{0} not in {1}'.format(compareUnmatchedCast, castCompareAliasList)))
 
                 # Check Career - if we have a match - this can only be done if the film is not a compilation and we have a Year
                 # only do this if we have more than one actor returned
@@ -5239,28 +5463,36 @@ def matchCast(unmatchedCastList, FILMDICT):
                     else:
                         log('UTILS :: {0:<29} {1}'.format('Failed Career Matching', '{0} <= {1} <= {2}'.format(startCareer, myYear, endCareer)))
 
-
                 # we have a cast member who satisfies the conditions
                 if matchedCast:
-                    castPhoto = cast.xpath('./td[1]/a/img/@src')[0] # Cast Name on agent website - retrieve picture
-                    castPhoto = '' if 'nophoto' in castPhoto or 'th_iafd_ad' in castPhoto else castPhoto.replace('thumbs/th_', '')
+                    # get cast biography and filmography etc
+                    castDetails = getIAFDArtist(castURL)
+                    castAwards = castDetails['Awards']
+                    castBio = castDetails['Bio']
+                    castFilms = castDetails['Films']
+                    castNationality = castDetails['Nationality']
+                    castPhoto = castDetails['Photo']
+                    castRealName = castDetails['RealName']
                     castRole = IAFD_FOUND  # default to found
 
-                    log('UTILS :: {0:<29} {1}'.format('Cast URL', castURL))
+                    # log cast details
+                    log('UTILS :: {0:<29} {1}'.format('Matched Cast Details:', ''))
+                    log('UTILS :: {0:<29} {1}'.format('Cast Real Name', castRealName))
+                    log('UTILS :: {0:<29} {1}'.format('Cast Alias', castAlias if castAlias else 'No Cast Alias Recorded'))
+                    log('UTILS :: {0:<29} {1}'.format('Cast Awards', castAwards))
+                    log('UTILS :: {0:<29} {1}'.format('Cast Bio', castBio))
+                    log('UTILS :: {0:<29} {1}'.format('Cast Films', castFilms))
+                    log('UTILS :: {0:<29} {1}'.format('Cast Name', castName))
+                    log('UTILS :: {0:<29} {1}'.format('Cast Nationality', castNationality))
                     log('UTILS :: {0:<29} {1}'.format('Cast Photo', castPhoto))
                     log('UTILS :: {0:<29} {1}'.format('Cast Role', castRole))
+                    log('UTILS :: {0:<29} {1}'.format('Cast URL', castURL))
                     log('UTILS :: {0:<29} {1}'.format('Matched Using', matchedUsing))
-
-                    # Assign found values to dictionary
-                    myDict = {}
-                    myDict['Photo'] = castPhoto
-                    myDict['Role'] = '{0}:{1}'.format(castRole, matchedUsing)
-                    myDict['Alias'] = ''
-                    myDict['CompareName'] = compareCastName
-                    myDict['CompareAlias'] = compareCastAliasList
-                    matchedCastDict[unmatchedCast] = myDict
-
                     log(LOG_SUBLINE)
+
+                    # Assign values to dictionary
+                    matchedCastDict[unmatchedCast] = {'Alias': castAliasList, 'Awards': castAwards, 'Bio': castBio, 'CompareName': castCompareName, 'CompareAlias': castCompareAliasList, 
+                                                      'Films': castFilms, 'Nationality': castNationality, 'Photo': castPhoto, 'RealName': castRealName, 'Role': castRole, 'URL': castURL}
                     break   # matched - ignore any other entries
 
         except Exception as e:
@@ -5277,8 +5509,9 @@ def matchDirectors(unmatchedDirectorList, FILMDICT):
     for idx, unmatchedDirector in enumerate(unmatchedDirectorList, start=1):
         compareUnmatchedDirector = re.sub(r'[\W\d_]', '', unmatchedDirector).strip().lower()
         log('UTILS :: {0:<29} {1}'.format('Unmatched Director Name', '{0:>2} - {1}/{2}'.format(idx, unmatchedDirector, compareUnmatchedDirector)))
-        log('UTILS :: {0:<29} {1}'.format('Unmatched Director Name', unmatchedDirector))
 
+        # the director on the website has not matched to those listed against the film in IAFD. So search for the director's entry on IAFD
+        matchedDirectorDict[unmatchedDirector] = {'Alias': '', 'Awards': [], 'Bio': {}, 'Films': [], 'RealName': '', 'Nationality': '', 'Photo': '', 'URL': ''}    # initialise director's dictionary
         # compare against IAFD Director List - retrieved from the film's url page
         matchedName = False
         for key, value in FILMDICT['Directors'].items():
@@ -5295,7 +5528,7 @@ def matchDirectors(unmatchedDirectorList, FILMDICT):
                 break
 
             # 2nd full match against director alias
-            if [x for x in IAFDCompareAlias if x == compareUnmatchedDirector]:
+            if compareUnmatchedDirector == IAFDCompareAlias:
                 log('UTILS :: {0:<29} {1}'.format('Matched with IAFD Director: Full Match - Director Alias', unmatchedDirector))
                 matchedName = True
                 break
@@ -5380,8 +5613,6 @@ def matchDirectors(unmatchedDirectorList, FILMDICT):
         if matchedName: # we have a match, on to the next director
             continue
 
-        # the director on the website has not matched to those listed against the film in IAFD. So search for the director's entry on IAFD
-        matchedDirectorDict[unmatchedDirector] = '' # initialise director's dictionary
         try:
             html = getURLElement(IAFD_SEARCH_URL.format(String.URLEncode(unmatchedDirector)), UseAdditionalResults=False)
             directorList = html.xpath('//table[@id="tblDir"]/tbody/tr')
@@ -5393,20 +5624,22 @@ def matchDirectors(unmatchedDirectorList, FILMDICT):
                 # get director details and compare to Agent director
                 try:
                     directorName = director.xpath('./td[2]/a/text()[normalize-space()]')[0]
-                    compareDirectorName = re.sub(r'[\W\d_]', '', directorName).strip().lower()
-                    log('UTILS :: {0:<29} {1}'.format('Matching Director', '{0:>2} - {1} / {1}'.format(idx2, directorName, compareDirectorName)))
+                    directorCompareName = re.sub(r'[\W\d_]', '', directorName).strip().lower()
+                    log('UTILS :: {0:<29} {1}'.format('Matching Director', '{0:>2} - {1} / {1}'.format(idx2, directorName, directorCompareName)))
                 except Exception as e:
                     log('UTILS :: Error: Could not read Director Name: %s', e)
                     continue   # next director
 
                 try:
                     directorAliasList = director.xpath('./td[3]/text()[normalize-space()]')[0].split(',')
-                    directorAliasList = [x.strip() for x in directorAliasList if x]
-                    compareDirectorAliasList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in directorAliasList]
+                    directorAliasList = [x.strip() for x in directorAliasList if x.strip()]
+                    directorAlias = ', '.join(directorAliasList)
+                    directorCompareAliasList = [re.sub(r'[\W\d_]', '', x).strip().lower() for x in directorAliasList]
                     log('UTILS :: {0:<29} {1}'.format('Alias', directorAliasList if directorAliasList else 'No Director Alias Recorded'))
                 except:
                     directorAliasList = []
-                    compareDirectorAliasList = []
+                    directorAlias = ''
+                    directorCompareAliasList = []
 
                 try:
                     startCareer = int(director.xpath('./td[4]/text()[normalize-space()]')[0]) # set start of career
@@ -5423,19 +5656,19 @@ def matchDirectors(unmatchedDirectorList, FILMDICT):
                 matchedUsing = ''
 
                 # match iafd row with Agent Director entry
-                matchedDirector = True if compareUnmatchedDirector == compareDirectorName else False
+                matchedDirector = True if compareUnmatchedDirector == directorCompareName else False
                 if matchedDirector:
                     matchedUsing = 'Name' 
                 else:
-                    log('UTILS :: {0:<29} {1}'.format('Failed Name Matching', '{0} != {1}'.format(compareUnmatchedDirector, compareDirectorName)))
+                    log('UTILS :: {0:<29} {1}'.format('Failed Name Matching', '{0} != {1}'.format(compareUnmatchedDirector, directorCompareName)))
 
                 if not matchedDirector and directorAliasList:
-                    matchedItem = x = [x for x in compareDirectorAliasList if compareUnmatchedDirector in x]
+                    matchedItem = [x for x in directorCompareAliasList if compareUnmatchedDirector in x]
                     matchedDirector = True if matchedItem else False
                     if matchedDirector:
                         matchedUsing = 'Alias' 
                     else:
-                        log('UTILS :: {0:<29} {1}'.format('Failed Alias List Matching', '{0} not in {1}'.format(compareUnmatchedDirector, compareDirectorAliasList)))
+                        log('UTILS :: {0:<29} {1}'.format('Failed Alias List Matching', '{0} not in {1}'.format(compareUnmatchedDirector, directorCompareAliasList)))
 
                 # Check Career - if we have a match - this can only be done if we have a Year
                 # only do this if we have more than one director returned
@@ -5456,29 +5689,39 @@ def matchDirectors(unmatchedDirectorList, FILMDICT):
                         checkName = key
                         checkAlias = value['Alias']
                         checkCompareAlias = value['CompareAlias']
-                        if checkCompareAlias in compareDirectorAliasList:
+                        if checkCompareAlias in directorCompareAliasList:
                             matchedDirector = True
                             log('UTILS :: {0:<29} {1}'.format('Skipping: Recorded Director Name', '{0} AKA {1} also known by this name: {2}'.format(checkName, checkAlias, directorName)))
                             break
 
+                # we have an director who matches the conditions
                 if matchedDirector:
-                    # we have an director who matches the conditions
+                    # get director biography and filmography etc
                     directorURL = IAFD_BASE + director.xpath('./td[2]/a/@href')[0]
-                    directorPhoto = director.xpath('./td[1]/a/img/@src')[0] # director name on agent website - retrieve picture
-                    directorPhoto = '' if 'th_iafd_ad.gif' in directorPhoto else directorPhoto.replace('thumbs/th_', '')
+                    directorDetails = getIAFDArtist(directorURL)
+                    directorAwards = directorDetails['Awards']
+                    directorBio = directorDetails['Bio']
+                    directorFilms = directorDetails['Films']
+                    directorNationality = directorDetails['Nationality']
+                    directorPhoto = directorDetails['Photo']
+                    directorRealName = directorDetails['RealName']
 
-                    log('UTILS :: {0:<29} {1}'.format('Director URL', directorURL))
+                    log('UTILS :: {0:<29} {1}'.format('Recorded Director Details:', ''))
+                    log('UTILS :: {0:<29} {1}'.format('Director Alias', directorAliasList if directorAliasList else 'No Director Alias Recorded'))
+                    log('UTILS :: {0:<29} {1}'.format('Director Awards', directorAwards))
+                    log('UTILS :: {0:<29} {1}'.format('Director Bio', directorBio))
+                    log('UTILS :: {0:<29} {1}'.format('Director Films', directorFilms))
+                    log('UTILS :: {0:<29} {1}'.format('Director Name', directorName))
+                    log('UTILS :: {0:<29} {1}'.format('Director Nationality', directorNationality))
                     log('UTILS :: {0:<29} {1}'.format('Director Photo', directorPhoto))
+                    log('UTILS :: {0:<29} {1}'.format('Director Real Name', directorRealName))
+                    log('UTILS :: {0:<29} {1}'.format('Director URL', directorURL))
                     log('UTILS :: {0:<29} {1}'.format('Matched Using', matchedUsing))
+                    log(LOG_SUBLINE)
 
                     # Assign values to dictionary
-                    myDict = {}
-                    myDict['Photo'] = directorPhoto
-                    myDict['Alias'] = directorAliasList
-                    myDict['CompareName'] = compareDirectorName
-                    myDict['CompareAlias'] = compareDirectorAliasList
-                    matchedDirectorDict[unmatchedDirector] = myDict
-
+                    matchedDirectorDict[unmatchedDirector] = {'Alias': directorAliasList, 'Awards': directorAwards, 'Bio': directorBio, 'Films': directorFilms, 
+                                                              'RealName': directorRealName, 'Nationality': directorNationality, 'Photo': directorPhoto, 'URL': directorURL}
                     log(LOG_SUBLINE)
                     break   # matched - ignore any other entries
 
@@ -5492,11 +5735,21 @@ def matchDirectors(unmatchedDirectorList, FILMDICT):
 # -------------------------------------------------------------------------------------------------------------------------------
 def matchFilename(media):
     ''' Check filename on disk corresponds to regex preference format '''
+    if START_SCRAPE == 'No':
+        raise Exception('<QUIT: Scraping Parameters Not Set Up!>')
+
     filmVars = {}
     filmVars['id'] = media.id
     filmVars['Status'] = False          # initial state before Search and Update Routine
-    filmVars['Agent'] = AGENT
     filmVars['SceneAgent'] = False
+
+    # Plex Library, that media resides in
+    plexBaseURL = 'http://{0}:{1}'.format('127.0.0.1', '32400')
+    metadataURL = '{0}/library/metadata/{1}?X-Plex-Token={2}'.format(plexBaseURL, media.id, PLEXTOKEN)
+    xml = XML.ElementFromURL(metadataURL, sleep=5)
+    xml = XML.StringFromElement(xml)
+    filmVars['LibraryID'] = xml.split('librarySectionID="')[1].split('"')[0]
+    filmVars['LibraryTitle'] = xml.split('librarySectionTitle="')[1].split('"')[0]
 
     # file name
     filmPath = media.items[0].parts[0].file
@@ -5536,13 +5789,28 @@ def matchFilename(media):
     filmVars['CompareStudio'] = Normalise(filmVars['Studio'])
 
     #   Title
+    filmVars['CompareTitle'] = set()
     filmVars['Title'] = groups['fnTITLE']
-    filmVars['CompareTitle'] = {sortAlphaChars(Normalise(filmVars['Title']))}
+    filmVars['NormaliseTitle'] = Normalise(filmVars['Title'])
+    filmVars['CompareTitle'].add(sortAlphaChars(filmVars['NormaliseTitle']))
 
+    # Search Strings - A Title is split into Search Strings if a Dash-space is found
+    searchTitles = []
+    pattern = r'(?<![-.])\b[0-9]+\b(?!\.[0-9])$'                                        # series matching = whole separate number at end of string
+    splitFilmTitle = filmVars['Title'].split('- ')
+    splitFilmTitle = [x.strip() for x in splitFilmTitle]
+    splitCount = len(splitFilmTitle) - 1
+    for index, partTitle in enumerate(splitFilmTitle):
+        matchedSearchTitle = re.subn(pattern, '', partTitle)
+        if matchedSearchTitle[1]:
+            searchTitles.insert(0, matchedSearchTitle[0].strip())                       # e.g. Pissing
+        else:
+            if index < splitCount:                                                      # only add to collection if not last part of title e.g. Hardcore Fetish Series
+                searchTitles.insert(0, partTitle)
+    
     #   Series - for use in creating collections - A Series is only considered if it is separated by space-dash-space
     series = []
-    episode = []
-
+    episodes = []
     pattern = r'(?<![-.])\b[0-9]+\b(?!\.[0-9])$'                                        # series matching = whole separate number at end of string
     splitFilmTitle = filmVars['Title'].split(' - ')
     splitFilmTitle = [x.strip() for x in splitFilmTitle]
@@ -5551,7 +5819,7 @@ def matchFilename(media):
         matchedSeries = re.subn(pattern, '', partTitle)
         if matchedSeries[1]:
             series.insert(0, matchedSeries[0].strip())                                  # e.g. Pissing
-            episode.insert(0, partTitle)                                                # e.g. Pissing 1
+            episodes.insert(0, partTitle)                                               # e.g. Pissing 1
             if index < splitCount:                                                      # only blank out series info in title if not last split
                 splitFilmTitle[index] = ''
         else:
@@ -5560,21 +5828,33 @@ def matchFilename(media):
                 series.insert(0, partTitle)
 
     filmVars['Series'] = series
-    filmVars['Episode'] = episode
+    filmVars['Episodes'] = episodes
+    for item in episodes:
+        filmVars['CompareTitle'].add(sortAlphaChars(Normalise(item)))
 
-    filmVars['Title'] = re.sub(ur' - |- ', ': ', filmVars['Title'])                     # replace dahes with colons
+    filmVars['Title'] = re.sub(ur' - |- ', ': ', filmVars['Title'])                     # replace dashes with colons
     pattern = ur'[' + re.escape(''.join(['.', '!', '%', '?'])) + ']+$'
     filmVars['ShortTitle'] = re.sub(pattern, '', ' '.join(splitFilmTitle).strip())      # strip punctuations at end of string
     filmVars['NormaliseShortTitle'] = Normalise(filmVars['ShortTitle'])
-    filmVars['CompareShortTitle'] = sortAlphaChars(filmVars['NormaliseShortTitle'])
+    filmVars['CompareTitle'].add(sortAlphaChars(filmVars['NormaliseShortTitle']))
 
-    #   Search Title: strip determinates - helpful for searching GEVI and GayDVD Empire
-    #                 strip trailing '1' from search string
+    # add series inividually and wholly + short Title in case episode number left out
+    for item in filmVars['Series']:
+        filmVars['CompareTitle'].add(sortAlphaChars(Normalise('{0}{1}'.format(item, filmVars['ShortTitle']))))
+
+    allSeries = ''.join(filmVars['Series'])
+    filmVars['CompareTitle'].add(sortAlphaChars(Normalise('{0}{1}'.format(allSeries, filmVars['ShortTitle']))))
+
+    #   Search Title: Add Short Title to the list, strip determinates and strip trailing '1' from search string
     pattern = ur'^(The |An |A )'
-    filmVars['SearchTitle'] = re.sub(pattern, '', filmVars['ShortTitle'], flags=re.IGNORECASE).strip()
+    filmVars['ShortTitle'] = re.sub(pattern, '', filmVars['ShortTitle'], flags=re.IGNORECASE).strip()
 
     pattern = ur' 1$'
-    filmVars['SearchTitle'] = re.sub(pattern, '', filmVars['SearchTitle'], flags=re.IGNORECASE).strip()
+    filmVars['ShortTitle'] = re.sub(pattern, '', filmVars['ShortTitle'], flags=re.IGNORECASE).strip()
+
+    searchTitles.append(filmVars['ShortTitle'])                     # for GEVi - temp
+    filmVars['SearchTitles'] = searchTitles
+    filmVars['SearchTitle'] = filmVars['ShortTitle']                # for rest - temp
 
     #   Prepare IAFD variables
     filmVars['IAFDDuration'] = datetime.fromtimestamp(0) # default 1970-01-01 00:00:00
@@ -5602,7 +5882,9 @@ def matchFilename(media):
     # strip definite and indefinite english articles and take after articles
     pattern = ur'^(The|An|A) '
     filmVars['IAFDTitle']= re.sub(pattern, '', filmVars['IAFDTitle'], re.IGNORECASE)  # match against whole string
-    filmVars['IAFDCompareTitle'] = sortAlphaChars(Normalise(filmVars['IAFDTitle']))
+    filmVars['NormaliseIAFDTitle'] = Normalise(filmVars['IAFDTitle'])
+    filmVars['CompareTitle'].add(sortAlphaChars(filmVars['NormaliseIAFDTitle']))
+    filmVars['CompareTitle'] = sorted(list(filmVars['CompareTitle']))
 
     # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string
     searchString = filmVars['IAFDTitle'].split(':')[0]
@@ -5616,7 +5898,7 @@ def matchFilename(media):
         filmVars['CompareDate'] = datetime(filmVars['Year'], 12, 31)
     except:
         filmVars['Year'] = 0
-        filmVars['CompareDate'] = datetime.fromtimestamp(0)
+        filmVars['CompareDate'] = None
 
     #   Stacked
     filmVars['Stacked'] = 'Yes' if groups['fnSTACK'] is not None else 'No'
@@ -5628,12 +5910,18 @@ def matchFilename(media):
     # IAFD Variables used by other Agents
     filmVars['FilmAKA'] = ''            # default blank - only IAFD has AKA Titles
     filmVars['Compilation'] = 'No'      # default No
-    filmVars['AllGirl'] = 'No'          # default No
-    filmVars['AllMale'] = 'Yes'         # default Yes as this is usually used on gay websites.
+    filmVars['AllGirl'] = ''            # default No
+    filmVars['AllMale'] = ''            # default Yes as this is usually used on gay websites.
     filmVars['Cast'] = {}
     filmVars['Directors'] = {}
     filmVars['FoundOnIAFD'] = 'No'      # default No
     filmVars['IAFDFilmURL'] = ''        # default blank
+    filmVars['FilmURL'] = ''            # default blank
+
+    # delete unneeded dictionary keys
+    del filmVars['NormaliseIAFDTitle']
+    del filmVars['NormaliseTitle']
+    del filmVars['ShortTitle']
 
     # print out dictionary values / normalise unicode
     printFilmInformation(filmVars)
@@ -5724,24 +6012,30 @@ def matchTitle(filmTitle, FILMDICT):
     # some agents have the studio name in the title within brackets - take these out before matching
     pattern = re.compile('\(({0}.*?)\)'.format(FILMDICT['Studio']), re.IGNORECASE)
     filmTitle = re.sub(pattern, '', filmTitle)
-    filmTitleNormalise = Normalise(filmTitle)
+    filmTitleNormaliseA = Normalise(filmTitle)
 
-    if FILMDICT['NormaliseShortTitle'] in filmTitleNormalise:
+    filmTitleNormaliseB = ''
+    if FILMDICT['NormaliseShortTitle'] in filmTitleNormaliseA:
         pattern = re.compile(re.escape(FILMDICT['NormaliseShortTitle']), re.IGNORECASE)
-        filmTitleNormalise = '{0}{1}'.format(re.sub(pattern, '', filmTitleNormalise).strip(), FILMDICT['NormaliseShortTitle'])
+        filmTitleNormaliseB = '{0}{1}'.format(re.sub(pattern, '', filmTitleNormaliseA).strip(), FILMDICT['NormaliseShortTitle'])
 
-    filmTitleASort = sortAlphaChars(filmTitleNormalise)
-    testTitle = 'Passed' if filmTitleASort in FILMDICT['CompareTitle'] else 'Passed (IAFD)' if filmTitleASort in FILMDICT['IAFDCompareTitle'] else 'Failed'
+    filmCompareTitle = sortAlphaChars(filmTitleNormaliseA)
+    testTitle = 'Passed' if filmCompareTitle in FILMDICT['CompareTitle'] else 'Failed'
+    if testTitle == 'Failed':
+        filmCompareTitle = sortAlphaChars(filmTitleNormaliseB)
+        testTitle = 'Passed' if filmCompareTitle in FILMDICT['CompareTitle'] else 'Failed'
+
+    if testTitle == 'Failed':                   # check if episode  i.e. series + number in agent title
+        for item in FILMDICT['Episodes']:
+            pattern = re.compile(re.escape(item), re.IGNORECASE)
+            if re.search(pattern, filmTitle):  # match against whole string
+                testTitle = 'Passed'
+                break
 
     log('UTILS :: {0:<29} {1}'.format('Site Title', filmTitle))
-    log('UTILS :: {0:<29} {1}'.format('Normalised', filmTitleNormalise))
-    log('UTILS :: {0:<29} {1}'.format('    Sorted', filmTitleASort))
-    log('UTILS :: {0:<29} {1}'.format('File Full Title', FILMDICT['Title']))
-    log('UTILS :: {0:<29} {1}'.format('    Short Title', FILMDICT['ShortTitle']))
-    log('UTILS :: {0:<29} {1}'.format('     Normalised', FILMDICT['NormaliseShortTitle']))
-    log('UTILS :: {0:<29} {1}'.format('         Sorted', FILMDICT['CompareShortTitle']))
-    log('UTILS :: {0:<29} {1}'.format('IAFD Title', FILMDICT['IAFDTitle']))
-    log('UTILS :: {0:<29} {1}'.format('    Sorted', FILMDICT['IAFDCompareTitle']))
+    log('UTILS :: {0:<29} {1}'.format('     Comparison Title', filmCompareTitle))
+    log('UTILS :: {0:<29} {1}'.format('File Title', FILMDICT['Title']))
+    log('UTILS :: {0:<29} {1}'.format('     Comparison Title List', FILMDICT['CompareTitle']))
     log('UTILS :: {0:<29} {1}'.format('Title Comparison Test', testTitle))
 
     if testTitle == 'Failed':
@@ -5754,7 +6048,7 @@ def Normalise(myString):
     ''' Normalise string for, strip uneeded characters for comparison of web site values to file name regex group values '''
     # Check if string has roman numerals as in a series; note the letter I will be converted
     myString = '{0} '.format(myString)  # append space at end of string to match last characters
-    pattern = r'(?=\b[MDCLXVI]+\b)M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})'
+    pattern = r'(?=\b[MDCLXVI]+\b)M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$'
     matches = re.findall(pattern, myString, re.IGNORECASE)  # match against string
     if matches:
         RomanValues = {'I':1, 'V':5, 'X':10, 'L':50, 'C':100, 'D':500, 'M':1000}
@@ -5784,8 +6078,8 @@ def Normalise(myString):
     # myString = makeASCII(myString)
 
     # strip domain suffixes, vol., volume, Pt, Part from string, standalone '1's' then strip all non alphanumeric characters
-    # pattern = r'[.]([a-z]{2,3}|co[.][a-z]{2})|Vol[.]|Vols[.]|Nr[.]|\bVolume\b|\bVolumes\b|(?<!\d)1(?!\d)|Pt |\bPart\b[^A-Za-z0-9]+'
-    pattern = r'[.]([a-z]{2,3}|co[.][a-z]{2})|Vol[.]|Vols[.]|Nr[.]|\bVolume\b|\bVolumes\b|Pt |\bPart\b[^A-Za-z0-9]+'
+    # pattern = r'[.]([a-z]{2,3}co[.][a-z]{2})|Vol[.]|Vols[.]|Nr[.]|\bVolume\b|\bVolumes\b|Pt |\bPart\b[^A-Za-z0-9]+'
+    pattern = r'[.]([a-z]{2,3}co[.][a-z]{2})|Vol[.]|Vols[.]|Nr[.]|\bVolume\b|\bVolumes\b|(?<!\d)1(?!\d)|Pt |\bPart\b[^A-Za-z0-9]+'
     myString = re.sub(pattern, '', myString, flags=re.IGNORECASE)
     myString = filter(str.isalnum, myString)
     myString = ''.join(myString)
@@ -5793,50 +6087,49 @@ def Normalise(myString):
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def printFilmInformation(myDictionary):
-    # print out dictionary values / normalise unicode
+    ''' print out dictionary values / normalise unicode'''
     log('UTILS :: Film Dictionary Variables:')
     for key in sorted(myDictionary.keys()):
         myDictionary[key] = list(dict.fromkeys(myDictionary[key])) if type(myDictionary[key]) is list else myDictionary[key]
         log('UTILS :: {0:<29} {1}'.format(key, myDictionary[key]))
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-def setMetadata(metadata, FILMDICT):
-    '''
-    The following bits of metadata need to be established and used to update the movie on plex
-    1.  Metadata that is set by Agent as default
-        a. id.                              : Plex media id setting
-        b. Studio                           : From studio group of filename - no need to process this as above
-        c. Title                            : From title group of filename - no need to process this as is used to find it on website
-        d. Content Rating                   : Always X
-        e. Content Rating Age               : Always 18
+def setMetadata(metadata, media, FILMDICT):
+    ''' Set Metadata variables with information gleaned from File Name and Agent website stored in FILMDICT. Any failure aborts the process'''
+    myAgent = FILMDICT.get('Agent', AGENT)
+    myAgentDict = FILMDICT.get(myAgent, '')
+    if not myAgentDict:
+        FILMDICT['Status'] = False
+        return
 
-    2.  Metadata retrieved from website
-        a. Original Title                   : From IAFD - Also Known As Title
-        b. Tag line                         : Corresponds to the url of film
-        c. Originally Availiable Date       : Production Date, default to (Year) of File Name else Agent Website Date
-        d. Ratings                          : Viewer Rating out of 100%
-        e. Genres                           : List of Genres (alphabetic order)
-        f. Countries
-        g. Cast                             : List of Actors, Roles and Photos (alphabetic order) - Photos sourced from IAFD
-        h. Directors                        : List of Directors and Photos (alphabetic order)
-        i. Collections                      : retrieved from FILMDICT, Genres, Countries, Cast Directors
-        j. Posters                          : Front Cover of DVD
-        k. Art (Background)                 : Back Cover of DVF
-        l. Reviews                          : Usually Scene Information OR Actual Reviews depending on Agent
-        m. Chapters                         : Scene Lengths for Jump Tos in film
-        n. Summary                          : Synopsis of film
-    '''
+    collectionsDict = {}                                                            # used to create collections that have extra information like cast photos, country flags etc order by Sort title
+    prefix = '{0}{1}'.format(AGENT_TYPE, THIN_SPACE) if PREFIXGENRE else ''         # add prefix to genres and genre collections if preferenced
+    deathRegex = r'Date of Death|Year of Death|would be'.replace(' ', NOBREAK_SPACE)
+    errorCountryArt = os.path.join(PGMA_COUNTRYART, '_Error.png')
+    errorCountryPosterFlag = os.path.join(PGMA_COUNTRYPOSTERFLAGS, '_Error.png')
+
     log('UTILS :: 1.  Set Metadata from File Name and Default Settings:')
 
     try:
-        # 1a.   Set id
+        '''
+        The following bits of metadata need to be established and used to update the movie on plex
+        1.  Metadata that is set by Agent as default
+            a. id.                              : Plex media id setting
+            b. Studio                           : From studio group of filename - no need to process this as above
+            c. Title                            : From title group of filename - no need to process this as is used to find it on website
+            d. Content Rating                   : Always X
+            e. Content Rating Age               : Always 18
+        '''
+        # 1a.   Show id
         log(LOG_SUBLINE)
         try:
-            metadata.id = FILMDICT['id']
+            metadata.id = '{0}:{1}'.format(myAgent, re.sub('[^0-9]', '', FILMDICT['FilmURL']))
             log('UTILS :: {0:<29} {1}'.format('1a. ID', metadata.id))
 
         except Exception as e:
-            log('UTILS :: Error setting Studio: %s', e)
+            log('UTILS :: Error setting ID: %s', e)
+            FILMDICT['Status'] = False
+            return
 
         # 1b.   Set Studio
         log(LOG_SUBLINE)
@@ -5846,15 +6139,31 @@ def setMetadata(metadata, FILMDICT):
 
         except Exception as e:
             log('UTILS :: Error setting Studio: %s', e)
+            FILMDICT['Status'] = False
+            return
 
         # 1c.   Set Title
         log(LOG_SUBLINE)
         try:
-            metadata.title = FILMDICT['Title']
+            if AGENT == 'BestExclusivePorn':        # BEP - file name has to be set to lowercase bar Actors Names, so restore
+                metadata.title = " ".join(word.capitalize() if "'s" in word or "’s" in word or "'t" in word or "’t" in word else word.title() for word in FILMDICT['Title'].split())
+            else:
+                metadata.title = FILMDICT['Title']
             log('UTILS :: {0:<29} {1}'.format('1c. Title', metadata.title))
+
+            # Showcase Collection - if "Best of" found in Title
+            if COLGENRE:
+                pattern = r'Best Of'
+                matched = re.search(pattern, FILMDICT['Title'], re.IGNORECASE)
+                if matched:
+                    item = 'Showcase'
+                    entry = '{0} {1}'.format(COLGENRE, item)
+                    collectionsDict[entry] = {'Poster': GENRESDICT[item.lower()], 'Art': '', 'Summary': ''}
 
         except Exception as e:
             log('UTILS :: Error setting Title: %s', e)
+            FILMDICT['Status'] = False
+            return
 
         # 1d.   Set Content Rating to Adult
         log(LOG_SUBLINE)
@@ -5864,6 +6173,8 @@ def setMetadata(metadata, FILMDICT):
 
         except Exception as e:
             log('UTILS :: Error setting Content Rating: %s', e)
+            FILMDICT['Status'] = False
+            return
 
         # 1e.   Set Content Rating Age to 18 years
         log(LOG_SUBLINE)
@@ -5873,7 +6184,27 @@ def setMetadata(metadata, FILMDICT):
 
         except Exception as e:
             log('UTILS :: Error setting Content Rating Age: %s', e)
+            FILMDICT['Status'] = False
+            return
 
+        '''
+        The following bits of metadata need to be established and used to update the movie on plex
+        2.  Metadata retrieved from website
+            a. Original Title                   : From IAFD - Also Known As Title
+            b. Tag line                         : Corresponds to the url of film
+            c. Ratings                          : Viewer Rating out of 100%
+            d. Genres                           : List of Genres (alphabetic order)
+            e. Countries
+            f. Cast                             : List of Actors, Roles and Photos (alphabetic order) - Photos sourced from IAFD
+            g. Directors                        : List of Directors and Photos (alphabetic order)
+            h. Posters                          : Front Cover of DVD
+            i. Art (Background)                 : Back Cover of DVF
+            j. Reviews                          : Usually Scene Information OR Actual Reviews depending on Agent
+            k. Chapters                         : Scene Lengths for Jump Tos in film
+            l. Summary                          : Synopsis of film
+            m. Collections                      : retrieved from FILMDICT, Genres, Countries, Cast Directors
+            n. Originally Availiable Date       : Production Date, default to (Year) of File Name else Agent Website Date
+        '''
         log(LOG_SUBLINE)
         log('UTILS :: 2.  Set Metadata from Scraped Website Resources:')
 
@@ -5885,15 +6216,17 @@ def setMetadata(metadata, FILMDICT):
 
         except Exception as e:
             log('UTILS :: Error setting Original Title: %s', e)
+            FILMDICT['Status'] = False
+            return
 
         # 2b.   Set Tagline
         log(LOG_SUBLINE)
         try:
-            if AGENT == 'IAFD':
-                metadata.tagline = FILMDICT['FilmURL']  
+            if myAgent == 'IAFD':
+                metadata.tagline = FILMDICT['FilmURL']
 
             elif FILMDICT['FoundOnIAFD'] == 'No':
-                metadata.tagline = FILMDICT['FilmURL']  
+                metadata.tagline = FILMDICT['FilmURL']
 
             else:
                 metadata.tagline = '{0} :: {1}'.format(FILMDICT['FilmURL'], FILMDICT['IAFDFilmURL'])
@@ -5903,255 +6236,264 @@ def setMetadata(metadata, FILMDICT):
 
         except Exception as e:
             log('UTILS :: Error setting Tag Line: %s', e)
+            FILMDICT['Status'] = False
+            return
 
-        # 2c.   Set Originally Available Date - From website's release date if only it is earlier in the same year
-        log(LOG_BIGLINE)
-        try:
-            log('UTILS :: {0:<29} {1}'.format('2c. Originally Available Date', ''))
-            log('UTILS :: {0:<29} {1}'.format('Current Date', metadata.originally_available_at))
-            log('UTILS :: {0:<29} {1}'.format('Current Year', metadata.year))
-            releaseDate = FILMDICT[AGENT]['ReleaseDate'].date()
-            log('UTILS :: {0:<29} {1}'.format('Agent Date', releaseDate))
-
-
-            if RESETMETA or metadata.originally_available_at is None:
-                metadata.originally_available_at = datetime.fromtimestamp(0).date()
-                metadata.year = metadata.originally_available_at.year
-
-            metadata.originally_available_at = releaseDate
-            metadata.year = metadata.originally_available_at.year
-
-        except Exception as e:
-            log('UTILS :: Error setting Originally Available Date: %s', e)
-
-        # 2d.   Rating  can be a maximum of 10 - float value
+        # 2c.   Rating  can be a maximum of 10 - float value
         log(LOG_SUBLINE)
         try:
             if RESETMETA:
                 metadata.rating = 0.0
 
-            metadata.rating = FILMDICT[AGENT]['Rating'] if metadata.rating < FILMDICT[AGENT]['Rating'] else metadata.rating
-            log('UTILS :: {0:<29} {1}'.format('2d. Film Rating', metadata.rating))
+            metadata.rating = myAgentDict['Rating'] if metadata.rating < myAgentDict['Rating'] else metadata.rating
+            log('UTILS :: {0:<29} {1}'.format('2c. Film Rating', metadata.rating))
 
         except Exception as e:
             log('UTILS :: Error setting Rating: %s', e)
+            FILMDICT['Status'] = False
+            return
 
-        # 2e.   Genres - retrieved from website and in some case from the synopsis
+        # 2d.   Genres - retrieved from website and in some case from the synopsis
         log(LOG_SUBLINE)
         try:
             if RESETMETA:
                 metadata.genres.clear()
 
-            listGenres = list(FILMDICT[AGENT]['Genres'])
-            if AGENT != 'IAFD' and 'IAFD' in FILMDICT:
+            listGenres = list(myAgentDict['Genres'])
+            if myAgent != 'IAFD' and 'IAFD' in FILMDICT:
                 listGenres.extend(FILMDICT['IAFD']['Genres'])
-                listGenres = (list(set(listGenres)))
 
+            listGenres = (list(set(listGenres)))
             listGenres.sort(key = lambda x: x.lower())
-            log('UTILS :: {0:<29} {1}'.format('2e. Genres', '{0:>2} - {1}'.format(len(listGenres), listGenres)))
+            log('UTILS :: {0:<29} {1}'.format('2d. Genres', '{0:>2} - {1}'.format(len(listGenres), listGenres)))
+
+            # Process Genres
             for idx, item in enumerate(listGenres, start=1):
-                metadata.genres.add(item)
-                log('UTILS :: {0:<29} {1}'.format('Genre' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
+                metadata.genres.add('{0}{1}'.format(prefix, item))
+                log('UTILS :: {0:<29} {1}'.format('Genre' if idx == 1 else '', '{0:>2} - {1}{2}'.format(idx, prefix, item)))
+                entry = '{0} {1}{2}'.format(COLSYSTEM, prefix, item) if 'Compilations' in item and COLSYSTEM else ''
+                entry = '{0} {1}{2}'.format(COLGENRE, prefix, item) if not entry and COLGENRE else ''
+                if entry:
+                    collectionsDict[entry] = {'Poster': GENRESDICT[item.lower()], 'Art': '', 'Summary': ''}
 
         except Exception as e:
             log('UTILS :: Error setting Genres: %s', e)
+            FILMDICT['Status'] = False
+            return
 
-        # 2f.   Countries
+        # 2e.   Countries
         log(LOG_SUBLINE)
+        countryArt = ''
+        countryPoster = ''
         try:
             if RESETMETA:
                 metadata.countries.clear()
 
-            listCountries = list(FILMDICT[AGENT]['Countries'])
-            if AGENT != 'IAFD' and 'IAFD' in FILMDICT:
+            listCountries = list(myAgentDict['Countries'])
+            if myAgent != 'IAFD' and 'IAFD' in FILMDICT:
                 listCountries.extend(FILMDICT['IAFD']['Countries'])
                 listCountries = (list(set(listCountries)))
 
             listCountries.sort(key = lambda x: x.lower())
-            log('UTILS :: {0:<29} {1}'.format('2f. Countries', '{0:>2} - {1}'.format(len(listCountries), listCountries)))
+            log('UTILS :: {0:<29} {1}'.format('2e. Countries', '{0:>2} - {1}'.format(len(listCountries), listCountries)))
             for idx, item in enumerate(listCountries, start=1):
+                countryArt = os.path.join(PGMA_COUNTRYART, '{0}.png'.format(item))
+                countryArt = countryArt if os.path.exists(countryArt) else errorCountryArt
+
+                # use map as country posters, if missing use vertical flag of country or error flag if that is also missing
+                flagPoster = os.path.join(PGMA_COUNTRYPOSTERFLAGS, '{0}.png'.format(item))
+                if COUNTRYPOSTERTYPE == 'Map':
+                    mapPoster = os.path.join(PGMA_COUNTRYPOSTERMAPS, '{0}.jpg'.format(item))
+                    countryPoster = mapPoster if os.path.exists(mapPoster) else flagPoster if os.path.exists(flagPoster) else errorCountryPosterFlag
+                else:
+                    # use vertical flag as poster or error flag if missing
+                    countryPoster = flagPoster if os.path.exists(flagPoster) else errorCountryPosterFlag
+
                 log('UTILS :: {0:<29} {1}'.format('Country' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
                 metadata.countries.add(item)
+                # Process Countries
+                if COLCOUNTRY:
+                    entry = '{0} {1}'.format(COLCOUNTRY, item)
+                    collectionsDict[entry] = {'Poster': countryPoster, 'Art': countryArt, 'Summary': ''}
 
         except Exception as e:
             log('UTILS :: Error setting Countries: %s', e)
+            FILMDICT['Status'] = False
+            return
 
-        # 2g.   Cast: thumbnails, roles from IAFD. Use IAFD as main Source if film found on IAFD
+        # 2f.   Cast: thumbnails, roles from IAFD. Use IAFD as main Source if film found on IAFD
         log(LOG_SUBLINE)
         cast = []
         try:
             if RESETMETA:
                 metadata.roles.clear()
 
-            log('UTILS :: {0:<29} {1}'.format('2g. Cast', ''))
+            log('UTILS :: {0:<29} {1}'.format('2f. Cast', ''))
             if FILMDICT['FilenameCast']:                      # Priority 1: user has defined the missing cast to be used in filename
                 cast = FILMDICT['FilenameCast'][:]
 
-            if FILMDICT[AGENT]['Cast']:                       # Priority 2: Add Cast from Agent
-                cast.extend(FILMDICT[AGENT]['Cast'])
+            if myAgentDict['Cast']:                       # Priority 2: Add Cast from Agent
+                cast.extend(myAgentDict['Cast'])
 
             tempDict = getCast(cast, FILMDICT)                # process cast names returning a dictionary
             castDict = {k.split('(')[0].strip():v for (k,v) in tempDict.items()}
             log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(castDict.keys()), sorted(castDict.keys()))))
 
             # sort the dictionary and add key(Name)- value(Photo, Role) to metadata
-            for idx, key in enumerate(sorted(castDict), start=1):
-                log('UTILS :: {0:<29} {1}'.format('Cast Name' if idx == 1 else '', '{0:>2} - {1}'.format(idx, key)))
+            for idx, item in enumerate(sorted(castDict), start=1):
+                entry = castDict[item]['RealName'] if castDict[item]['RealName'] else item
                 newRole = metadata.roles.new()
-                newRole.name = key
-                newRole.photo = castDict[key]['Photo']
-                newRole.role = castDict[key]['Role']
-                # add cast name to collection
+                newRole.name = entry
+                newRole.role = castDict[item]['Role']
+                newRole.photo = castDict[item]['Photo'] if 'iafd_ad' not in castDict[item]['Photo'] and castDict[item]['Photo'] else 'https://www.iafd.com/graphics/headshots/nophoto340.jpg'
+                log('UTILS :: {0:<29} {1}'.format('Cast Name' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
+                if COLCAST:
+                    if item == 'Unknown Actor':      # do not create collections for unknown actors...
+                        continue
+
+                    # check for user defined photo - this only works if the actor has an entry on IAFD
+                    if 'nophoto' in newRole.photo:      # actor has no photo but has entry on IAFD
+                        castDict[item]['Photo'] = NOCAST_POSTER
+                        if castDict[item]['URL']:       # artiste has no photo but has entry on IAFD, check if there is a photo on disk #### still not fully implemented
+                            #   https://www.iafd.com/person.rme/perfid=zakspears/gender=m/zak-spears.htm -> zakspears#zak-spears
+                            castPhoto = castDict[item]['URL'].split('perfid=')[1].split('.htm')[0].replace('/gender=m/', '#').replace('/gender=f/', '#')
+                            castDict[item]['Photo'] = PGMA_CASTDICT.get(castPhoto, NOCAST_POSTER)
+
+                    myBioList = []
+                    myBioDict = OrderedDict(sorted(castDict[item]['Bio'].items()))
+                    for count, (k, v) in enumerate(myBioDict.items(), start=1):
+                        bio = '{0}. {1}: {2}'.format(count, k.upper(), v).replace(' ', NOBREAK_SPACE).replace('-', NOBREAK_HYPHEN)
+                        myBioList.append(bio + NOBREAK_SPACE * 3 + ' ')    # add space to use as a line break if needed
+
+                    if castDict[item]['Awards']:
+                        myBioList.append('\nAwards:' + NOBREAK_SPACE * 150)
+                        myBioList.extend(castDict[item]['Awards'])
+
+                    if castDict[item]['Films']:
+                        myBioList.append('\nFilmography:' + NOBREAK_SPACE * 150)
+                        myBioList.extend(castDict[item]['Films'])
+
+                    summary = ' '.join(myBioList)
+
+                    entry = '{0} {1}[d]'.format(COLCAST, entry) if re.search(deathRegex, summary, re.IGNORECASE) else '{0} {1}'.format(COLCAST, entry)
+                    myNationality = castDict[item]['Nationality'].split(',')[-1].strip() if castDict[item]['Nationality'] else ''
+                    myFlag = os.path.join(PGMA_COUNTRYART, '{0}.png'.format(myNationality)) if myNationality else ''
+                    art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else errorCountryArt
+                    collectionsDict[entry] = {'Poster': castDict[item]['Photo'], 'Art': art, 'Summary': summary}
 
         except Exception as e:
             log('UTILS :: Error setting Cast: %s', e)
+            FILMDICT['Status'] = False
+            return
 
-        # 2h.   Directors
+        # 2g.   Directors
         log(LOG_SUBLINE)
         try:
             if RESETMETA:
                 metadata.directors.clear()
 
-            directors = FILMDICT[AGENT]['Directors']
-            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('2h. Director(s)'), '{0:>2} - {1}'.format(len(directors), directors)))
+            directors = myAgentDict['Directors']
+            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('2g. Director(s)'), '{0:>2} - {1}'.format(len(directors), directors)))
             tempDict = getDirectors(directors, FILMDICT)
             directorDict = {k.split('(')[0].strip():v for (k,v) in tempDict.items()}
-            for idx, key in enumerate(sorted(directorDict), start=1):
-                log('UTILS :: {0:<29} {1}'.format('Director' if idx == 1 else '', '{0:>2} - {1}'.format(idx, key)))
+            for idx, item in enumerate(sorted(directorDict), start=1):
+                # to create unique cast vs direcotr entries - replace all spaces with no-break space and end with it
+                entry = directorDict[item]['RealName'] if directorDict[item]['RealName'] else item
+                entry += ' '
+                entry = entry.replace(' ', NOBREAK_SPACE)
                 newDirector = metadata.directors.new()
-                newDirector.name = key
-                newDirector.photo = directorDict[key]
+                newDirector.name = entry
+                newDirector.photo = directorDict[item]['Photo'] if 'iafd_ad' not in directorDict[item]['Photo'] and directorDict[item]['Photo'] else 'https://www.iafd.com/graphics/headshots/nophoto340.jpg'
+                log('UTILS :: {0:<29} {1}'.format('Director' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
+                if COLDIRECTOR:
+                    if 'nophoto' in newDirector.photo:
+                        directorDict[item]['Photo'] = NODIRECTOR_POSTER
+                        if directorDict[item]['URL']:      # artiste has no photo but has entry on IAFD, check if there is a photo on disk #### still not fully implemented
+                            #   https://www.iafd.com/person.rme/perfid=zakspears/gender=d/zak-spears.htm -> zakspears#zak-spears
+                            directorPhoto = directorDict[item]['URL'].split('perfid=')[1].split('.htm')[0].replace('/gender=d/', '#')
+                            directorDict[item]['Photo'] = PGMA_DIRECTORDICT.get(directorPhoto, NODIRECTOR_POSTER)
+
+                    myBioList = []
+                    myBioDict = OrderedDict(sorted(directorDict[item]['Bio'].items()))
+                    for count, (k, v) in enumerate(myBioDict.items(), start=1):
+                        bio = '{0}. {1}: {2}'.format(count, k.upper(), v).replace(' ', NOBREAK_SPACE).replace('-', NOBREAK_HYPHEN)
+                        myBioList.append(bio + NOBREAK_SPACE * 3 + ' ')    # add space to use as a line break if needed
+
+                    if directorDict[item]['Awards']:
+                        myBioList.append('\nAwards:' + NOBREAK_SPACE * 150)
+                        myBioList.extend(directorDict[item]['Awards'])
+
+                    if directorDict[item]['Films']:
+                        myBioList.append('\nFilmography:' + NOBREAK_SPACE * 150)
+                        myBioList.extend(directorDict[item]['Films'])
+
+                    summary = ' '.join(myBioList)
+                    entry = '{0} {1}[d]'.format(COLDIRECTOR, entry) if re.search(deathRegex, summary, re.IGNORECASE) else '{0} {1}'.format(COLDIRECTOR, entry)
+                    myNationality = directorDict[item]['Nationality'].split(',')[-1].strip() if directorDict[item]['Nationality'] else ''
+                    myFlag = os.path.join(PGMA_COUNTRYART, '{0}.png'.format(myNationality)) if myNationality else ''
+                    art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else errorCountryArt
+                    collectionsDict[entry] = {'Poster': directorDict[item]['Photo'], 'Art': art, 'Summary': summary}
 
         except Exception as e:
             log('UTILS :: Error setting Director(s): %s', e)
+            FILMDICT['Status'] = False
+            return
 
-        # 2i.   Set Collection
-        log(LOG_SUBLINE)
-        listCollections = []
-        log('UTILS :: {0: <29} {1}'.format('2i. Collections', ''))
-        try:
-            # scraped by agent collection - find all films scrapped by agent in case of errors missed
-            defaultCollections = ['|~| {0}'.format(FILMDICT['Agent']), 
-                                  '|~| {0}-IAFD'.format('On' if FILMDICT['FoundOnIAFD'] == 'Yes' else 'Not On'),
-                                  '|~| Stacked' if FILMDICT['Stacked'] == 'Yes' else '|~| Not Stacked'
-                                 ]
-            for idx, item in enumerate(defaultCollections, start=1):
-                listCollections.append(item)
-                log('UTILS :: {0:<29} {1}'.format('{0}'.format('Default Collections' if idx == 1 else ''), '{0:>2} - {1}'.format(idx, item)))
-
-            # Process Cast Members - Group prefix = |a|, Do not create Unknown Actor Collections
-            if COLCAST:
-                for idx, item in enumerate(sorted(castDict.keys()), start=1):
-                    if item != 'Unknown Actor':      # do not create collections for unknown actors...
-                        log('UTILS :: {0:<29} {1}'.format('{0}'.format('Cast Collections' if idx == 1 else ''), '{0:>2} - {1}'.format(idx, item)))
-                        listCollections.append('|a| {0}'.format(item) if GROUPCOL else item)
-
-            # Process Countries - Group Prefix |c|
-            if COLCOUNTRY:
-                for idx, item in enumerate(listCountries, start=1):
-                    log('UTILS :: {0:<29} {1}'.format('{0}'.format('Country Collections' if idx == 1 else ''), '{0:>2} - {1}'.format(idx, item)))
-                    listCollections.append('|c| {0}'.format(item) if GROUPCOL else item)
-
-            # Process Directors - Group prefix = |d|
-            if COLDIRECTOR:
-                for idx, item in enumerate(sorted(directorDict.keys()), start=1):
-                    log('UTILS :: {0:<29} {1}'.format('{0}'.format('Director Collections' if idx == 1 else ''), '{0:>2} - {1}'.format(idx, item)))
-                    listCollections.append('|d| {0}'.format(item) if GROUPCOL else item)
-
-            # Process Genres - Group Prefix |g|
-            if COLGENRE:
-                for idx, item in enumerate(listGenres, start=1):
-                    log('UTILS :: {0:<29} {1}'.format('{0}'.format('Genre Collections' if idx == 1 else ''), '{0:>2} - {1}'.format(idx, item)))
-                    if item == 'Compilations':
-                        listCollections.append('|~| {0}'.format(item))
-                    else:
-                        listCollections.append('|g| {0}'.format(item) if GROUPCOL else item)
-
-                if FILMDICT['Compilation'] == 'Yes':
-                    log('UTILS :: {0:<29} {1}'.format('Compilation Collection', 'Yes'))
-                    listCollections.append('|~| Compilations')
-
-            # Process Studio Name
-            if COLSTUDIO:
-                studioList = []
-                studioList.append(FILMDICT['Studio'])
-                if FILMDICT['IAFDStudio']:
-                    studioList.append(FILMDICT['IAFDStudio'])
-
-                for idx, item in enumerate(studioList, start=1):
-                    log('UTILS :: {0:<29} {1}'.format('{0}'.format('Studio Collections' if idx == 1 else ''), '{0:>2} - {1}'.format(idx, item)))
-                    listCollections.append('|s| {0}'.format(item) if GROUPCOL else item) 
-
-            # Process File Name Series: These are not grouped as they are present as data on some websites
-            if COLSERIES:
-                seriesList = FILMDICT['Series']
-                for idx, item in enumerate(seriesList, start=1):
-                    log('UTILS :: {0:<29} {1}'.format('{0}'.format('Series Collection' if idx == 1 else ''), '{0:>2} - {1}'.format(idx, item)))
-                    listCollections.append(item) 
-
-            # Process Website Series: These are not grouped and not an option
-            if FILMDICT[AGENT]['Collections']:
-                websiteCollectionList = FILMDICT[AGENT]['Collections']
-                for idx, item in enumerate(websiteCollectionList, start=1):
-                    log('UTILS :: {0:<29} {1}'.format('{0}'.format('Website Collections' if idx == 1 else ''), '{0:>2} - {1}'.format(idx, item)))
-                    listCollections.append(item)
-
-            # Add to Metadata
-            if RESETMETA:
-                metadata.collections.clear()
-
-            log('UTILS ::')
-            log('UTILS :: {0:<29} {1}'.format('Total Collections', len(listCollections)))
-            listCollections = list(set(listCollections))
-            log('UTILS :: {0:<29} {1}'.format('Unique Collections', len(listCollections)))
-            listCollections.sort(key = lambda x: x.lower())
-            for idx, item in enumerate(listCollections, start=1):
-                metadata.collections.add(item)
-                log('UTILS :: {0:<29} {1}'.format('{0}'.format('Adding Collections' if idx == 1 else ''), '{0:>2} - {1}'.format(idx, item)))
-
-        except Exception as e:
-            log('UTILS :: Error setting Collection: %s', e)
-
-        # 2j.   Posters - Front Cover of DVD
+        # 2h.   Posters - Front Cover of DVD
         # There is no working way to reset posters
         log(LOG_SUBLINE)
         try:
-            poster = FILMDICT[AGENT]['Poster']
-            log('UTILS :: {0:<29} {1}'.format('2j. Poster Image', poster if poster else 'None Found'))
-            if poster:
-                if FILMDICT['SceneAgent']:
-                    pic, picContent = getFilmImages(imageType='Poster', imageURL=poster, whRatio=1.5)
-                    metadata.posters[pic] = Proxy.Media(picContent, sort_order=1)
-                    metadata.posters.validate_keys([pic])
-                else:
-                    metadata.posters[poster] = Proxy.Media(HTTP.Request(poster).content, sort_order=1)
-                    metadata.posters.validate_keys([poster])
+            if RESETMETA:
+                for key in metadata.posters.keys():
+                    del metadata.posters[key]
+                    metadata.posters.validate_keys([])
+
+            poster = myAgentDict['Poster']
+            log('UTILS :: {0:<29} {1}'.format('2h. Poster Images', poster if poster else 'None Found'))
+            for idx, item in enumerate(poster, start=1):
+                log('UTILS :: {0:<29} {1}'.format('Poster' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
+                image, imageContent = getFilmImages(imageType='Poster', imageLocation=item, whRatio=1.5) if FILMDICT['SceneAgent'] else item, HTTP.Request(item).content
+                metadata.posters[image] = Proxy.Media(imageContent, sort_order=idx)
+
+            # save poster to disk
+            if poster and 'Yes' in POSTERSOURCEDOWNLOAD:
+                idx = 0 if 'Local' in POSTERSOURCEDOWNLOAD else -1
+                item = poster[idx]
+                extension = item.split('.')[-1].split('?')[0]
+                filename = os.path.splitext(media.items[0].parts[0].file)[0]
+                downloadPoster = '{0}.{1}'.format(filename, extension)
+                PlexSaveFile(downloadPoster, imageContent)
 
         except Exception as e:
             log('UTILS :: Error setting Poster: %s', e)
+            FILMDICT['Status'] = False
+            return
 
-        # 2k.   Art - Back Cover of DVD : Determined by user preference
+        # 2i.   Art - Back Cover of DVD : Determined by user preference
         # There is no working way to reset Art
         log(LOG_SUBLINE)
         try:
             if USEBACKGROUNDART:
-                art = FILMDICT[AGENT]['Art']
-                log('UTILS :: {0:<29} {1}'.format('2k. Art Image', art if art else 'None Found'))
-                if art:
-                    if FILMDICT['SceneAgent']:
-                        pic, picContent = getFilmImages(imageType='Art', imageURL=art, whRatio=0.5625)
-                        metadata.art[pic] = Proxy.Media(picContent, sort_order=1)
-                        metadata.art.validate_keys([pic])
-                    else:
-                        metadata.art[art] = Proxy.Media(HTTP.Request(art).content, sort_order=1)
-                        metadata.art.validate_keys([art])
+                if RESETMETA:
+                    for key in metadata.art.keys():
+                        del metadata.art[key]
+                        metadata.art.validate_keys([])
+
+                art = myAgentDict['Art']
+                log('UTILS :: {0:<29} {1}'.format('2i. Art Images', art if art else 'None Found'))
+                for idx, item in enumerate(art, start=1):
+                    log('UTILS :: {0:<29} {1}'.format('Art' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
+                    image, imageContent = getFilmImages(imageType='Art', imageLocation=item, whRatio=0.5625) if FILMDICT['SceneAgent'] else item, HTTP.Request(item).content
+                    metadata.art[image] = Proxy.Media(imageContent, sort_order=idx)
             else:
                 log('UTILS :: {0:<29} {1}'.format('Art Image', 'Not Set By Preference'))
 
         except Exception as e:
             log('UTILS :: Error setting Art: %s', e)
+            FILMDICT['Status'] = False
+            return
 
-        # 2l.   Reviews - Put all Scene information as default unless there are none and website has actual reviews
+        # 2j.   Reviews - Put all Scene information as default unless there are none and website has actual reviews
         log(LOG_SUBLINE)
         try:
             source = AGENT
@@ -6160,30 +6502,41 @@ def setMetadata(metadata, FILMDICT):
                 scenes = FILMDICT['IAFD']['Scenes']
                 source = 'IAFD'
 
-            log('UTILS :: {0:<29} {1}'.format('2l. Scenes', '{0}: {1} - {2}'.format(source, len(scenes), scenes)))
-            if scenes != {}:
-                if RESETMETA:
-                    metadata.reviews.clear()
+            scenesLink = scenes.get('Link', '')
+            if scenesLink:
+                del scenes['Link']
+                log('UTILS :: {0:<29} {1}'.format('2j. Scenes Link', '{0}: {1}'.format(source, scenesLink)))
+                log('UTILS :: {0:<29} {1}'.format('Scenes', '{0}: {1} - {2}'.format(source, len(scenes), scenes)))
+                if scenes != {}:
+                    if RESETMETA:
+                        metadata.reviews.clear()
 
-                for idx, item in enumerate(scenes, start=1):
-                    scene = str(idx)
-                    newReview = metadata.reviews.new()
-                    newReview.author = scenes[scene]['Author']
-                    newReview.link  = scenes[scene]['Link']
-                    newReview.source = scenes[scene]['Source']
-                    newReview.text = scenes[scene]['Text']
-                    log('UTILS :: {0:<29} {1}'.format('Created Reviews' if idx == 1 else '', '{0}: {1}'.format(scene, newReview.author)))
+                    for idx, item in enumerate(scenes, start=1):
+                        scene = str(idx)
+                        if not scenes[scene]['Text']:                     # if no review text - skip
+                            continue
+                        newReview = metadata.reviews.new()
+                        newReview.author = scenes[scene]['Author']
+                        newReview.link  = scenesLink
+                        newReview.source = scenes[scene]['Source']
+                        newReview.text = scenes[scene]['Text']
+                        log('UTILS :: {0:<29} {1}'.format('Created Reviews' if idx == 1 else '', '{0}: {1}'.format(idx, newReview.author)))
+                else:
+                    log('UTILS :: Warning: No Scenes / Reviews Found!')
+
             else:
-                raise Exception('< No Scenes / Reviews Found! >')
+                log('UTILS :: Warning: Agent Has No Scenes / Reviews Set!')
 
         except Exception as e:
             log('UTILS :: Error setting Reviews: %s', e)
+            FILMDICT['Status'] = False
+            return
 
-        # 2m.   Chapters - Put all Chapter Information here
+        # 2k.   Chapters - Put all Chapter Information here
         log(LOG_SUBLINE)
         try:
-            chapters = FILMDICT[AGENT]['Chapters']
-            log('UTILS :: {0:<29} {1}'.format('2m. Chapters', '{0} - {1}'.format(len(chapters), chapters)))
+            chapters = myAgentDict['Chapters']
+            log('UTILS :: {0:<29} {1}'.format('2k. Chapters', '{0} - {1}'.format(len(chapters), chapters)))
 
             if chapters != {}:
                 if RESETMETA:
@@ -6194,65 +6547,300 @@ def setMetadata(metadata, FILMDICT):
                     newChapter.title = chapters[chapter]['Title']
                     newChapter.start_time_offset = chapters[chapter]['StartTime']
                     newChapter.end_time_offset = chapters[chapter]['EndTime']
-                    log('UTILS :: {0:<29} {1}'.format('Created Chapters' if idx == 1 else '', '{0}: {1}'.format(chapter, newChapter.title)))
+                    log('UTILS :: {0:<29} {1}'.format('Created Chapters' if idx == 1 else '', '{0}: {1}'.format(idx, newChapter.title)))
             else:
-                raise Exception('< No Chapters Found! >')
+                log('UTILS :: Warning: No Chapters Found!')
 
         except Exception as e:
             log('UTILS :: Error setting Chapters: %s', e)
+            FILMDICT['Status'] = False
+            return
 
-        # 2n.   Summary = Synopsis with IAFD Legend
+        # 2l.   Summary = Synopsis with IAFD Legend
         log(LOG_SUBLINE)
         try:
-            synopsis = FILMDICT[AGENT]['Synopsis']
+            log('UTILS :: {0:<29} {1}'.format('2l. Summary', ''))
+            synopsis = myAgentDict['Synopsis']
             if not synopsis:
                 if 'IAFD' in FILMDICT and FILMDICT['IAFD']['Synopsis']:
                     synopsis = FILMDICT['IAFD']['Synopsis']
-                    log('UTILS :: {0:<29} {1}'.format('2n. IAFD Synopsis', 'Website Synopsis Absent'))
+                    log('UTILS :: {0:<29} {1}'.format('IAFD Synopsis', 'Website Synopsis Absent'))
 
             # translate if synopsis not in library language
             synopsis = TranslateString(synopsis, SITE_LANGUAGE, FILMDICT['lang'], DETECT)
 
-        except Exception as e:
-            synopsis = ''
-            log('UTILS :: Error getting Synopsis: %s', e)
-
-        else:
             # combine and update
             log(LOG_SUBLINE)
             summary = ('{0}\n{1}' if PREFIXLEGEND else '{1}\n{0}').format(FILMDICT['Legend'], synopsis.strip())
             summary = summary.replace('\n\n', '\n')
             summaryList = wrap(summary, 100)
             for idx, summaryLine in enumerate(summaryList):
-                log('UTILS :: {0:<29} {1}'.format('2n. Summary with Legend' if idx == 0 else '', summaryLine.replace('\n', '')))
+                log('UTILS :: {0:<29} {1}'.format('Summary with Legend' if idx == 0 else '', summaryLine.replace('\n', '')))
 
             if RESETMETA:
                 metadata.summary = ' ' 
 
             metadata.summary = summary
 
-        log('UTILS ::')
+        except Exception as e:
+            synopsis = ''
+            log('UTILS :: Error getting Synopsis: %s', e)
+            FILMDICT['Status'] = False
+            return
+
+        # 2m.   Set Collection
+        log(LOG_SUBLINE)
+        log('UTILS :: {0: <29} {1}'.format('2m. Collections', ''))
+        try:
+            studio = FILMDICT['Studio']
+            if COLSERIES:
+                # Process Agent Website Series
+                try:
+                    if myAgentDict['Collections']:
+                        websiteCollectionList = myAgentDict['Collections']
+                        for idx, item in enumerate(websiteCollectionList, start=1):
+                            entry = '{0} {1}: {2}'.format(COLSTUDIO if COLSTUDIO else COLSERIES, studio, item)
+                            collectionsDict[entry] = {'Poster': '', 'Art': countryArt, 'Summary': ''}
+                except Exception as e:
+                    log('UTILS :: Error Collating Website Series Collections: %s', e)
+
+                # Process Series from File Name
+                try:
+                    seriesList = FILMDICT['Series']
+                    for idx, item in enumerate(seriesList, start=1):
+                        entry = '{0} {1}: {2}'.format(COLSTUDIO if COLSTUDIO else COLSERIES, studio, item)
+                        collectionsDict[entry] = {'Poster': '', 'Art': countryArt, 'Summary': ''}
+
+                except Exception as e:
+                    log('UTILS :: Error Collating Derived Series Collections: %s', e)
+
+            # Process Studio Name:
+            if COLSTUDIO:
+                entry = '{0} {1}'.format(COLSTUDIO, studio)
+                collectionsDict[entry] = {'Poster': '', 'Art': countryArt, 'Summary': ''}
+
+            # System Collections
+            if COLSYSTEM:
+                try:
+                    # Agent Collection
+                    entry = '{0} {1}'.format(COLSYSTEM, myAgent)
+                    collectionsDict[entry] = {'Poster': AGENT_POSTER, 'Art': '', 'Summary': ''}
+
+                    # IAFD : On or Not On - Collection
+                    entry = '{0} {1}-IAFD'.format(COLSYSTEM, 'On' if FILMDICT['FoundOnIAFD'] == 'Yes' else 'Not On')
+                    collectionsDict[entry] = {'Poster': IAFDFOUND_POSTER if FILMDICT['FoundOnIAFD'] == 'Yes' else IAFDNOTFOUND_POSTER, 
+                                              'Art': IAFDFOUND_POSTER if FILMDICT['FoundOnIAFD'] == 'Yes' else IAFDNOTFOUND_POSTER, 
+                                              'Summary': ''}
+
+                    # stacked or Not Stacked Collection
+                    entry = '{0} {1}'.format(COLSYSTEM, 'Stacked' if FILMDICT['Stacked'] == 'Yes' else 'Not Stacked')
+                    collectionsDict[entry] = {'Poster': STACKED_POSTER if FILMDICT['Stacked'] == 'Yes' else NOTSTACKED_POSTER, 
+                                              'Art': STACKED_POSTER if FILMDICT['Stacked'] == 'Yes' else NOTSTACKED_POSTER, 
+                                              'Summary': ''}
+
+                    # Compilation Collection
+                    if FILMDICT['Compilation'] == 'Yes':
+                        entry = '{0} {1}{2}'.format(COLSYSTEM, prefix, 'Compilations')
+                        collectionsDict[entry] = {'Poster': COMPILATIONS_POSTER, 
+                                                  'Art': COMPILATIONS_POSTER, 
+                                                  'Summary': ''}
+
+                except Exception as e:
+                    log('UTILS :: Error Collating System Collections: %s', e)
+
+            # List the collections
+            for idx, item in enumerate(sorted(collectionsDict.keys()), start=1):
+                log('UTILS :: {0:<29} {1}'.format('{0}'.format('Collections' if idx == 1 else ''), '{0:>2} - {1:<30} - {2}'.format(idx, item, collectionsDict[item])))
+
+        except Exception as e:
+            log('UTILS :: Error collating Collections: %s', e)
+            FILMDICT['Status'] = False
+            return
+
+        # Add to Metadata
+        if RESETMETA:
+            metadata.collections.clear()
+
+        log(LOG_SUBLINE)
+        try:
+            plexBaseURL = 'http://127.0.0.1:32400'
+
+            ssn = requests.Session()
+            ssn.headers.update({'Accept': 'application/json'})
+            ssn.params.update({'X-Plex-Token': PLEXTOKEN})
+            machineID = MACHINEID if MACHINEID else ssn.get('{0}/'.format(plexBaseURL)).json()['MediaContainer']['machineIdentifier']
+            for idx, entry in enumerate(sorted(collectionsDict.keys()), start=1):
+                myDictionary = collectionsDict.get(entry)
+                if myDictionary is None:
+                    continue
+
+                log('UTILS :: {0:<29} {1}'.format('{0}'.format('Entry'), '{0:>2} - {1} - {2}'.format(idx, entry, myDictionary)))
+
+                # create collection title - depending on type of collection i.e. Cast, Director, Studio, Series - replace standard spaces with alternate spaces
+                if COLCAST in entry:
+                    title = entry.replace(COLCAST, '').replace('[d]', '').strip()
+                elif COLDIRECTOR in entry:            # add space to string then replace spaces with no-break space - to give differention to single name director artists to single named cast artists
+                    title = entry.replace(COLDIRECTOR, '').replace('[d]', '').strip()
+                    title += ' '
+                    title = title.replace(' ', NOBREAK_SPACE)
+                elif COLSTUDIO in entry:             # add space to string then replace spaces with en-space
+                    title = entry.replace(COLSTUDIO, '').strip()
+                    title += ' '
+                    title = title.replace(' ', EN_SPACE)
+                elif COLSERIES in entry:             # add space to string then replace spaces with en-space
+                    title = entry.replace(COLSERIES, '').strip()
+                    title += ' '
+                    title = title.replace(' ', EN_SPACE)
+                else:
+                    title = re.sub('\|\d\|', '', entry).strip()
+
+                log('UTILS :: {0:<29} {1}'.format('Collection Title', title))
+                metadata.collections.add(title)
+
+                # get rating key if collection exists else create
+                ratingKey = ''
+                createdRatingKey = False
+                collections = ssn.get('{0}/library/sections/{1}/collections'.format(plexBaseURL, FILMDICT['LibraryID'])).json()['MediaContainer'].get('Metadata',[])
+                for collection in collections:
+                    if title == collection.get('title'):
+                        ratingKey = collection.get("ratingKey", '')
+                        break
+                else:
+                    data = '{0}/library/collections'.format(plexBaseURL)
+                    uri = 'server://{0}/com.plexapp.plugins.library/library/metadata/'.format(machineID)
+                    parameters = {'title': title, 'smart': '0', 'sectionId': FILMDICT['LibraryID'], 'type': 1, 'uri': uri}
+                    r = ssn.post(data, params=parameters)
+                    ratingKey = r.json()['MediaContainer']['Metadata'][0]['ratingKey']
+                    createdRatingKey = True
+
+                if not ratingKey:
+                    log('UTILS :: Error Establishing Enhanced Collection Rating Key')
+                    log(LOG_SUBLINE)
+                    continue
+
+                log('UTILS :: {0:<29} {1}'.format('{0} Rating Key'.format('Created' if createdRatingKey else 'Found'), ratingKey))
+
+                #   Set Sort Title: from entry string
+                try:
+                    # place the default system icons before the agent icons in the following order
+                    if entry == '|1| On-IAFD':
+                        titleSort = entry.replace('|1| On-IAFD', '|0.0| IAFD:Yes').replace('|1|', '|0|')             # on IAFD
+                    elif entry == '|1| Not On-IAFD':
+                        titleSort = entry.replace('|1| Not On-IAFD', '|0.1| IAFD:No').replace('|1|', '|0|')          # Not on IAFD
+                    elif entry == '|1| Not Stacked':
+                        titleSort = entry.replace('|1| Not Stacked', '|0.2| Stacked:No').replace('|1|', '|0|')       # films in parts/disks
+                    elif entry == '|1| Stacked':
+                        titleSort = entry.replace('|1| Stacked', '|0.3| Stacked:Yes').replace('|1|', '|0|')          # full films
+                    elif entry == '|1| Compilations':
+                        titleSort = entry.replace('|1| Compilations', '|0.4| Compilations')                          # place after IAFD and Stacked
+                    elif '[d]' in entry:
+                        titleSort = entry.replace('[d]', '')                                                         # remove death marker
+                    else:
+                        titleSort = entry
+
+                    log('UTILS :: {0:<29} {1}'.format('Sort Title:', titleSort))
+                    payload = {'type': 18, 'id': ratingKey}
+                    payload['titleSort.value'] = titleSort
+                    payload['titleSort.locked'] = 1
+                    ssn.put('{0}/library/sections/{1}/all'.format(plexBaseURL, FILMDICT['LibraryID']), params=payload)
+                except Exception as e:
+                    log('UTILS :: Error setting Collection Sort Title: %s', e)
+
+                #   Set poster
+                poster = myDictionary.get('Poster', '')
+                if poster:
+                    try:
+                        log('UTILS :: {0:<29} {1}'.format('Poster:', poster))
+                        data = getImage(poster, entry, 'Poster')
+                        ssn.post('{0}/library/collections/{1}/posters'.format(plexBaseURL, ratingKey), data=data, stream=True)
+                    except Exception as e:
+                        log('UTILS :: Error setting Collection Poster: %s', e)
+
+                #   Set Collection Art
+                art = myDictionary.get('Art', '')
+                if art:
+                    try:
+                        log('UTILS :: {0:<29} {1}'.format('Art:', art))
+                        data = getImage(art, entry, 'Art')                 #data = ssn.get(art).content
+                        ssn.post('{0}/library/collections/{1}/arts'.format(plexBaseURL, ratingKey), data=data, stream=True)
+                    except Exception as e:
+                        log('UTILS :: Error setting Collection Art: %s', e)
+
+                #   Set Summary: None set for Genres
+                summary = myDictionary.get('Summary', '')
+                if summary:
+                    try:
+                        payload = {'type': 18, 'id': ratingKey}
+                        payload['summary.value'] = summary
+                        payload['summary.locked'] = 1
+                        ssn.put('{0}/library/sections/{1}/all'.format(plexBaseURL, FILMDICT['LibraryID']), params=payload)
+                        summary = [x.strip() for x in summary.split(' ') if x.strip()]
+                        for idx2, item in enumerate(summary, start=1):
+                            log('UTILS :: {0:<29} {1}'.format('Summary:' if idx2 == 1 else '', item))
+                    except Exception as e:
+                        log('UTILS :: Error setting Collection Summary: %s', e)
+
+                log(LOG_BIGLINE)
+
+        except Exception as e:
+            log('UTILS :: Error Creating Enhanced Collections: %s', e)
+            FILMDICT['Status'] = False
+            return
+
+        # 2n.   Set Originally Available Date - From website's release date if only it is earlier in the same year
+        log(LOG_BIGLINE)
+        try:
+            log('UTILS :: {0:<29} {1}'.format('2n. Originally Available Date', ''))
+            releaseDate = myAgentDict['ReleaseDate'].date()
+            log('UTILS :: {0:<29} {1}'.format('Agent Date', releaseDate))
+
+            metadata.originally_available_at = releaseDate
+            metadata.year = metadata.originally_available_at.year
+            log('UTILS :: {0:<29} {1}'.format('Current Date', metadata.originally_available_at))
+            log('UTILS :: {0:<29} {1}'.format('Current Year', metadata.year))
+
+        except Exception as e:
+            log('UTILS :: Error setting Originally Available Date: %s', e)
+            FILMDICT['Status'] = False
+            return
 
     except Exception as e:
         FILMDICT['Status'] = False
-
     else:
         FILMDICT['Status'] = True
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def setupStartVariables():
     ''' used by start routine to set up Tidy Genres, Countries List and Show Preference Settings'''
+    global START_SCRAPE
 
-    #   1.    Preference Settings list json file entries
+    # preferences
+    global COLCAST, COLCOUNTRY, COLGENRE, COLDIRECTOR, COLSERIES, COLSTUDIO, COLSYSTEM
+    global COUNTRYPOSTERTYPE, POSTERSOURCEDOWNLOAD, DETECT, DURATIONDX, PREFIXGENRE, MATCHIAFDDURATION, MATCHSITEDURATION
+    global PLEXTOKEN, PREFIXLEGEND, RESETMETA, THUMBOR, USEBACKGROUNDART
+
+    # variables
+    global COUNTRYSET, GENRESDICT, TIDYDICT, MACHINEID, PGMA_CASTDICT, PGMA_DIRECTORDICT
+
+    START_SCRAPE = 'No'
+
+    #   1.    Plex Support Path and preferences
     log(LOG_SUBLINE)
-    log('START :: {0:<29} {1}'.format('Plex Support Path', PlexSupportPath))
+    log('START :: {0:<29} {1}'.format('1.\tPlex Support Path', PlexSupportPath))
+    continueSetup = True if os.path.isdir(PlexSupportPath) else False
+    #   2.    Agent Preference Settings
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 2.\tAgent Preference Settings')
+        log('START :: {0:<29} {1}'.format('Agent Type', AGENT_TYPE))
+        defaultPrefs_json = os.path.join(PlexSupportPath, 'Plug-ins', '{0}.bundle'.format(AGENT), 'Contents', 'DefaultPrefs.json')
+        log('START :: {0:<29} {1}'.format('Default Preferences', os.path.relpath(defaultPrefs_json, PlexSupportPath)))
+        if os.path.isfile(defaultPrefs_json):
+            try:
+                json = JSON.ObjectFromString(PlexLoadFile(defaultPrefs_json), encoding=None)  ### Load 'DefaultPrefs.json' to have access to default settings ###
+                if not json:
+                    raise Exception('< Could Not Read Default Prefs! >')
 
-    defaultPrefs_json = os.path.join(PlexSupportPath, 'Plug-ins', '{0}.bundle'.format(AGENT), 'Contents', 'DefaultPrefs.json')
-    log('START :: {0:<29} {1}'.format('Default Preferences', os.path.relpath(defaultPrefs_json, PlexSupportPath)))
-    if os.path.isfile(defaultPrefs_json):
-        try:
-            json = JSON.ObjectFromString(PlexLoadFile(defaultPrefs_json), encoding=None)  ### Load 'DefaultPrefs.json' to have access to default settings ###
-            if json:
                 log('START :: {0:<29} {1}'.format('Loaded', defaultPrefs_json))
                 log('START :: {0:<29} {1}'.format('Preferences:', len(json)))
                 idx = 0
@@ -6260,63 +6848,293 @@ def setupStartVariables():
                     idx += 1
                     prefName =  entry['id']
                     defSet =  entry['default']
-                    setAs = Prefs[prefName]
-                    log('START :: {0:<29} {1}'.format('{0:>2}. {1}'.format(idx, prefName), 'Default = {0:<10}| Set As = {1}'.format(defSet, setAs)))
+                    setAs = Prefs[prefName] if prefName != 'plextoken' else '********'              # hide token in logs
+                    log('START :: {0:<29} {1}'.format('{0:>2}. {1}'.format(idx, prefName), 'Default = {0:<10} Set As = {1}'.format(defSet, setAs)))
+
+                COLSYSTEM = '|1|' if Prefs['systemcollection'] else ''
+                COLGENRE = '|2|' if Prefs['genrecollection'] else ''
+                COLCOUNTRY = '|3|' if Prefs['countrycollection'] else ''
+                COLSTUDIO = '|4|' if Prefs['studiocollection'] else ''
+                COLSERIES = '|5|' if Prefs['seriescollection'] else ''
+                COLDIRECTOR = '|6|' if Prefs['directorcollection']  else ''
+                COLCAST = '|7|' if Prefs['castcollection'] else ''
+
+                # Other Preferences
+                COUNTRYPOSTERTYPE = Prefs['countrypostertype']        # show poster as map or vertical flag
+                DETECT = Prefs['detect']                              # detect the language the summary appears in on the web page
+                DURATIONDX = int(Prefs['durationdx'])                 # Acceptable difference between actual duration of video file and that on agent website
+                PREFIXGENRE = Prefs['prefixgenre']                    # prefix genres with agent sexuality type - useful for mixed content plex servers
+                MATCHIAFDDURATION = Prefs['matchiafdduration']        # Match against IAFD Duration value
+                MATCHSITEDURATION = Prefs['matchsiteduration']        # Match against Site Duration value
+                PLEXTOKEN = Prefs['plextoken']                        # Plex token from View XML of any library item
+                POSTERSOURCEDOWNLOAD = Prefs['postersourcedownload']  # Down film poster to disk, (renamed as film title + image extension)
+                PREFIXLEGEND = Prefs['prefixlegend']                  # place cast legend at start of summary or end
+                RESETMETA = Prefs['resetmeta']                        # clear previously set metadata
+                THUMBOR = Prefs['thumbor']                            # Thumbor Image manipulation URL
+                USEBACKGROUNDART = Prefs['usebackgroundart']          # Use background art
+
+            except Exception as e:
+                log('START :: Error Loading Default Preferences File: %s', e)
+                continueSetup = False
+
+
+    #   3. PGMA - Folder Location, where all general files needed for the PGMA Agents are stored, like posters, gayTidy, Countries et cetera
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 3.\tPGMA Usage Folder Locations')
+        global PGMA_FOLDER, PGMA_CASTFACEFOLDER, PGMA_DIRECTORFACEFOLDER, PGMA_CASTPOSTERFOLDER, PGMA_DIRECTORPOSTERFOLDER, PGMA_COUNTRYART, PGMA_COUNTRYPOSTERFLAGS, PGMA_COUNTRYPOSTERMAPS, PGMA_GENREFOLDER
+        PGMA_FOLDER = os.path.join(PlexSupportPath, 'Plug-ins', '_PGMA')
+        PGMA_SYSTEMFOLDER = os.path.join(PGMA_FOLDER, 'System')
+        PGMA_CASTFACEFOLDER = os.path.join(PGMA_FOLDER, 'Cast', 'Face')
+        PGMA_CASTPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Cast', 'Poster')
+        PGMA_DIRECTORFACEFOLDER = os.path.join(PGMA_FOLDER, 'Director', 'Face')
+        PGMA_DIRECTORPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Director', 'Poster')
+        PGMA_COUNTRYART = os.path.join(PGMA_FOLDER, 'Country', 'Art')
+        PGMA_COUNTRYPOSTERFLAGS = os.path.join(PGMA_FOLDER, 'Country', 'Poster', 'Flags')
+        PGMA_COUNTRYPOSTERMAPS = os.path.join(PGMA_FOLDER, 'Country', 'Poster', 'Maps')
+        PGMA_GENREFOLDER = os.path.join(PGMA_FOLDER, 'Genre')
+
+        PGMA_FOLDER = PGMA_FOLDER if os.path.isdir(PGMA_FOLDER) else ''
+        PGMA_SYSTEMFOLDER = PGMA_SYSTEMFOLDER if os.path.isdir(PGMA_SYSTEMFOLDER) else ''
+        PGMA_GENREFOLDER = PGMA_GENREFOLDER if os.path.isdir(PGMA_GENREFOLDER) else ''
+        PGMA_COUNTRYART = PGMA_COUNTRYART if os.path.isdir(PGMA_COUNTRYART) else ''
+        PGMA_COUNTRYPOSTERFLAGS = PGMA_COUNTRYPOSTERFLAGS if os.path.isdir(PGMA_COUNTRYPOSTERFLAGS) else ''
+        PGMA_COUNTRYPOSTERMAPS = PGMA_COUNTRYPOSTERMAPS if os.path.isdir(PGMA_COUNTRYPOSTERMAPS) else ''
+        PGMA_CASTFACEFOLDER = PGMA_CASTFACEFOLDER if os.path.isdir(PGMA_CASTFACEFOLDER) else ''
+        PGMA_DIRECTORFACEFOLDER = PGMA_DIRECTORFACEFOLDER if os.path.isdir(PGMA_DIRECTORFACEFOLDER) else ''
+        PGMA_CASTPOSTERFOLDER = PGMA_CASTPOSTERFOLDER if os.path.isdir(PGMA_CASTPOSTERFOLDER) else ''
+        PGMA_DIRECTORPOSTERFOLDER = PGMA_DIRECTORPOSTERFOLDER if os.path.isdir(PGMA_DIRECTORPOSTERFOLDER) else ''
+
+        log('START :: {0:<29} {1}'.format('PGMA Folder Location', PGMA_FOLDER if PGMA_FOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('              System', PGMA_SYSTEMFOLDER if PGMA_SYSTEMFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('              Genres', PGMA_GENREFOLDER if PGMA_GENREFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('         Country Art', PGMA_COUNTRYART if PGMA_COUNTRYART else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('Country Poster Flags', PGMA_COUNTRYPOSTERFLAGS if PGMA_COUNTRYPOSTERFLAGS else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format(' Country Poster Maps', PGMA_COUNTRYPOSTERMAPS if PGMA_COUNTRYPOSTERMAPS else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('          Cast Faces', PGMA_CASTFACEFOLDER if PGMA_CASTFACEFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('        Cast Posters', PGMA_CASTPOSTERFOLDER if PGMA_CASTPOSTERFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('      Director Faces', PGMA_DIRECTORFACEFOLDER if PGMA_DIRECTORFACEFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('    Director Posters', PGMA_DIRECTORPOSTERFOLDER if PGMA_DIRECTORPOSTERFOLDER else '** FAIL **'))
+
+        # only contunue with setup if all folders are present
+        continueSetup = (PGMA_FOLDER and PGMA_SYSTEMFOLDER and PGMA_CASTFACEFOLDER and PGMA_DIRECTORFACEFOLDER and PGMA_CASTPOSTERFOLDER and 
+                         PGMA_DIRECTORPOSTERFOLDER and PGMA_COUNTRYART and PGMA_COUNTRYPOSTERFLAGS and PGMA_COUNTRYPOSTERMAPS and PGMA_GENREFOLDER)
+
+    #   4. PGMA - On disk Cast and Director Collection Posters
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 4.\tPGMA Cast and Director Collection Poster Dictionaries')
+        PGMA_CASTDICT = {}
+        PGMA_DIRECTORDICT = {}
+        try:
+            PGMA_CASTDICT = {x.rsplit('.', 1)[0]:os.path.join(PGMA_CASTPOSTERFOLDER, x) for x in os.listdir(PGMA_CASTPOSTERFOLDER)}
+            log('START :: {0:<29} {1}'.format('Cast Collection Posters', '{0:>4} - {1}'.format(len(PGMA_CASTDICT), PGMA_CASTDICT)))
+
+            PGMA_DIRECTORDICT = {x.rsplit('.', 1)[0]:os.path.join(PGMA_DIRECTORPOSTERFOLDER, x) for x in os.listdir(PGMA_DIRECTORPOSTERFOLDER)}
+            log('START :: {0:<29} {1}'.format('Director Collection Posters', '{0:>4} - {1}'.format(len(PGMA_DIRECTORDICT), PGMA_DIRECTORDICT)))
+
         except Exception as e:
-            log('START :: Error Loading Default Preferences File: %s', e)
+            log('START :: Error creating Local Cast and Director Collection Poster Dictionaries: %s', e)
+            continueSetup = False
 
-    #   2. Country Set: create set containing countries from country.txt located in plugins code directory
-    log(LOG_SUBLINE)
-    log('START :: Prepare Set of Country Names')
-    global COUNTRYSET
-    try:
-        countries_txt = os.path.join(PlexSupportPath, 'Plug-ins', 'Countries.txt')
-        txtfile = PlexLoadFile(countries_txt)
-        txtrows = txtfile.split('\n')
-        for row in txtrows:
-            COUNTRYSET.add(row.strip())
+    #   5. Country Dictionary: create dictionary containing countries and flag urls from Country.txt located in plugins code directory
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 5.\tPrepare Dictionary of Country Names and Flags')
+        COUNTRYSET = set() 
+        try:
+            countries_txt = os.path.join(PGMA_FOLDER, 'Countries.txt')
+            txtfile = PlexLoadFile(countries_txt)
+            txtrows = txtfile.split('\n')
+            for idx, row in enumerate(txtrows, start=1):
+                COUNTRYSET.add(row.strip())
 
-        log('START :: {0:<29} {1}'.format('Country Set', '{0:>2} - {1}'.format(len(COUNTRYSET), sorted(COUNTRYSET))))
+            log('START :: {0:<29} {1}'.format('Country Dictionary', '{0:>4} - {1}'.format(len(COUNTRYSET), sorted(COUNTRYSET))))
 
-    except Exception as e:
-        log('START :: Error creating Country Set: %s', e)
-        log('START :: Error: Country Source File: %s', countries_txt)
+        except Exception as e:
+            log('START :: Error creating Country Dictionary: %s', e)
+            log('START :: Error: Country Source File: %s', countries_txt)
+            continueSetup = False
 
-    #   2.     Tidy Genres: create dictionary containing the tidy genres from genres.tsv file located in plugins code directory
-    log(LOG_SUBLINE)
-    log('START :: Prepare Tidied Dictionary of Genre/Countries')
-    global TIDYDICT
-    tidiedCountriesSet = set()                    # used for debugging
-    try:
-        tidy_txt = os.path.join(PlexSupportPath, 'Plug-ins', 'GayTidy.txt')
-        csvfile = PlexLoadFile(tidy_txt)
-        csvrows = csvfile.split('\n')
-        for idx, row in enumerate(csvrows, start=1):
-            if '::' in row:
+    #   6. Genres Dictionary: create dictionary containing genres and image urls from Genres.txt located in plugins code directory
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 6.\tPrepare Dictionary of Genres and Symbols')
+        GENRESDICT = {}
+        try:
+            genres_txt = os.path.join(PGMA_FOLDER, 'Genres.txt')
+            txtfile = PlexLoadFile(genres_txt)
+            txtrows = txtfile.split('\n')
+            for idx, row in enumerate(txtrows, start=1):
+                if '::' not in row:
+                    log('START :: {0:<29} {1}'.format('Invalid Format Row', 'Row {0} - {1}'.format(idx, row)))
+                    continue
+
                 keyValue = row.split('::')
                 keyValue = [x.strip() for x in keyValue]
-                key = keyValue[0].lower()
-                value = keyValue[1]
-                if key not in TIDYDICT and len(keyValue) == 2:
+                key =  keyValue[0].lower()
+
+                if key in GENRESDICT:
+                    log('START :: {0:<29} {1}'.format('Duplicate/Error Row', 'Row {0} - {1}'.format(idx, row)))
+                    continue
+
+                value = os.path.join(PGMA_GENREFOLDER, keyValue[1])
+                GENRESDICT[key] = value
+
+            log('START :: {0:<29} {1}'.format('Genres Dictionary', '{0:>4} - {1}'.format(len(GENRESDICT), sorted(GENRESDICT))))
+
+        except Exception as e:
+            log('START :: Error creating Genres Dictionary: %s', e)
+            log('START :: Error: Genres Source File: %s', genres_txt)
+            continueSetup = False
+
+    #   7.     Tidy Genres: create dictionary containing the tidy genres from genres.tsv file located in plugins code directory
+    #                       unless second field is an 'x', it should appear in the COUNTRYSET or GENRESDICT
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 7.\tPrepare Tidied Dictionary of Genres and Countries')
+        TIDYDICT = {}
+        tidiedCountriesSet = set()                              # used for debugging
+        tidiedGenresSet = set()                                 # used for debugging
+        tidiedNullSet = set()                                   # used for debugging
+        tidiedErrorSet = set()                                  # used for debugging
+        try:
+            # Main Tidy has to be first in list as user can make changes
+            tidyList = ['GayTidy.txt', 'UserGayTidy.txt'] if AGENT_TYPE == '⚣' else ['StraightTidy.txt', 'UserStraightTidy.txt']
+            log('START :: {0:<29} {1}'.format('Tidy Files', tidyList))
+            for tidy in tidyList:
+                tidy_txt = os.path.join(PGMA_FOLDER, tidy)
+                txtfile = PlexLoadFile(tidy_txt)
+                txtrows = txtfile.split('\n')
+                for idx, row in enumerate(txtrows, start=1):
+                    if '::' not in row:
+                        log('START :: {0:<29} {1}'.format('Invalid Format Row', 'Row {0} - {1}'.format(idx, row)))
+                        continue
+
+                    keyValue = row.split('::')
+                    keyValue = [x.strip() for x in keyValue]
+                    key = keyValue[0].lower()
+                    value = keyValue[1]
+                    if key in TIDYDICT:
+                        log('START :: {0:<29} {1}'.format('Duplicate/Error Row', 'Row {0} - {1}'.format(idx, row)))
+                        continue
+
                     TIDYDICT[key] = value if value != 'x' else None
                     if value in COUNTRYSET:                 # useful for comparing cities, locations to the country they are in when debugging
                         tidiedCountriesSet.add('{0} : {1}'.format(keyValue[0], value))
-                else:
-                    log('START :: {0:<29} {1}'.format('Duplicate/Error Row', 'Row {0} - {1}'.format(idx, row)))
-            else:
-                log('START :: {0:<29} {1}'.format('Invalid Format Row', 'Row {0} - {1}'.format(idx, row)))
+                    elif value.lower() in GENRESDICT:
+                        tidiedGenresSet.add('{0} : {1}'.format(keyValue[0], value))
+                    elif value == 'x':
+                        tidiedNullSet.add('{0} : {1}'.format(keyValue[0], value))
+                    else:
+                        tidiedErrorSet.add('{0} : {1}'.format(keyValue[0], value))
 
-        tidiedSet = set(TIDYDICT.values())
-        log('START :: {0:<29} {1}'.format('Original Categories', '{0:>2} - {1}'.format(len(TIDYDICT), sorted(TIDYDICT.keys()))))
-        log('START :: {0:<29} {1}'.format('Tidied Categories', '{0:>2} - {1}'.format(len(tidiedSet), sorted(tidiedSet))))
-        log('START :: {0:<29} {1}'.format('Tidied Countries', '{0:>2} - {1}'.format(len(tidiedCountriesSet), sorted(tidiedCountriesSet))))
+            log('START :: {0:<29} {1}'.format('Original Categories', '{0:>4} - {1}'.format(len(TIDYDICT), sorted(TIDYDICT.keys()))))
+            log('START :: {0:<29} {1}'.format('Tidied Countries', '{0:>4} - {1}'.format(len(tidiedCountriesSet), sorted(tidiedCountriesSet))))
+            log('START :: {0:<29} {1}'.format('Tidied Genres', '{0:>4} - {1}'.format(len(tidiedGenresSet), sorted(tidiedGenresSet))))
+            log('START :: {0:<29} {1}'.format('Null Categories', '{0:>4} - {1}'.format(len(tidiedNullSet), sorted(tidiedNullSet))))
+            log('START :: {0:<29} {1}'.format('Error Categories', '{0:>4} - {1}'.format(len(tidiedErrorSet), sorted(tidiedErrorSet))))
+            continueSetup = False if tidiedErrorSet else True
+
+        except Exception as e:
+            log('START :: Error creating Tidy Categories Dictionary: %s', e)   
+            log('START :: Error: Tidy Categories Source File: %s', tidy_txt)   
+            continueSetup = False
+
+    #   8.     Retrieve Plex Token
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 8.\tRetrieve Plex Token')
+        MACHINEID = ''
+        if not PLEXTOKEN and os.name == 'nt':
+            try:
+                preferences_xml = os.path.join(PlexSupportPath, 'preferences.xml').replace('Plex', 'Plex\Plex')
+                log('START :: {0:<29} {1}'.format('Preference XML', preferences_xml))
+                txtfile = PlexLoadFile(preferences_xml)
+                txtrows = txtfile.split('\n')
+                for row in txtrows:
+                    if 'PlexOnlineToken=' in row:
+                        item = row.split('PlexOnlineToken=')[1]
+                        item = item.split()[0].replace('"', '').strip()
+                        PLEXTOKEN = item
+
+                    if 'MachineIdentifier=' in row:
+                        item = row.split('MachineIdentifier=')[1]
+                        item = item.split()[0].replace('"', '').strip()
+                        MACHINEID = item
+
+                log('START :: {0:<29} {1}'.format('Machine ID', MACHINEID))
+
+            except Exception as e:
+                log('START :: Error retrieving Plex Token: %s', e)
+                log('START :: Error: Preferences XML File: %s', preferences_xml)
+        else:
+            PLEXTOKEN = Prefs['plextoken']
+
+        if PLEXTOKEN and PLEXTOKEN is not None:
+            log('START :: {0:<29} {1}'.format('Plex Token', '*' * len(PLEXTOKEN)))
+        else:
+            log('START :: {0:<29} {1}'.format('Plex Token', 'MISSING'))
+            PLEXTOKEN = ''
+            continueSetup = False
+
+    #   9. Get paths to Default Posters for Agent, Compilations Genre, IAFD, Stacks
+    if continueSetup:
+        log(LOG_SUBLINE)
+        log('START :: 9.\tRetrieve Agent and Default Posters')
+        global AGENT_POSTER, COMPILATIONS_POSTER, IAFDFOUND_POSTER, IAFDNOTFOUND_POSTER, STACKED_POSTER, NOTSTACKED_POSTER, NOCAST_POSTER, NODIRECTOR_POSTER, WATERMARK
+        AGENT_POSTER = os.path.join(PGMA_SYSTEMFOLDER, '{0}.png'.format(AGENT))
+        AGENT_POSTER = AGENT_POSTER if os.path.exists(AGENT_POSTER) else ''
+
+        COMPILATIONS_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'Compilations.png')
+        COMPILATIONS_POSTER = COMPILATIONS_POSTER if os.path.exists(COMPILATIONS_POSTER) else ''
+
+        IAFDFOUND_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'IAFD-Found.png')
+        IAFDFOUND_POSTER = IAFDFOUND_POSTER if os.path.exists(IAFDFOUND_POSTER) else ''
+
+        IAFDNOTFOUND_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'IAFD-NotFound.png')
+        IAFDNOTFOUND_POSTER = IAFDNOTFOUND_POSTER if os.path.exists(IAFDNOTFOUND_POSTER) else ''
+
+        STACKED_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'Stacked-Yes.png')
+        STACKED_POSTER = STACKED_POSTER if os.path.exists(STACKED_POSTER) else ''
+
+        NOTSTACKED_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'Stacked-No.png')
+        NOTSTACKED_POSTER = NOTSTACKED_POSTER if os.path.exists(NOTSTACKED_POSTER) else ''
+
+        NOCAST_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'NoCast.png')
+        NOCAST_POSTER = NOCAST_POSTER if os.path.exists(NOCAST_POSTER) else ''
+
+        NODIRECTOR_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'NoDirector.png')
+        NODIRECTOR_POSTER = NODIRECTOR_POSTER if os.path.exists(NODIRECTOR_POSTER) else ''
+
+        WATERMARK = String.URLEncode(WATERMARK)
+
+        log('START :: {0:<29} {1}'.format('Agent Poster', AGENT_POSTER if AGENT_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('Compilations Poster', COMPILATIONS_POSTER if COMPILATIONS_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('IAFD Poster', IAFDFOUND_POSTER if IAFDFOUND_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('Not IAFD Poster', IAFDNOTFOUND_POSTER if IAFDNOTFOUND_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('Stacked Poster', STACKED_POSTER if STACKED_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('Not Stacked Poster', NOTSTACKED_POSTER if NOTSTACKED_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('No Cast Poster', NOCAST_POSTER if NOCAST_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('No Director Poster', NODIRECTOR_POSTER if NODIRECTOR_POSTER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('Watermark', WATERMARK if WATERMARK else '** FAIL **'))
+
+        # if any of the posters do not resolve we have to stop the Search Process: set GLOBAL variable and use later
+        START_SCRAPE = 'Yes' if PLEXTOKEN and not tidiedErrorSet and AGENT_POSTER != '' and COMPILATIONS_POSTER != '' and IAFDFOUND_POSTER != '' and IAFDNOTFOUND_POSTER != '' and STACKED_POSTER != '' and NOTSTACKED_POSTER != '' and NOCAST_POSTER != '' and NODIRECTOR_POSTER != '' and PLEXTOKEN != '' and WATERMARK != '' else 'No'
+
+        log('START :: {0:<29} {1}'.format('Start Scrape Process', START_SCRAPE))
+
+        # not needed anymore - free up memory
         tidiedCountriesSet = None
+        tidiedGenresSet = None
+        tidiedNullSet = None
+        tidiedErrorSet = None
         del(tidiedCountriesSet)
+        del(tidiedGenresSet)
+        del(tidiedNullSet)
+        del(tidiedErrorSet)
 
-
-    except Exception as e:
-        log('START :: Error creating Tidy Categories Dictionary: %s', e)   
-        log('START :: Error: Tidy Categories Source File: %s', tidy_txt)   
+    return True
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def showSetData(mySet, myString):
@@ -6413,4 +7231,5 @@ def TranslateString(myString, siteLanguage, plexLibLanguageCode, detectLanguage)
                 log('UTILS :: {0:<29} {1}'.format('Translation Skipped', plexLibLanguageCode))
 
     myString = myString if myString else ' ' # return single space to initialise metadata summary field
+
     return myString

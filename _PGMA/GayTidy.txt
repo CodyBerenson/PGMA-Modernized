@@ -249,6 +249,7 @@ Cars & Motorcycles::Vehicles
 Casting Couch / Auditions::Showcase
 Casting::Showcase
 Caymanian::Cayman Islands
+CBT::BDSM
 Celebrities -> Celebrity Nude Scenes::x
 Celebrities::x
 Celebrity Sex Tapes::x
@@ -284,6 +285,7 @@ Chubs::Bears
 Circle Jerk::Masturbation
 Circle-Jerk::Masturbation
 Classic::x
+Classic Plot::Role Play
 Classics -> 70'S::x
 Classics -> 80'S::x
 Classics -> 90'S::x
@@ -640,6 +642,8 @@ Horror::x
 Horse::Big Cocks
 Horse Hung::Big Cocks
 Hot Gay Sex::x
+Huge Cock::Big Cocks
+Huge Dick::Big Cocks
 Humiliation::BDSM
 Humiliations::BDSM
 Hungarian::Hungary
@@ -687,6 +691,7 @@ International -> Thailand::Thailand
 International -> Turkey::Turkey
 International -> United Kingdom::United Kingdom
 International::x
+International Star Showcase::Showcase
 Interracial - Asian Men::Interracial
 Interracial - Black Men::Interracial
 Interracial - Caucasian Men::Interracial
@@ -718,6 +723,8 @@ Jeans & Denim::Fetish Wear
 Jock Straps::Fetish Wear
 Jocks & Muscle Hunks::Fit Guys
 Jocks::Fit Guys
+Jockstrap::Fetish Wear
+Jockstraps::Fetish Wear
 JOI::Masturbation
 Jordanian::Jordan
 Jousting::Fetish
@@ -909,6 +916,7 @@ NL::Canada
 NM::United States
 North Carolina::United States
 North Dakota::United States
+North Hollywood::United States
 North Korean::North Korea
 Norwegian::Norway
 Nova Scotia::Canada
@@ -946,6 +954,7 @@ Oral -> Swallowing::Oral Sex
 Oral Sex / Blow Job::Oral Sex
 Oral Sex::Oral Sex
 Oral::Oral Sex
+Oral/Anal Sex::Anal Sex
 Oregon::United States
 Orgies::Group Sex (3+)
 Orgy::Group Sex (3+)
@@ -969,9 +978,11 @@ Pantyhose & Stockings::Fetish Wear
 Papua New Guinean::Papua New Guinea
 Paraguayan::Paraguay
 Paris::France
+Park / Woods::Outdoors
 Parody / Spoof::Role Play
 Parody::Role Play
-Parties::Other
+Parties::Group Sex (3+)
+Parties / Clubs::Group Sex (3+)
 PE::Canada
 Pee::Watersports
 Penis Pumps::Sex Toys
@@ -986,26 +997,26 @@ Pirates::Role Play
 Pissing::Watersports
 Pitcairn Islander::Pitcairn
 Pizza Delivery::Deliveries
-Plot Based::x
-Plot Oriented -> Audio Stories::x
-Plot Oriented -> Classic::x
-Plot Oriented -> Contemporary::x
+Plot Based::Role Play
+Plot Oriented -> Audio Stories::Role Play
+Plot Oriented -> Classic::Role Play
+Plot Oriented -> Contemporary::Role Play
 Plot Oriented -> Fantasy & Supernatural::Role Play
-Plot Oriented -> Futuristic / Sci-Fi::x
-Plot Oriented -> Grindhouse::x
-Plot Oriented -> Historical::x
+Plot Oriented -> Futuristic / Sci-Fi::Role Play
+Plot Oriented -> Grindhouse::Role Play
+Plot Oriented -> Historical::Role Play
 Plot Oriented -> Holidays -> Christmas::x
 Plot Oriented -> Holidays -> Halloween::x
 Plot Oriented -> Holidays -> Valentines Day::x
-Plot Oriented -> Holidays::x
-Plot Oriented -> Horror::x
-Plot Oriented -> Humor::x
-Plot Oriented -> Politics::x
-Plot Oriented -> Precondom::x
-Plot Oriented -> Spoofs / Parodies::x
-Plot Oriented -> Sports::x
-Plot Oriented -> Vignettes::x
-Plot Oriented::x
+Plot Oriented -> Holidays::Role Play
+Plot Oriented -> Horror::Role Play
+Plot Oriented -> Humor::Role Play
+Plot Oriented -> Politics::Role Play
+Plot Oriented -> Precondom::Role Play
+Plot Oriented -> Spoofs / Parodies::Role Play
+Plot Oriented -> Sports::Role Play
+Plot Oriented -> Vignettes::Role Play
+Plot Oriented::Role Play
 Poland::Poland
 Pole::Poland
 Police::Role Play
@@ -1024,6 +1035,7 @@ Porn Stars::Showcase
 Porno Filmmaking/Adult Star::Showcase
 Portugal::Portugal
 Portuguese::Portugal
+Portuguese Language::x
 POV::Voyeurism
 Prague::Czech Republic
 Pre-Condom Era - Plot::x
@@ -1070,6 +1082,7 @@ RI::United States
 Rim Job::Rimming
 Rimming::Rimming
 Rio::Brazil
+Rio de Janeiro::Brazil
 Role Play / Fantasy::Role Play
 Romance::x
 Romanian::Romania
@@ -1125,7 +1138,7 @@ Settings -> Massage Parlor::Massage
 Settings -> Office::White Collar
 Settings -> Outdoors::Outdoors
 Settings -> Park / Woods::Outdoors
-Settings -> Parties / Clubs::Other
+Settings -> Parties / Clubs::Group Sex (3+)
 Settings -> Photoshoot::Showcase
 Settings -> Pool/Hot Tub::Outdoors
 Settings -> Prison/Jail::Role Play
@@ -1265,6 +1278,7 @@ Teen (18+)::Twinks/Young Men
 Tennessee::United States
 Texas::United States
 Thai::Thailand
+The Playground::United States
 Three Way::Group Sex (3+)
 Threesome::Group Sex (3+)
 Threesomes & More::Group Sex (3+)
