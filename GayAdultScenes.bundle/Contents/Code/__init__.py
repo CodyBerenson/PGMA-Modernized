@@ -15,7 +15,7 @@
 '''
 import platform, sys
 
-PLUGIN_LOG_TITLE = 'GayAdultScenes'
+AGENT = 'GayAdultScenes'
 VERSION_NO = '2020.02.07.03'
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -41,7 +41,7 @@ class GayAdultScenes(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def log(self, message, *args):
         ''' log messages '''
-        Log(PLUGIN_LOG_TITLE + ' - ' + message, *args)
+        Log(AGENT + ' - ' + message, *args)
 
     # -------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang, manual):

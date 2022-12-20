@@ -82,6 +82,7 @@ Arkansas::United States
 Armenian::Armenia
 Armpit::Other
 Armpits::Other
+Art Film::x
 Asian / Pacific Islander::x
 Asian::x
 Asians::x
@@ -217,6 +218,7 @@ Bottom::Anal Sex
 Boxed Sets::x
 Boxing::Fit Guys
 Boyfriends::Couples
+Bratislava::Slovakia
 Brazilian::Brazil
 Breast Play::Other
 Breeding::Bareback
@@ -315,6 +317,7 @@ Clothing::x
 Clowns::Role Play
 Clubbing::Other
 CO::United States
+Cock Bondage::BDSM
 Cock & Balls Torture::BDSM
 Cock-Sucking::Oral Sex
 Cocksucking::Oral Sex
@@ -458,6 +461,7 @@ Exclusive DVDs::x
 Exclusive Movies -> Rare And Out Of Print::x
 Exclusive Movies::x
 Exclusive::x
+Exclusives::x
 Exhibitionism::Exhibitionism
 Extreme Penetration::Extreme Penetration
 Extreme Penetrations::Extreme Penetration
@@ -522,6 +526,7 @@ Firemen::Role Play
 Fishhooking::Oral Sex
 Fisting::Fisting
 FL::United States
+Flexible::Fit Guys
 Flog::BDSM
 Flogging::BDSM
 Flogs::BDSM
@@ -591,6 +596,7 @@ Go-Go Boys::Exhibitionism
 Gonzo -> Behind The Scenes::Oral Sex
 Gonzo -> Pov::Oral Sex
 Gonzo::Oral Sex
+Gran Canaria::Spain
 Grandpa::Mature
 Greek::Greece
 Grenadan::Grenada
@@ -798,6 +804,7 @@ Lycra::Fetish Wear
 MA::United States
 Macedonian::North Macedonia
 Madagascan::Madagascar
+Magic Touch::x
 Maine::United States
 Malawian::Malawi
 Malaysian::Malaysia
@@ -864,6 +871,7 @@ Multi-DVD Packs::x
 Multi-ethnic::Interracial
 Multi-Pack::x
 Multiple Pops::Cum
+Muscle Bondage::BDSM
 Muscle Hunks::Muscles
 Muscle Studs::Muscles
 Muscle Worship::Muscles
@@ -875,6 +883,7 @@ Music Themed -> Musicals::x
 Musicals::x
 Mystery::x
 Namibian::Namibia
+Naples::Italy
 Nationalities / Ethnic Groups::x
 Native American::x
 Natural Body Hair::Beards/Hairy
@@ -914,6 +923,7 @@ Niuean::Niue
 NJ::United States
 NL::Canada
 NM::United States
+North America::x
 North Carolina::United States
 North Dakota::United States
 North Hollywood::United States
@@ -1018,7 +1028,6 @@ Plot Oriented -> Sports::Role Play
 Plot Oriented -> Vignettes::Role Play
 Plot Oriented::Role Play
 Poland::Poland
-Pole::Poland
 Police::Role Play
 Policeman::Role Play
 Policemen::Role Play
@@ -1197,6 +1206,7 @@ Solos::Exhibitionism
 Somali::Somalia
 Sounding::Extreme Penetration
 South African::South Africa
+South America::x
 South America / Latin America::x
 South Carolina::United States
 South Dakota::United States
@@ -1215,6 +1225,7 @@ Spies & Secret Agents::Role Play
 Spit::BDSM
 Spits::BDSM
 Spitting::BDSM
+Sports Gear::Fit Guys
 Sport Plots::Fit Guys
 Sports Sex::Fit Guys
 Spring Break::College/Frat/Studs
@@ -1252,6 +1263,7 @@ Sudanese::Sudan
 Suits & Tie::White Collar
 Suits & Ties::White Collar
 Superhero::Role Play
+Superheroes::Role Play
 SuperHeroes vs Villains::Role Play
 Surinamese::Suriname
 Swallow::Oral Sex
@@ -1338,6 +1350,7 @@ Twinks (18-22)::Twinks/Young Men
 Twinks::Twinks/Young Men
 Twins::Other
 TX::United States
+Tyrol::Austria
 U.K.::United Kingdom
 U.S.::United States
 Ugandan::Uganda

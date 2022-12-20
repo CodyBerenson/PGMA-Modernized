@@ -42,6 +42,8 @@ General Functions found in all agents
                     New routine to match film Titles
                     standardised update metadata routine
                     implemented Collection Grouping - Preference based
+    19 Dec 2022     Roman Numeral and Title Matching, corrections
+                    Add Director and Cast Nationalities to Country Metadata
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, random, re, requests, subprocess, time, unicodedata
@@ -3518,7 +3520,7 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
 
             log('UTILS :: {0:<29} {1}'.format('External Countries', '{0:>2} - {1}'.format(len(countriesSet), sorted(countriesSet))))
 
-            htmlcountries = html.xpath('//td[text()="location"]//following-sibling::td[1]/text()')[0].strip()
+            htmlcountries = html.xpath('//td[text()="stats/info"]//following-sibling::td//td[text()="location"]//following-sibling::td[1]/text()')[0].strip()
             htmlcountries = [x.strip() for x in htmlcountries.split(',')]
             log('UTILS :: {0:<29} {1}'.format('GEVI Countries', '{0:>2} - {1}'.format(len(htmlcountries), htmlcountries)))
             for idx, item in enumerate(htmlcountries, start=1):
@@ -3576,7 +3578,8 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
                     item = '{0}1231'.format(item)
                     productionDates.add(datetime.strptime(item, '%Y%m%d'))
 
-                siteInfoDict['ReleaseDate'] = min(productionDates) if productionDates else datetime.fromtimestamp(0)
+                htmldate = min(productionDates) if productionDates else datetime.fromtimestamp(0)
+                siteInfoDict['ReleaseDate'] = htmldate
                 log('UTILS :: {0:<29} {1}'.format('Release Date', htmldate.strftime('%Y-%m-%d')))
 
             except Exception as e:
@@ -5152,17 +5155,18 @@ def logHeader(myFunc, media, lang):
     log('%s:: Version:                              v.%s', myFunc, VERSION_NO)
     log('%s:: Python:                               %s (%s): %s', myFunc, platform.python_version(), platform.architecture()[0], platform.python_build())
     log('%s:: Platform:                             %s - %s %s', myFunc, platform.machine(), platform.system(), platform.release())
+    log('%s:: Operating System Name                 %s', myFunc, os.name)
     log('%s:: Preferences:', myFunc)
     log('%s::  > Legend Before Summary:             %s', myFunc, PREFIXLEGEND)
     log('%s::  > Reset Metadata:                    %s', myFunc, RESETMETA)
-    log('%s::  > Collection Gathering Order', myFunc)
-    log('%s::      > System:                        %s', myFunc, COLSYSTEM)
-    log('%s::      > Genres:                        %s, Prefix genres with %s symbol?: %s', myFunc, COLGENRE, AGENT_TYPE, PREFIXGENRE)
-    log('%s::      > Countries                      %s, Display poster as %s', myFunc, COLCOUNTRY, COUNTRYPOSTERTYPE)
-    log('%s::      > Studio:                        %s', myFunc, COLSTUDIO)
-    log('%s::      > Series:                        %s', myFunc, COLSERIES)
-    log('%s::      > Directors:                     %s', myFunc, COLDIRECTOR)
-    log('%s::      > Cast:                          %s', myFunc, COLCAST)
+    log('%s::  > Collection Gathering:', myFunc)
+    log('%s::      > System:                        %s', myFunc, 'Yes' if COLSYSTEM else 'No')
+    log('%s::      > Genres:                        %s, Prefix genres with %s symbol?: %s', myFunc, 'Yes' if COLGENRE else 'No', AGENT_TYPE, PREFIXGENRE)
+    log('%s::      > Countries                      %s, Display poster as %s', myFunc, 'Yes' if COLCOUNTRY else 'No', COUNTRYPOSTERTYPE)
+    log('%s::      > Studio:                        %s', myFunc, 'Yes' if COLSTUDIO else 'No')
+    log('%s::      > Series:                        %s', myFunc, 'Yes' if COLSERIES else 'No')
+    log('%s::      > Directors:                     %s', myFunc, 'Yes' if COLDIRECTOR else 'No')
+    log('%s::      > Cast:                          %s', myFunc, 'Yes' if COLCAST else 'No')
     log('%s::  > Poster Source - Download?          %s', myFunc, POSTERSOURCEDOWNLOAD)
     log('%s::  > Match IAFD Duration:               %s', myFunc, MATCHIAFDDURATION)
     log('%s::  > Match Site Duration:               %s', myFunc, MATCHSITEDURATION)
@@ -5199,6 +5203,7 @@ def makeASCII(myString):
     pattern = ur'[{0}]'.format(''.join(doubleQuotes))
     myString = re.sub(pattern, '"', myString)
 
+    '''
     # convert to unicode
     myString = u'{0}'.format(myString)
     asciiString = ''
@@ -5216,6 +5221,9 @@ def makeASCII(myString):
             asciiString += char
 
     asciiString = unidecode(asciiString)
+    '''
+
+    asciiString = unidecode(myString)
 
     return asciiString
 
@@ -5786,7 +5794,7 @@ def matchFilename(media):
 
     #   Studio
     filmVars['Studio'] = groups['fnSTUDIO'].split(';')[0].strip()
-    filmVars['CompareStudio'] = Normalise(filmVars['Studio'])
+    filmVars['CompareStudio'] = Normalise(makeASCII(filmVars['Studio']))
 
     #   Title
     filmVars['CompareTitle'] = set()
@@ -5794,8 +5802,8 @@ def matchFilename(media):
     filmVars['NormaliseTitle'] = Normalise(filmVars['Title'])
     filmVars['CompareTitle'].add(sortAlphaChars(filmVars['NormaliseTitle']))
 
-    # Search Strings - A Title is split into Search Strings if a Dash-space is found
-    searchTitles = []
+    #   Search Strings - A Title is split into Search Strings if a Dash-space is found
+    searchTitlesTemp = []
     pattern = r'(?<![-.])\b[0-9]+\b(?!\.[0-9])$'                                        # series matching = whole separate number at end of string
     splitFilmTitle = filmVars['Title'].split('- ')
     splitFilmTitle = [x.strip() for x in splitFilmTitle]
@@ -5803,11 +5811,11 @@ def matchFilename(media):
     for index, partTitle in enumerate(splitFilmTitle):
         matchedSearchTitle = re.subn(pattern, '', partTitle)
         if matchedSearchTitle[1]:
-            searchTitles.insert(0, matchedSearchTitle[0].strip())                       # e.g. Pissing
+            searchTitlesTemp.insert(0, matchedSearchTitle[0].strip())                       # e.g. Pissing
         else:
             if index < splitCount:                                                      # only add to collection if not last part of title e.g. Hardcore Fetish Series
-                searchTitles.insert(0, partTitle)
-    
+                searchTitlesTemp.insert(0, partTitle)
+
     #   Series - for use in creating collections - A Series is only considered if it is separated by space-dash-space
     series = []
     episodes = []
@@ -5834,7 +5842,8 @@ def matchFilename(media):
 
     filmVars['Title'] = re.sub(ur' - |- ', ': ', filmVars['Title'])                     # replace dashes with colons
     pattern = ur'[' + re.escape(''.join(['.', '!', '%', '?'])) + ']+$'
-    filmVars['ShortTitle'] = re.sub(pattern, '', ' '.join(splitFilmTitle).strip())      # strip punctuations at end of string
+    shortTitle = re.sub(pattern, '', ' '.join(splitFilmTitle).strip())      # strip punctuations at end of string
+    filmVars['ShortTitle'] = shortTitle
     filmVars['NormaliseShortTitle'] = Normalise(filmVars['ShortTitle'])
     filmVars['CompareTitle'].add(sortAlphaChars(filmVars['NormaliseShortTitle']))
 
@@ -5852,9 +5861,14 @@ def matchFilename(media):
     pattern = ur' 1$'
     filmVars['ShortTitle'] = re.sub(pattern, '', filmVars['ShortTitle'], flags=re.IGNORECASE).strip()
 
-    searchTitles.append(filmVars['ShortTitle'])                     # for GEVi - temp
-    filmVars['SearchTitles'] = searchTitles
-    filmVars['SearchTitle'] = filmVars['ShortTitle']                # for rest - temp
+    #   insert short title and whole whole title as first and second search titles and remove any duplicates
+    searchTitlesTemp.append(shortTitle)
+    fullSearchTitle = ' '.join(searchTitlesTemp)
+    searchTitlesTemp.insert(0, fullSearchTitle)
+    searchTitles = []
+    [searchTitles.append(i) for i in searchTitlesTemp if not i in searchTitles]
+    filmVars['SearchTitles'] = searchTitles                         # for GEVI and AEBN - multiple searches allowed
+    filmVars['SearchTitle'] = filmVars['ShortTitle']                # for rest - search on shortTitle - temporary - to be upgraded
 
     #   Prepare IAFD variables
     filmVars['IAFDDuration'] = datetime.fromtimestamp(0) # default 1970-01-01 00:00:00
@@ -5941,7 +5955,7 @@ def matchDuration(siteDuration, FILMDICT, matchAgainstIAFD=False):
     testDuration = 'Passed' if dxmm <= DURATIONDX else 'Failed'
 
     log('UTILS :: {0:<29} {1}'.format('Match Against IAFD Duration', matchAgainstIAFD))
-    log('UTILS :: {0:<29} {1}'.format('Site Duration', siteDuration.strftime('%H:%M:%S')))
+    log('UTILS :: {0:<29} {1}'.format('{0} Duration'.format(AGENT), siteDuration.strftime('%H:%M:%S')))
     if matchAgainstIAFD:
         log('UTILS :: {0:<29} {1}'.format('IAFD Duration', FILMDICT['IAFDDuration'].strftime('%H:%M:%S')))
     else:
@@ -5964,7 +5978,7 @@ def matchReleaseDate(siteReleaseDate, FILMDICT, UseTwoYearMatch=False):
     dxMaximum = 731 if UseTwoYearMatch else 366               # 2 years if matching film year with IAFD and 1 year for Agent
     testReleaseDate = 'Failed' if dx > dxMaximum else 'Passed'
 
-    log('UTILS :: {0:<29} {1}'.format('Site Release Date', siteReleaseDate))
+    log('UTILS :: {0:<29} {1}'.format('{0} Release Date'.format(AGENT), siteReleaseDate))
     log('UTILS :: {0:<29} {1}'.format('File Release Date', FILMDICT['CompareDate']))
     log('UTILS :: {0:<29} {1}'.format('Delta in Days', dx))
     log('UTILS :: {0:<29} {1}'.format('Release Date Comparison Test', testReleaseDate))
@@ -5994,10 +6008,11 @@ def matchStudio(siteStudio, FILMDICT):
     if not testStudio:
         testStudio = 'Failed Match'
 
-    log('UTILS :: {0:<29} {1}'.format('Site Studio', siteStudio))
+    log('UTILS :: {0:<29} {1}'.format('{0} Studio'.format(AGENT), siteStudio))
+    log('UTILS :: {0:<29} {1}'.format('File Studio', FILMDICT['Studio']))
     log('UTILS :: {0:<29} {1}'.format('IAFD Studio', FILMDICT['IAFDStudio']))
-    log('UTILS :: {0:<29} {1}'.format('Compare Site Studio', compareSiteStudio))
-    log('UTILS :: {0:<29} {1}'.format('       Agent Studio', FILMDICT['CompareStudio']))
+    log('UTILS :: {0:<29} {1}'.format('Compare {0} Studio'.format(AGENT), compareSiteStudio))
+    log('UTILS :: {0:<29} {1}'.format('        File Studio', FILMDICT['CompareStudio']))
     log('UTILS :: {0:<29} {1}'.format('        IAFD Studio', FILMDICT['CompareIAFDStudio']))
     log('UTILS :: {0:<29} {1}'.format('Studio Comparison Test', testStudio))
 
@@ -6015,14 +6030,15 @@ def matchTitle(filmTitle, FILMDICT):
     filmTitleNormaliseA = Normalise(filmTitle)
 
     filmTitleNormaliseB = ''
-    if FILMDICT['NormaliseShortTitle'] in filmTitleNormaliseA:
+    if FILMDICT['NormaliseShortTitle'] in filmTitleNormaliseA and FILMDICT['NormaliseShortTitle'] != filmTitleNormaliseA:
         pattern = re.compile(re.escape(FILMDICT['NormaliseShortTitle']), re.IGNORECASE)
         filmTitleNormaliseB = '{0}{1}'.format(re.sub(pattern, '', filmTitleNormaliseA).strip(), FILMDICT['NormaliseShortTitle'])
 
     filmCompareTitle = sortAlphaChars(filmTitleNormaliseA)
     testTitle = 'Passed' if filmCompareTitle in FILMDICT['CompareTitle'] else 'Failed'
-    if testTitle == 'Failed':
+    if testTitle == 'Failed' and filmTitleNormaliseB:
         filmCompareTitle = sortAlphaChars(filmTitleNormaliseB)
+        log('UTILS :: {0:<29} {1}'.format('Comparison Title B', filmCompareTitle))
         testTitle = 'Passed' if filmCompareTitle in FILMDICT['CompareTitle'] else 'Failed'
 
     if testTitle == 'Failed':                   # check if episode  i.e. series + number in agent title
@@ -6032,10 +6048,10 @@ def matchTitle(filmTitle, FILMDICT):
                 testTitle = 'Passed'
                 break
 
-    log('UTILS :: {0:<29} {1}'.format('Site Title', filmTitle))
-    log('UTILS :: {0:<29} {1}'.format('     Comparison Title', filmCompareTitle))
+    log('UTILS :: {0:<29} {1}'.format('{0} Title'.format(AGENT), filmTitle))
+    log('UTILS :: {0:<29} {1}'.format('Comparison Title', filmCompareTitle))
     log('UTILS :: {0:<29} {1}'.format('File Title', FILMDICT['Title']))
-    log('UTILS :: {0:<29} {1}'.format('     Comparison Title List', FILMDICT['CompareTitle']))
+    log('UTILS :: {0:<29} {1}'.format('Comparison Title List', FILMDICT['CompareTitle']))
     log('UTILS :: {0:<29} {1}'.format('Title Comparison Test', testTitle))
 
     if testTitle == 'Failed':
@@ -6047,7 +6063,7 @@ def matchTitle(filmTitle, FILMDICT):
 def Normalise(myString):
     ''' Normalise string for, strip uneeded characters for comparison of web site values to file name regex group values '''
     # Check if string has roman numerals as in a series; note the letter I will be converted
-    myString = '{0} '.format(myString)  # append space at end of string to match last characters
+    # myString = '{0} '.format(myString)  # append space at end of string to match last characters
     pattern = r'(?=\b[MDCLXVI]+\b)M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$'
     matches = re.findall(pattern, myString, re.IGNORECASE)  # match against string
     if matches:
@@ -6075,7 +6091,7 @@ def Normalise(myString):
     myString = myString.replace(': ', ' - ')
 
     # change string to ASCII
-    # myString = makeASCII(myString)
+    myString = makeASCII(myString)
 
     # strip domain suffixes, vol., volume, Pt, Part from string, standalone '1's' then strip all non alphanumeric characters
     # pattern = r'[.]([a-z]{2,3}co[.][a-z]{2})|Vol[.]|Vols[.]|Nr[.]|\bVolume\b|\bVolumes\b|Pt |\bPart\b[^A-Za-z0-9]+'
@@ -6103,6 +6119,7 @@ def setMetadata(metadata, media, FILMDICT):
         return
 
     collectionsDict = {}                                                            # used to create collections that have extra information like cast photos, country flags etc order by Sort title
+    nationalities = set()
     prefix = '{0}{1}'.format(AGENT_TYPE, THIN_SPACE) if PREFIXGENRE else ''         # add prefix to genres and genre collections if preferenced
     deathRegex = r'Date of Death|Year of Death|would be'.replace(' ', NOBREAK_SPACE)
     errorCountryArt = os.path.join(PGMA_COUNTRYART, '_Error.png')
@@ -6194,9 +6211,9 @@ def setMetadata(metadata, media, FILMDICT):
             b. Tag line                         : Corresponds to the url of film
             c. Ratings                          : Viewer Rating out of 100%
             d. Genres                           : List of Genres (alphabetic order)
-            e. Countries
-            f. Cast                             : List of Actors, Roles and Photos (alphabetic order) - Photos sourced from IAFD
-            g. Directors                        : List of Directors and Photos (alphabetic order)
+            e. Cast                             : List of Actors, Roles and Photos (alphabetic order) - Photos sourced from IAFD
+            f. Directors                        : List of Directors and Photos (alphabetic order)
+            g. Countries
             h. Posters                          : Front Cover of DVD
             i. Art (Background)                 : Back Cover of DVF
             j. Reviews                          : Usually Scene Information OR Actual Reviews depending on Agent
@@ -6281,54 +6298,14 @@ def setMetadata(metadata, media, FILMDICT):
             FILMDICT['Status'] = False
             return
 
-        # 2e.   Countries
-        log(LOG_SUBLINE)
-        countryArt = ''
-        countryPoster = ''
-        try:
-            if RESETMETA:
-                metadata.countries.clear()
-
-            listCountries = list(myAgentDict['Countries'])
-            if myAgent != 'IAFD' and 'IAFD' in FILMDICT:
-                listCountries.extend(FILMDICT['IAFD']['Countries'])
-                listCountries = (list(set(listCountries)))
-
-            listCountries.sort(key = lambda x: x.lower())
-            log('UTILS :: {0:<29} {1}'.format('2e. Countries', '{0:>2} - {1}'.format(len(listCountries), listCountries)))
-            for idx, item in enumerate(listCountries, start=1):
-                countryArt = os.path.join(PGMA_COUNTRYART, '{0}.png'.format(item))
-                countryArt = countryArt if os.path.exists(countryArt) else errorCountryArt
-
-                # use map as country posters, if missing use vertical flag of country or error flag if that is also missing
-                flagPoster = os.path.join(PGMA_COUNTRYPOSTERFLAGS, '{0}.png'.format(item))
-                if COUNTRYPOSTERTYPE == 'Map':
-                    mapPoster = os.path.join(PGMA_COUNTRYPOSTERMAPS, '{0}.jpg'.format(item))
-                    countryPoster = mapPoster if os.path.exists(mapPoster) else flagPoster if os.path.exists(flagPoster) else errorCountryPosterFlag
-                else:
-                    # use vertical flag as poster or error flag if missing
-                    countryPoster = flagPoster if os.path.exists(flagPoster) else errorCountryPosterFlag
-
-                log('UTILS :: {0:<29} {1}'.format('Country' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
-                metadata.countries.add(item)
-                # Process Countries
-                if COLCOUNTRY:
-                    entry = '{0} {1}'.format(COLCOUNTRY, item)
-                    collectionsDict[entry] = {'Poster': countryPoster, 'Art': countryArt, 'Summary': ''}
-
-        except Exception as e:
-            log('UTILS :: Error setting Countries: %s', e)
-            FILMDICT['Status'] = False
-            return
-
-        # 2f.   Cast: thumbnails, roles from IAFD. Use IAFD as main Source if film found on IAFD
+        # 2e.   Cast: thumbnails, roles from IAFD. Use IAFD as main Source if film found on IAFD
         log(LOG_SUBLINE)
         cast = []
         try:
             if RESETMETA:
                 metadata.roles.clear()
 
-            log('UTILS :: {0:<29} {1}'.format('2f. Cast', ''))
+            log('UTILS :: {0:<29} {1}'.format('2e. Cast', ''))
             if FILMDICT['FilenameCast']:                      # Priority 1: user has defined the missing cast to be used in filename
                 cast = FILMDICT['FilenameCast'][:]
 
@@ -6377,6 +6354,8 @@ def setMetadata(metadata, media, FILMDICT):
 
                     entry = '{0} {1}[d]'.format(COLCAST, entry) if re.search(deathRegex, summary, re.IGNORECASE) else '{0} {1}'.format(COLCAST, entry)
                     myNationality = castDict[item]['Nationality'].split(',')[-1].strip() if castDict[item]['Nationality'] else ''
+                    if myNationality:
+                        nationalities.add(myNationality)
                     myFlag = os.path.join(PGMA_COUNTRYART, '{0}.png'.format(myNationality)) if myNationality else ''
                     art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else errorCountryArt
                     collectionsDict[entry] = {'Poster': castDict[item]['Photo'], 'Art': art, 'Summary': summary}
@@ -6386,14 +6365,14 @@ def setMetadata(metadata, media, FILMDICT):
             FILMDICT['Status'] = False
             return
 
-        # 2g.   Directors
+        # 2f.   Directors
         log(LOG_SUBLINE)
         try:
             if RESETMETA:
                 metadata.directors.clear()
 
             directors = myAgentDict['Directors']
-            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('2g. Director(s)'), '{0:>2} - {1}'.format(len(directors), directors)))
+            log('UTILS :: {0: <29} {1}'.format('{0}:'.format('2f. Director(s)'), '{0:>2} - {1}'.format(len(directors), directors)))
             tempDict = getDirectors(directors, FILMDICT)
             directorDict = {k.split('(')[0].strip():v for (k,v) in tempDict.items()}
             for idx, item in enumerate(sorted(directorDict), start=1):
@@ -6430,12 +6409,55 @@ def setMetadata(metadata, media, FILMDICT):
                     summary = ' '.join(myBioList)
                     entry = '{0} {1}[d]'.format(COLDIRECTOR, entry) if re.search(deathRegex, summary, re.IGNORECASE) else '{0} {1}'.format(COLDIRECTOR, entry)
                     myNationality = directorDict[item]['Nationality'].split(',')[-1].strip() if directorDict[item]['Nationality'] else ''
+                    if myNationality:
+                        nationalities.add(myNationality)
                     myFlag = os.path.join(PGMA_COUNTRYART, '{0}.png'.format(myNationality)) if myNationality else ''
                     art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else errorCountryArt
                     collectionsDict[entry] = {'Poster': directorDict[item]['Photo'], 'Art': art, 'Summary': summary}
 
         except Exception as e:
             log('UTILS :: Error setting Director(s): %s', e)
+            FILMDICT['Status'] = False
+            return
+
+        # 2g.   Countries
+        log(LOG_SUBLINE)
+        countryArt = ''
+        countryPoster = ''
+        try:
+            if RESETMETA:
+                metadata.countries.clear()
+
+            listCountries = [nationalities, myAgentDict['Countries']]
+            if myAgent != 'IAFD' and 'IAFD' in FILMDICT:
+                listCountries.append(FILMDICT['IAFD']['Countries'])
+
+            # at this stage listCountries is a list of 3 sets, do a union
+            listCountries = list(set().union(*listCountries))
+            listCountries.sort(key = lambda x: x.lower())
+            log('UTILS :: {0:<29} {1}'.format('2g. Countries', '{0:>2} - {1}'.format(len(listCountries), listCountries)))
+            for idx, item in enumerate(listCountries, start=1):
+                countryArt = os.path.join(PGMA_COUNTRYART, '{0}.png'.format(item))
+                countryArt = countryArt if os.path.exists(countryArt) else errorCountryArt
+
+                # use map as country posters, if missing use vertical flag of country or error flag if that is also missing
+                flagPoster = os.path.join(PGMA_COUNTRYPOSTERFLAGS, '{0}.png'.format(item))
+                if COUNTRYPOSTERTYPE == 'Map':
+                    mapPoster = os.path.join(PGMA_COUNTRYPOSTERMAPS, '{0}.jpg'.format(item))
+                    countryPoster = mapPoster if os.path.exists(mapPoster) else flagPoster if os.path.exists(flagPoster) else errorCountryPosterFlag
+                else:
+                    # use vertical flag as poster or error flag if missing
+                    countryPoster = flagPoster if os.path.exists(flagPoster) else errorCountryPosterFlag
+
+                log('UTILS :: {0:<29} {1}'.format('Country' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
+                metadata.countries.add(item)
+                # Process Countries
+                if COLCOUNTRY:
+                    entry = '{0} {1}'.format(COLCOUNTRY, item)
+                    collectionsDict[entry] = {'Poster': countryPoster, 'Art': countryArt, 'Summary': ''}
+
+        except Exception as e:
+            log('UTILS :: Error setting Countries: %s', e)
             FILMDICT['Status'] = False
             return
 
@@ -6816,8 +6838,8 @@ def setupStartVariables():
 
     # preferences
     global COLCAST, COLCOUNTRY, COLGENRE, COLDIRECTOR, COLSERIES, COLSTUDIO, COLSYSTEM
-    global COUNTRYPOSTERTYPE, POSTERSOURCEDOWNLOAD, DETECT, DURATIONDX, PREFIXGENRE, MATCHIAFDDURATION, MATCHSITEDURATION
-    global PLEXTOKEN, PREFIXLEGEND, RESETMETA, THUMBOR, USEBACKGROUNDART
+    global COUNTRYPOSTERTYPE, POSTERSOURCEDOWNLOAD, DETECT, DURATIONDX, PREFIXGENRE
+    global MATCHIAFDDURATION, MATCHSITEDURATION, PLEXTOKEN, PREFIXLEGEND, RESETMETA, THUMBOR, USEBACKGROUNDART
 
     # variables
     global COUNTRYSET, GENRESDICT, TIDYDICT, MACHINEID, PGMA_CASTDICT, PGMA_DIRECTORDICT
@@ -7045,11 +7067,18 @@ def setupStartVariables():
     if continueSetup:
         log(LOG_SUBLINE)
         log('START :: 8.\tRetrieve Plex Token')
+        if os.name == 'nt':
+            preferences_xml = os.path.join(PlexSupportPath, 'Preferences.xml').replace('Plex', 'Plex\Plex')
+        elif os.name == 'posix':
+            preferences_xml = os.path.join(PlexSupportPath, 'Preferences.xml')
+        else:
+            preferences_xml = ''        # will error when trying to load file
+
+        log('START :: {0:<29} {1}'.format('Preference XML', preferences_xml if preferences_xml else 'Error: Not Found'))
         MACHINEID = ''
-        if not PLEXTOKEN and os.name == 'nt':
+
+        if not PLEXTOKEN:
             try:
-                preferences_xml = os.path.join(PlexSupportPath, 'preferences.xml').replace('Plex', 'Plex\Plex')
-                log('START :: {0:<29} {1}'.format('Preference XML', preferences_xml))
                 txtfile = PlexLoadFile(preferences_xml)
                 txtrows = txtfile.split('\n')
                 for row in txtrows:

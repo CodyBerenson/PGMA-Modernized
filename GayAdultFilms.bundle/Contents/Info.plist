@@ -5,7 +5,7 @@
         <key>CFBundleDevelopmentRegion</key>
         <string>English</string>
         <key>CFBundleExecutable</key>
-        <string>Gay Adult Films</string>
+        <string>Gay Adult Scenes</string>
         <key>CFBundleIdentifier</key>
         <string>com.plexapp.agents.GayAdultFilms</string>
         <key>PlexAgentAttributionText</key>
@@ -29,9 +29,7 @@
                     12. GEVI - Gay Erotic Video Index<br/>
                     13. Homo Active<br/>
                     14. Internet Adult Film Database</br>
-                    15. nymMedia</br>
-                    16. RadVideo<br/>
-                    17. WolffVideo<br/>
+                    15. WolffVideo<br/>
             ]]>
         </string>
         <key>CFBundleInfoDictionaryVersion</key>

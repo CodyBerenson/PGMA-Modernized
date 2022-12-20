@@ -24,7 +24,7 @@ AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
 # URLS
 BASE_URL = 'https://gay.aebn.com'
-BASE_SEARCH_URL = BASE_URL + '/gay/search/movies/page/1?sysQuery="{0}"&criteria=%7B%22sort%22%3A%22Relevance%22%7D'
+BASE_SEARCH_URL = BASE_URL + '/gay/search?queryType=Free+Form&sysQuery={0}&criteria=%7B%22sort%22%3A%22Relevance%22%7D'
 WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Date Formats used by website
@@ -125,152 +125,156 @@ class AEBN(Agent.Movies):
 
         # Search Query - for use to search the internet, remove all non alphabetic characters.
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
-        searchTitle = self.CleanSearchString(FILMDICT['SearchTitle'])
-        searchQuery = BASE_SEARCH_URL.format(searchTitle)
-        morePages = True
-        while morePages:
-            try:
-                utils.log('SEARCH:: {0:<29} {1}'.format('Search Query', searchQuery))
-                html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=utils.delay())
-                filmsList = html.xpath('//div[@class="dts-image-overlay-container"]')
-                if not filmsList:
-                    raise Exception('< No Films! >')
-            except Exception as e:
-                utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+        for searchTitle in FILMDICT['SearchTitles']:
+            if FILMDICT['Status']:
                 break
 
-            try:
-                searchQuery = html.xpath('//ul[@class="dts-pagination"]/li[@class="active" and text()!="..."]/following::li/a[@class="dts-paginator-tagging"]/@href')[0]
-                searchQuery = (BASE_URL if BASE_URL not in searchQuery else '') + searchQuery
-                utils.log('SEARCH:: Next Page Search Query: %s', searchQuery)
-                pageNumber = int(html.xpath('//ul[@class="dts-pagination"]/li[@class="active" and text()!="..."]/text()')[0]) - 1
-                morePages = True if pageNumber <= 10 else False
-            except:
-                searchQuery = ''
-                utils.log('SEARCH:: Next Page Search Query: No More Pages Found')
-                pageNumber = 1
-                morePages = False
-
-            filmsFound = len(filmsList)
-            utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
-            utils.log(LOG_BIGLINE)
-            myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
-            for idx, film in enumerate(filmsList, start=1):
-                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', '{0} of {1} for {2} - {3} {4}'.format(idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
-                utils.log(LOG_BIGLINE)
-
-                # Site Title
+            searchTitle = self.CleanSearchString(searchTitle)
+            searchQuery = BASE_SEARCH_URL.format(searchTitle)
+            morePages = True
+            while morePages:
                 try:
-                    filmTitle = film.xpath('./a//img/@title')[0]
-                    utils.matchTitle(filmTitle, FILMDICT)
+                    utils.log('SEARCH:: {0:<29} {1}'.format('Search Query', searchQuery))
+                    html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=utils.delay())
+                    filmsList = html.xpath('//div[@class="dts-collection-item dts-collection-item-movie"][@id]/div[contains(@id, "dtsImageOverlayContainer")]')
+                    if not filmsList:
+                        raise Exception('< No Films! >')
                 except Exception as e:
-                    utils.log('SEARCH:: Error getting Site Title: %s', e)
-                    utils.log(LOG_SUBLINE)
-                    continue
+                    utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+                    break
 
-                # Site Title URL
-                utils.log(LOG_BIGLINE)
                 try:
-                    filmURL = film.xpath('./a/@href')[0]
-                    filmURL = ('' if BASE_URL in filmURL else BASE_URL) + filmURL
-                    FILMDICT['FilmURL'] = filmURL
-                    utils.log('SEARCH:: {0:<29} {1}'.format('Site Title URL', filmURL))
+                    searchQuery = html.xpath('//ul[@class="dts-pagination"]/li[@class="active" and text()!="..."]/following::li/a[@class="dts-paginator-tagging"]/@href')[0]
+                    searchQuery = (BASE_URL if BASE_URL not in searchQuery else '') + searchQuery
+                    utils.log('SEARCH:: Next Page Search Query: %s', searchQuery)
+                    pageNumber = int(html.xpath('//ul[@class="dts-pagination"]/li[@class="active" and text()!="..."]/text()')[0]) - 1
+                    morePages = True if pageNumber <= 10 else False
                 except:
-                    utils.log('SEARCH:: Error getting Site Title Url')
-                    utils.log(LOG_SUBLINE)
-                    continue
+                    searchQuery = ''
+                    utils.log('SEARCH:: Next Page Search Query: No More Pages Found')
+                    pageNumber = 1
+                    morePages = False
 
-                # Access Site URL for Studio and Release Date information
+                filmsFound = len(filmsList)
+                utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
                 utils.log(LOG_BIGLINE)
-                try:
-                    utils.log('SEARCH:: {0:<29} {1}'.format('Reading Site URL page', filmURL))
-                    fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=utils.delay())
-                    FILMDICT['FilmHTML'] = fhtml
-                except Exception as e:
-                    utils.log('SEARCH:: Error reading Site URL page: %s', e)
-                    utils.log(LOG_SUBLINE)
-                    continue
+                myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
+                for idx, film in enumerate(filmsList, start=1):
+                    utils.log('SEARCH:: {0:<29} {1}'.format('Processing', '{0} of {1} for {2} - {3} {4}'.format(idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
+                    utils.log(LOG_BIGLINE)
 
-                # Site Studio Name
-                utils.log(LOG_BIGLINE)
-                matchedStudio = False
-                try:
-                    fhtmlStudios = fhtml.xpath('//div[@class="dts-studio-name-wrapper"]/a/text()')
-                    utils.log('UPDATE:: {0:<29} {1}'.format('Site URL Studios', '{0:>2} - {1}'.format(len(fhtmlStudios), fhtmlStudios)))
-                    for item in fhtmlStudios:
+                    # Site Title
+                    try:
+                        filmTitle = film.xpath('./a[contains(@href,"/movies/")]//img/@title')[0]
+                        utils.matchTitle(filmTitle, FILMDICT)
+                    except Exception as e:
+                        utils.log('SEARCH:: Error getting Site Title: %s', e)
+                        utils.log(LOG_SUBLINE)
+                        continue
+
+                    # Site Title URL
+                    utils.log(LOG_BIGLINE)
+                    try:
+                        filmURL = film.xpath('./a/@href')[0]
+                        filmURL = ('' if BASE_URL in filmURL else BASE_URL) + filmURL
+                        FILMDICT['FilmURL'] = filmURL
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Site Title URL', filmURL))
+                    except:
+                        utils.log('SEARCH:: Error getting Site Title Url')
+                        utils.log(LOG_SUBLINE)
+                        continue
+
+                    # Access Site URL for Studio and Release Date information
+                    utils.log(LOG_BIGLINE)
+                    try:
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Reading Site URL page', filmURL))
+                        fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=utils.delay())
+                        FILMDICT['FilmHTML'] = fhtml
+                    except Exception as e:
+                        utils.log('SEARCH:: Error reading Site URL page: %s', e)
+                        utils.log(LOG_SUBLINE)
+                        continue
+
+                    # Site Studio Name
+                    utils.log(LOG_BIGLINE)
+                    matchedStudio = False
+                    try:
+                        fhtmlStudios = fhtml.xpath('//div[@class="dts-studio-name-wrapper"]/a/text()')
+                        utils.log('UPDATE:: {0:<29} {1}'.format('Site URL Studios', '{0:>2} - {1}'.format(len(fhtmlStudios), fhtmlStudios)))
+                        for item in fhtmlStudios:
+                            try:
+                                utils.matchStudio(item, FILMDICT)
+                                matchedStudio = True
+                                break
+                            except Exception as e:
+                                utils.log('SEARCH:: Error Matching %s: %s', item, e)
+                    except Exception as e:
+                        utils.log('SEARCH:: Error getting Site Studio %s', e)
+
+                    if not matchedStudio:
+                        utils.log('SEARCH:: Error No Matching Site Studio')
+                        utils.log(LOG_SUBLINE)
+                        continue
+
+                    # Site Release Date
+                    utils.log(LOG_BIGLINE)
+                    vReleaseDate = FILMDICT['CompareDate']
+                    try:
+                        fhtmlReleaseDate = fhtml.xpath('//li[contains(@class,"item-release-date")]/text()')[0].strip()
+                        fhtmlReleaseDate = fhtmlReleaseDate.replace('July', 'Jul').replace('Sept', 'Sep')    # AEBN uses 4 letter abbreviation for September & July
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Release Date', fhtmlReleaseDate))
                         try:
-                            utils.matchStudio(item, FILMDICT)
-                            matchedStudio = True
-                            break
+                            releaseDate = datetime.strptime(fhtmlReleaseDate, DATEFORMAT)
+                            utils.matchReleaseDate(releaseDate, FILMDICT)
+                            vReleaseDate = releaseDate
                         except Exception as e:
-                            utils.log('SEARCH:: Error Matching %s: %s', item, e)
-                except Exception as e:
-                    utils.log('SEARCH:: Error getting Site Studio %s', e)
+                            utils.log('SEARCH:: Error getting Site URL Release Date: %s', e)
+                            if FILMDICT['Year']:
+                                utils.log(LOG_SUBLINE)
+                                continue
+                    except:
+                        utils.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
 
-                if not matchedStudio:
-                    utils.log('SEARCH:: Error No Matching Site Studio')
-                    utils.log(LOG_SUBLINE)
-                    continue
-
-                # Site Release Date
-                utils.log(LOG_BIGLINE)
-                vReleaseDate = FILMDICT['CompareDate']
-                try:
-                    fhtmlReleaseDate = fhtml.xpath('//li[contains(@class,"item-release-date")]/text()')[0].strip()
-                    fhtmlReleaseDate = fhtmlReleaseDate.replace('July', 'Jul').replace('Sept', 'Sep')    # AEBN uses 4 letter abbreviation for September & July
-                    utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Release Date', fhtmlReleaseDate))
+                    # Site Film Duration
+                    utils.log(LOG_BIGLINE)
+                    matchedDuration = False
+                    vDuration = FILMDICT['Duration']
                     try:
-                        releaseDate = datetime.strptime(fhtmlReleaseDate, DATEFORMAT)
-                        utils.matchReleaseDate(releaseDate, FILMDICT)
-                        vReleaseDate = releaseDate
+                        fhtmlDuration = fhtml.xpath('//span[text()="Running Time:"]/parent::li/text()')[0].strip()
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Site Film Duration', fhtmlDuration))
+                        fhtmlDuration = fhtmlDuration.split(':')                                                      # split into hr, mins, secs
+                        fhtmlDuration = [int(x) for x in fhtmlDuration]                                               # convert to integer
+                        fhtmlDuration = ['0{0}'.format(x) if x < 10 else '{0}'.format(x) for x in fhtmlDuration]      # converted to zero padded items
+                        fhtmlDuration = ['00'] + fhtmlDuration if len(fhtmlDuration) == 2 else fhtmlDuration    # prefix with zero hours if string is only minutes and seconds
+                        fhtmlDuration = '1970-01-01 {0}'.format(':'.join(fhtmlDuration))                              # prefix with 1970-01-01 to conform to timestamp
+                        duration = datetime.strptime(fhtmlDuration, '%Y-%m-%d %H:%M:%S')                                 # turn to date time object
+                        try:
+                            utils.matchDuration(duration, FILMDICT)
+                            matchedDuration = True
+                            vDuration = duration
+                        except Exception as e:
+                            utils.log('SEARCH:: Error matching Site Film Duration: %s', e)
                     except Exception as e:
-                        utils.log('SEARCH:: Error getting Site URL Release Date: %s', e)
-                        if FILMDICT['Year']:
-                            utils.log(LOG_SUBLINE)
-                            continue
-                except:
-                    utils.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
+                        utils.log('SEARCH:: Error getting Site Film Duration')
 
-                # Site Film Duration
-                utils.log(LOG_BIGLINE)
-                matchedDuration = False
-                vDuration = FILMDICT['Duration']
-                try:
-                    fhtmlDuration = fhtml.xpath('//span[text()="Running Time:"]/parent::li/text()')[0].strip()
-                    utils.log('SEARCH:: {0:<29} {1}'.format('Site Film Duration', fhtmlDuration))
-                    fhtmlDuration = fhtmlDuration.split(':')                                                      # split into hr, mins, secs
-                    fhtmlDuration = [int(x) for x in fhtmlDuration]                                               # convert to integer
-                    fhtmlDuration = ['0{0}'.format(x) if x < 10 else '{0}'.format(x) for x in fhtmlDuration]      # converted to zero padded items
-                    fhtmlDuration = ['00'] + fhtmlDuration if len(fhtmlDuration) == 2 else fhtmlDuration    # prefix with zero hours if string is only minutes and seconds
-                    fhtmlDuration = '1970-01-01 {0}'.format(':'.join(fhtmlDuration))                              # prefix with 1970-01-01 to conform to timestamp
-                    duration = datetime.strptime(fhtmlDuration, '%Y-%m-%d %H:%M:%S')                                 # turn to date time object
-                    try:
-                        utils.matchDuration(duration, FILMDICT)
-                        matchedDuration = True
-                        vDuration = duration
-                    except Exception as e:
-                        utils.log('SEARCH:: Error matching Site Film Duration: %s', e)
-                except Exception as e:
-                    utils.log('SEARCH:: Error getting Site Film Duration')
+                    if MATCHSITEDURATION and not matchedDuration:
+                        utils.log(LOG_SUBLINE)
+                        continue
 
-                if MATCHSITEDURATION and not matchedDuration:
-                    utils.log(LOG_SUBLINE)
-                    continue
+                    FILMDICT['vCompilation'] = ''
+                    FILMDICT['vDuration'] = vDuration
+                    FILMDICT['vReleaseDate'] = vReleaseDate
+                    del FILMDICT['FilmHTML']
 
-                FILMDICT['vCompilation'] = ''
-                FILMDICT['vDuration'] = vDuration
-                FILMDICT['vReleaseDate'] = vReleaseDate
-                del FILMDICT['FilmHTML']
+                    myID = json.dumps(FILMDICT, default=utils.jsonDumper)
+                    results.Append(MetadataSearchResult(id=myID, name=FILMDICT['Title'], score=100, lang=lang))
 
-                myID = json.dumps(FILMDICT, default=utils.jsonDumper)
-                results.Append(MetadataSearchResult(id=myID, name=FILMDICT['Title'], score=100, lang=lang))
+                    # Film Scraped Sucessfully - update status and break out!
+                    FILMDICT['Status'] = True
+                    break       # stop processing
 
-                # Film Scraped Sucessfully - update status and break out!
-                FILMDICT['Status'] = True
-                break       # stop processing
-
-            if FILMDICT['Status']:      # if search and process sucessful stop processing
-                break
+                if FILMDICT['Status']:      # if search and process sucessful stop processing
+                    break
 
         # End Search Routine
         utils.logFooter('SEARCH', FILMDICT)

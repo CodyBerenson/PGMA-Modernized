@@ -143,7 +143,7 @@ class SimplyAdult(Agent.Movies):
         while morePages:
             utils.log('SEARCH:: Search Query Form Data: %s', formData)
             try:
-                html = HTML.ElementFromURL(searchQuery.format(pageNumber), headers=formData, timeout=20, sleep=DELAY)
+                html = HTML.ElementFromURL(searchQuery.format(pageNumber), headers=formData, timeout=20, sleep=utils.delay())
                 # Finds the entire media enclosure
                 filmsList = html.xpath('//div[@class="item-box"]')
                 if not filmsList:

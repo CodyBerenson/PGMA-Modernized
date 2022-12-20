@@ -121,7 +121,7 @@ class HomoActive(Agent.Movies):
         while morePages:
             utils.log('SEARCH:: Search Query: %s', searchQuery)
             try:
-                html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=DELAY)
+                html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=utils.delay())
                 # Finds the entire media enclosure
                 filmsList = html.xpath('//div[@class="item"]')
                 if not filmsList:
@@ -177,7 +177,7 @@ class HomoActive(Agent.Movies):
                 utils.log(LOG_BIGLINE)
                 try:
                     utils.log('SEARCH:: {0:<29} {1}'.format('Reading Site URL page', filmURL))
-                    fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=DELAY)
+                    fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=utils.delay())
                     FILMDICT['FilmHTML'] = fhtml
                 except Exception as e:
                     utils.log('SEARCH:: Error reading Site URL page: %s', e)

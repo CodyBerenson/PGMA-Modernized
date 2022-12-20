@@ -158,10 +158,17 @@ class GayEmpire(Agent.Movies):
                     matched = re.search(pattern, filmTitle, re.IGNORECASE)  # match against string
                     if matched:
                         determinate = matched.group().replace(', ', '')
-                        utils.log('SEARCH:: Found Determinate:           %s', determinate)
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Found Determinate', determinate))
                         filmTitle = re.sub(pattern, '', filmTitle)
                         filmTitle = '{0} {1}'.format(determinate, filmTitle)
-                        utils.log('SEARCH:: Re-ordered Site Title:       %s', filmTitle)
+
+                    # Gay Empire sometimes has the studio title at the end of title - remove
+                    pattern = u'\((.*?)\)$'
+                    matched = re.search(pattern, filmTitle, re.IGNORECASE)  # match against string
+                    if matched:
+                        if matched.group(1) in FILMDICT['Studio'] or FILMDICT['Studio'] in matched.group(1):
+                            utils.log('SEARCH:: {0:<29} {1}'.format('Studio in Title', matched.group(1)))
+                            filmTitle = re.sub(pattern, '', filmTitle)
 
                     utils.matchTitle(filmTitle, FILMDICT)
                 except Exception as e:

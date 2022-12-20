@@ -125,7 +125,7 @@ class HFGPM(Agent.Movies):
 
         utils.log('SEARCH:: Search Query: %s', formData)
         try:
-            html = HTML.ElementFromURL(searchQuery, values=formData, headers=formData, timeout=20, sleep=DELAY)
+            html = HTML.ElementFromURL(searchQuery, values=formData, headers=formData, timeout=20, sleep=utils.delay())
             # Finds the entire media enclosure
             filmsList = html.xpath('//div[@class="base shortstory"]')
             if not filmsList:
