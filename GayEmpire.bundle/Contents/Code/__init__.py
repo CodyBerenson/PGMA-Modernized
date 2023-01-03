@@ -11,6 +11,7 @@
                                     - introduced Grouped Collections and Default to keep track of films
     27 Nov 2022     2019.08.12.18   Updated to use latest version of utils.py
     04 Dec 2022     2019.08.12.19   Renamed GayEmpire
+    03 Jan 2022     2019.08.12.20   Corrected multipage search results processing
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -24,7 +25,7 @@ AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
 # URLS
 BASE_URL = 'http://www.gaydvdempire.com'
-BASE_SEARCH_URL = BASE_URL + '/AllSearch/Search?view=list&exactMatch={0}&q={0}'
+BASE_SEARCH_URL = BASE_URL + '/AllSearch/Search?view=list&q={0}&page={1}'
 WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Date Formats used by website
@@ -118,7 +119,8 @@ class GayEmpire(Agent.Movies):
         # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
         searchTitle = self.CleanSearchString(FILMDICT['SearchTitle'])
-        searchQuery = BASE_SEARCH_URL.format(searchTitle)
+        pageNumber = 0
+        searchQuery = BASE_SEARCH_URL.format(searchTitle, pageNumber)
 
         morePages = True
         while morePages:
@@ -128,26 +130,29 @@ class GayEmpire(Agent.Movies):
                 filmsList = html.xpath('.//div[contains(@class,"row list-view-item")]')
                 if not filmsList:
                     raise Exception('< No Film Titles >')   # out of WHILE loop
+                # if there is a list of films - check if there are further pages returned
+                try:
+                    nextPage = html.xpath('.//a[@title="Next"]/@href')[0]
+                    if pageNumber < 11:
+                        morePages = True 
+                    else:
+                        morePages = False     # search a maximum of 10 pages
+                        utils.log('SEARCH:: Warning: Page Search Limit Reached [10]')
+                        continue
+                    pageNumber += 1
+                    searchQuery = BASE_SEARCH_URL.format(searchTitle, pageNumber)
+                except:
+                    morePages = False
             except Exception as e:
                 utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
                 break
-
-            try:
-                searchQuery = html.xpath('.//a[@title="Next"]/@href')[0]
-                pageNumber = int(searchQuery.split('page=')[1]) # next page number
-                pageNumber = pageNumber - 1
-                searchQuery = BASE_SEARCH_URL.format(searchTitle) + '&page={0}'.format(pageNumber)
-                morePages = True if pageNumber <= 10 else False
-            except:
-                pageNumber = 1
-                morePages = False
 
             filmsFound = len(filmsList)
             utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
             utils.log(LOG_BIGLINE)
             myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
             for idx, film in enumerate(filmsList, start=1):
-                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', '{0} of {1} for {2} - {3} {4}'.format(idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
+                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', 'Page {0}: {1} of {2} for {3} - {4} {5}'.format(pageNumber - 1, idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
                 utils.log(LOG_BIGLINE)
 
                 # siteTitle = The text in the 'title' - Gay DVDEmpire - displays its titles in SORT order
@@ -280,7 +285,7 @@ class GayEmpire(Agent.Movies):
                 FILMDICT['Status'] = True
                 break       # stop processing
 
-            if FILMDICT['Status']:      # if search and process sucessful stop processing
+            if FILMDICT['Status'] is True:      # if search and process sucessful stop processing
                 break
 
         # End Search Routine

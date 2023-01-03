@@ -12,6 +12,7 @@
                                     - removed trailers as they did not work
     02 Nov 2022     2020.01.18.30   Enclosed Search String in quotes as navigate to 2nd page of results was failing without it
     30 Nov 2022     2019.01.18.31   Updated to use latest version of utils.py
+    28 Dec 2022     2019.01.18.32   removed quotes around search string
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -19,7 +20,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.31'
+VERSION_NO = '2020.01.18.32'
 AGENT = 'Fagalicious'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -119,7 +120,6 @@ class Fagalicious(Agent.Movies):
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: "{1} <= 20"'.format('Search Query Length', lastSpace)))
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: "{1}"'.format('Shorten Search Query', myString[:lastSpace])))
 
-        myString = '"{0}"'.format(myString)
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())
 

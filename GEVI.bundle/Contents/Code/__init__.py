@@ -295,8 +295,8 @@ class GEVI(Agent.Movies):
 
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Release Date(s)', '{0:>2} - {1}'.format(len(fhtmlReleaseDate), fhtmlReleaseDate)))
                         for item in fhtmlReleaseDate:
-                            if 'c' in item:                                                                                 # format 4
-                                item = item.replace('c', '')
+                            if 'b' in item or 'c' in item:                                                                  # format 4
+                                item = item.replace('b', '').replace('c', '')
                             elif ',' in item:                                                                               # format 3 - take year after the comma
                                 item = item.split(',')[1]
                             elif '-' in item:                                                                               # format 2 - take year after dash:

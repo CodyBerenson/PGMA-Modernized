@@ -35,6 +35,7 @@ Alt-porn -> Gender Queer::Transgender
 Alt-Porn -> Hipsters::Other
 Alt::Other
 Alternative::Other
+Alte Chemiefabrik::Germany
 Amateur -> Castings / Auditions::Amateur
 Amateur -> Gay Amateur::Amateur
 Amateur -> Home Made::Amateur
@@ -57,6 +58,7 @@ Andorran::Andorra
 Angolan::Angola
 Anguillan::Anguilla
 Animation::Other
+Antigua::Antigua and Barbuda
 Antiguan::Antigua and Barbuda
 Antwerp::Belgium
 Appearance -> Bald Men::Bald Men
@@ -95,6 +97,7 @@ Athletic::Fit Guys
 Atlanta::United States
 ATM / Ass To Mouth::Rimming
 Auditions::Showcase
+Aussie::Australia
 Australia::Australia
 Australian::Australia
 Austrian::Austria
@@ -170,6 +173,7 @@ Belgian::Belgium
 Belizean::Belize
 Beninese::Benin
 Berlin::Germany
+Berlin-Rudersdorf::Germany
 Bermudan::Bermuda
 Bestsellers::x
 Bhutanese::Bhutan
@@ -277,6 +281,7 @@ Character -> Trailer Trash::Blue Collar
 Character -> Vampires::Role Play
 Character::x
 Chastity & Cock Cages::BDSM
+Cherokee::United States
 Chicago::United States
 Chilean::Chile
 Chinese::China
@@ -377,6 +382,7 @@ Cumshot::Cum
 Cumshots::Cum
 Cypriot::Cyprus
 Czech::Czech Republic
+Czech Language::Czech Republic
 Daddies::Mature
 Daddy::Mature
 Dane::Denmark
@@ -416,6 +422,7 @@ DVD::x
 DVDs & Media::x
 DVDs Back in Stock::x
 DVDs::x
+East Europe::x
 East Timorese::Timor-Leste
 Ebony::x
 Ecuadorean::Ecuador
@@ -456,6 +463,7 @@ Ethnic -> Scandinavian::x
 Ethnic -> Thai::Thailand
 Ethnic::x
 Euro::x
+Europe::x
 European::x
 Exclusive DVDs::x
 Exclusive Movies -> Rare And Out Of Print::x
@@ -521,6 +529,7 @@ Fingercuffing - DP::Group Sex (3+)
 Fingercuffing - Vaginal::Other
 Fingering::Other
 Finn::Finland
+Finnish::Finland
 Fireman::Role Play
 Firemen::Role Play
 Fishhooking::Oral Sex
@@ -549,6 +558,7 @@ French Canadian::Canada
 French Language::x
 French::France
 Ft. Lauderdale::United States
+Ft. Worth::United States
 FTMs::Transgender
 Fuck::Anal Sex
 Fucked::Anal Sex
@@ -643,6 +653,7 @@ Holidays::x
 Home Made::Amateur
 Homemade Movies::Amateur
 Honduran::Honduras
+Hondurian::Honduras
 Hoods::Fetish Wear
 Horror::x
 Horse::Big Cocks
@@ -652,6 +663,7 @@ Huge Cock::Big Cocks
 Huge Dick::Big Cocks
 Humiliation::BDSM
 Humiliations::BDSM
+Hung::Big Cocks
 Hungarian::Hungary
 Hustler::Role Play
 Hustlers::Role Play
@@ -718,7 +730,7 @@ Israel::Israel
 Israeli::Israel
 Italian::Italy
 Italy::Italy
-Ivorien::Côte d'Ivoire
+Ivoirien::Côte d'Ivoire
 J/O::Masturbation
 Jack-Offs::Masturbation
 Jackhammer::United States
@@ -726,6 +738,7 @@ Jamaican::Jamaica
 Japanese Unmosaic::Japan
 Japanese::Japan
 Jeans & Denim::Fetish Wear
+Jewish::United States
 Jock Straps::Fetish Wear
 Jocks & Muscle Hunks::Fit Guys
 Jocks::Fit Guys
@@ -741,6 +754,8 @@ Kenyan::Kenya
 Kink::Fetish
 Kitchen::x
 Kittitian::Saint Kitts and Nevis
+Kiwi::New Zealand
+Korean::South Korea
 KS::United States
 Kuwaiti::Kuwait
 KY::United States
@@ -856,12 +871,13 @@ MO::United States
 Model::Exhibitionism
 Modeling::Exhibitionism
 Moldovan::Moldova
+Moldovian::Moldova
 Monégasque::Monaco
 Mongolian::Mongolia
 Montana::United States
 Montenegrin::Montenegro
 Montreal::Canada
-Morroccan::Morocco
+Moroccan::Morocco
 Mosotho::Lesotho
 Mozambican::Mozambique
 MS::United States
@@ -871,6 +887,7 @@ Multi-DVD Packs::x
 Multi-ethnic::Interracial
 Multi-Pack::x
 Multiple Pops::Cum
+Mulatto::x
 Muscle Bondage::BDSM
 Muscle Hunks::Muscles
 Muscle Studs::Muscles
@@ -885,7 +902,7 @@ Mystery::x
 Namibian::Namibia
 Naples::Italy
 Nationalities / Ethnic Groups::x
-Native American::x
+Native American::United States
 Natural Body Hair::Beards/Hairy
 Nauruan::Nauru
 NB::Canada
@@ -1106,6 +1123,8 @@ Saint Lucian::Saint Lucia
 SALE Downloads::x
 SALE Rentals::x
 SALE Streaming::x
+Salt Lake City::United States
+Salvadorean::El Salvador
 Sammarinese::San Marino
 Samoan::Samoa
 Sample Movies::x
@@ -1176,6 +1195,7 @@ Shot on film::x
 Shower::Wet/Oiled
 Showering/Bathing::Wet/Oiled
 Showers::Wet/Oiled
+Sicilian::Italy
 Sierra Leonean::Sierra Leone
 Silverlake::United States
 Singaporean::Singapore
@@ -1371,8 +1391,10 @@ Uzbek::Uzbekistan
 VA::United States
 Vaginal Sex::Other
 Valentines Day::x
+Valladolid::Spain
 Vampires::Role Play
 Vanuatuan::Vanuatu
+Varpalota::Hungary
 Vehicle Sex::Other
 Venezuelan::Venezuela
 Verbal Abuse::BDSM

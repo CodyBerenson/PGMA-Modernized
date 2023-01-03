@@ -44,6 +44,8 @@ General Functions found in all agents
                     implemented Collection Grouping - Preference based
     19 Dec 2022     Roman Numeral and Title Matching, corrections
                     Add Director and Cast Nationalities to Country Metadata
+    29 Dec 2022     Correction to Poster/Art images - Scene Agents cropped images were not been saved to metadata
+                    Queerclick - managed to determine cast from other tags.... will need further testing
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, random, re, requests, subprocess, time, unicodedata
@@ -90,7 +92,8 @@ def delay():
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def findTidy(myItem):
-    myItem = TIDYDICT.get(myItem.lower(), '')
+    myItem = makeASCII(myItem.lower())
+    myItem = TIDYDICT.get(myItem, '')
     myItem = None if myItem == 'x' else myItem
     return myItem
 
@@ -598,19 +601,42 @@ def getIAFDArtist(artistURL):
                 continue
 
             if re.search(r'Nationality', bioheading, re.IGNORECASE):                    # tidy the nationality
-                nations = [x.strip() for x in biodata.split(',') if x]
-                for idx, nation in enumerate(nations):
-                    tidy = findTidy(nation)
-                    nations[idx] = tidy if tidy else nation
+                artistNationality = ''
+                tempNations = [x.strip() for x in biodata.split(',') if x.strip()]
+                nations = set()
+                for idx, item in enumerate(tempNations):
+                    newItem = findTidy(item)
+                    if newItem is None:        # Don't process
+                        continue
+                    if newItem not in COUNTRYSET:
+                        continue
+                    nations.add(newItem)
 
-                artistNationality = nations[-1]                                         # use last country in the list for artist's art
-                biodata = ', '.join(nations)
+                # pick first nationality
+                nations = list(nations)
+                nations.sort(key = lambda x: x.lower())
+                artistNationality = nations[0] if nations else ''
+
+                biodata = ', '.join(nations)                                            # list of nations as nationality
                 artistBio[bioheading] = biodata
 
             elif re.search(r'Birthplace', bioheading, re.IGNORECASE):                   # Birthplace format = town, state, country
-                artistBirthNationality = biodata.split(',')[-1].strip()
-                tidy = findTidy(artistBirthNationality)
-                artistBirthNationality = tidy if tidy else artistBirthNationality
+                artistBirthNationality = ''
+                tempNations = [x.strip() for x in biodata.split(',') if x.strip()]
+                nations = set()
+                for idx, item in enumerate(tempNations):
+                    newItem = findTidy(item)
+                    if newItem is None:        # Don't process
+                        continue
+                    if newItem not in COUNTRYSET:
+                        continue
+                    nations.add(newItem)
+
+                # pick first nationality
+                nations = list(nations)
+                nations.sort(key = lambda x: x.lower())
+                artistBirthNationality = nations[0] if nations else ''
+
                 artistBio[bioheading] = biodata
 
             elif biodata.count('/') == 2:                                               # date format mm/dd/yyyy convert to mmm dd, yyyy - cater for years such as 19??
@@ -4366,15 +4392,24 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        log('UTILS :: No Cast List on Agent: Built From Tag List')
-        siteInfoDict['Cast'] = []
+        try:
+            htmlcast = html.xpath('//a[@class="titletags"]/text()')
+            htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
+            cast = list(set(htmlcast))
+            cast.sort(key = lambda x: x.lower())
+            siteInfoDict['Cast'] = cast[:]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+
+        except Exception as e:
+            siteInfoDict['Cast'] = []
+            log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
         log('UTILS :: No Collection Info on Agent')
         siteInfoDict['Collections'] = []
 
-        #   5.  Tag List: Genres, Cast and possible Countries, Compilation
+        #   5.  Tag List: Genres and possible Countries, Compilation
         log(LOG_SUBLINE)
         genresSet = set()
         countriesSet = set()
@@ -4416,7 +4451,8 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
                     countriesSet.add(newItem)
                     continue
 
-                genresSet.add(newItem) if newItem else castSet.add(item)
+                if newItem:
+                    genresSet.add(newItem)
 
             # also use synopsis to populate genres/countries as sometimes Scenes are not tagged with genres
             if siteInfoDict['Synopsis']:
@@ -5424,7 +5460,7 @@ def matchCast(unmatchedCastList, FILMDICT):
                 # Check that cast member has acted in a gay film
                 try:
                     chtml = getURLElement(castURL)
-                    xPath = '//table[@id="personal"]/tbody/tr[@class="ga" or @class="we"]' if FILMDICT['SceneAgent'] else '//table[@id="personal"]/tbody/tr[@class="ga"]'
+                    xPath = '//table[@id="personal"]/tbody/tr[@class="ga" or @class="we"]' if FILMDICT['SceneAgent'] is True else '//table[@id="personal"]/tbody/tr[@class="ga"]'
                     gayFilmsList = chtml.xpath(xPath)
                     gayFilmsFound = len(gayFilmsList)
                     log('UTILS :: {0:<29} {1}'.format('Filmography', '{0:>2} - Gay/Bi Films'.format(gayFilmsFound)))
@@ -6473,8 +6509,13 @@ def setMetadata(metadata, media, FILMDICT):
             poster = myAgentDict['Poster']
             log('UTILS :: {0:<29} {1}'.format('2h. Poster Images', poster if poster else 'None Found'))
             for idx, item in enumerate(poster, start=1):
-                log('UTILS :: {0:<29} {1}'.format('Poster' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
-                image, imageContent = getFilmImages(imageType='Poster', imageLocation=item, whRatio=1.5) if FILMDICT['SceneAgent'] else item, HTTP.Request(item).content
+                if FILMDICT['SceneAgent'] is True:
+                    image, imageContent = getFilmImages(imageType='Poster', imageLocation=item, whRatio=1.5) 
+                else:
+                    image = item
+                    imageContent = HTTP.Request(image).content
+
+                log('UTILS :: {0:<29} {1}'.format('Poster' if idx == 1 else '', '{0:>2} - {1}'.format(idx, image)))
                 metadata.posters[image] = Proxy.Media(imageContent, sort_order=idx)
 
             # save poster to disk
@@ -6504,8 +6545,13 @@ def setMetadata(metadata, media, FILMDICT):
                 art = myAgentDict['Art']
                 log('UTILS :: {0:<29} {1}'.format('2i. Art Images', art if art else 'None Found'))
                 for idx, item in enumerate(art, start=1):
-                    log('UTILS :: {0:<29} {1}'.format('Art' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
-                    image, imageContent = getFilmImages(imageType='Art', imageLocation=item, whRatio=0.5625) if FILMDICT['SceneAgent'] else item, HTTP.Request(item).content
+                    if FILMDICT['SceneAgent'] is True:
+                        image, imageContent = getFilmImages(imageType='Art', imageLocation=item, whRatio=1.5) 
+                    else:
+                        image = item
+                        imageContent = HTTP.Request(image).content
+
+                    log('UTILS :: {0:<29} {1}'.format('Art' if idx == 1 else '', '{0:>2} - {1}'.format(idx, image)))
                     metadata.art[image] = Proxy.Media(imageContent, sort_order=idx)
             else:
                 log('UTILS :: {0:<29} {1}'.format('Art Image', 'Not Set By Preference'))
