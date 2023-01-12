@@ -266,7 +266,7 @@ class CDUniverse(Agent.Movies):
 
         # update the metadata
         utils.log(LOG_BIGLINE)
-        if FILMDICT['Status']:
+        if FILMDICT['Status'] is True:
             utils.log(LOG_BIGLINE)
             '''
             The following bits of metadata need to be established and used to update the movie on plex
@@ -296,7 +296,7 @@ class CDUniverse(Agent.Movies):
             utils.setMetadata(metadata, media, FILMDICT)
 
         # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
-        if not FILMDICT['Status']:
+        if FILMDICT['Status'] is False:
             metadata.originally_available_at = None
             metadata.year = 0
 

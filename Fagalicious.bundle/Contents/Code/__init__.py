@@ -270,7 +270,7 @@ class Fagalicious(Agent.Movies):
                 FILMDICT['Status'] = True
                 break       # stop processing
 
-            if FILMDICT['Status']:      # if search and process sucessful stop processing
+            if FILMDICT['Status'] is True:      # if search and process sucessful stop processing
                 break
 
         # End Search Routine
@@ -314,7 +314,7 @@ class Fagalicious(Agent.Movies):
 
         # update the metadata
         utils.log(LOG_BIGLINE)
-        if FILMDICT['Status']:
+        if FILMDICT['Status'] is True:
             utils.log(LOG_BIGLINE)
             '''
             The following bits of metadata need to be established and used to update the movie on plex
@@ -344,7 +344,7 @@ class Fagalicious(Agent.Movies):
             utils.setMetadata(metadata, media, FILMDICT)
 
         # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
-        if not FILMDICT['Status']:
+        if FILMDICT['Status'] is False:
             metadata.originally_available_at = None
             metadata.year = 0
 

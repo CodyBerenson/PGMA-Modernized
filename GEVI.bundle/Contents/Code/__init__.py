@@ -153,18 +153,25 @@ class GEVI(Agent.Movies):
         # Search Query - for use to search the internet, remove all non alphabetic characters as GEVI site returns no results if apostrophes or commas exist etc..
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
         for searchTitle in FILMDICT['SearchTitles']:
-            if FILMDICT['Status']:
+            if FILMDICT['Status'] is True:
                 break
 
-            searchTitle = self.CleanSearchString(searchTitle)
             startRecord = 0
+            searchTitle = self.CleanSearchString(searchTitle)
+            searchType = 'containing' if '%7E%7E' in searchTitle else 'starting+with'           # ~~ = %7E%7E after URLEncoding
+            searchTitle = searchTitle.replace('%7E%7E', '') if searchType == 'containing' else searchTitle
+
+            pageNumber = 0
             morePages = True
             while morePages:
-                searchType = 'containing' if '%7E%7E' in searchTitle else 'starting+with'           # ~~ = %7E%7E after URLEncoding
-                if searchType == 'containing':
-                    searchTitle = searchTitle.replace('%7E%7E', '')
+                pageNumber += 1
+                if pageNumber > 10:
+                    morePages = False     # search a maximum of 10 pages
+                    utils.log('SEARCH:: Warning: Page Search Limit Reached [10]')
+                    continue
 
                 searchQuery = BASE_SEARCH_URL.format(startRecord, searchTitle, searchType)
+                startRecord = pageNumber * 100       # JSon retrieves 100 records at a time
                 utils.log('SEARCH:: Search Query: %s', searchQuery)
                 try:
                     JSon = JSON.ObjectFromURL(searchQuery, timeout=20, sleep=utils.delay())
@@ -174,18 +181,17 @@ class GEVI(Agent.Movies):
 
                     filmsFound = JSon.get('recordsFiltered', len(filmsList))
                     morePages = True if startRecord <= filmsFound else False
-                    if not morePages:
+                    if morePages is False:
                         utils.log('SEARCH:: No More Pages Found')
                 except Exception as e:
                     utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
                     break
 
-                pageNumber = int(startRecord / 100) + 1
                 utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2} - Search String: {2}'.format(filmsFound, pageNumber, searchTitle)))
                 utils.log(LOG_BIGLINE)
                 myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
                 for idx, film in enumerate(filmsList, start=1):
-                    utils.log('SEARCH:: {0:<29} {1}'.format('Processing', '{0} of {1} for {2} - {3} {4}'.format(idx + startRecord, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
+                    utils.log('SEARCH:: {0:<29} {1}'.format('Processing', 'Page {0}: {1} of {2} for {3} - {4} {5}'.format(pageNumber, idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
                     utils.log(LOG_BIGLINE)
 
                     #[u"<a href='/video/30363'>Big & Beefy</a>", u'2008', u"<a href='/company/6303'>Alphamale Media</a>", None, u'', u'', u'General Hardcore']
@@ -408,8 +414,7 @@ class GEVI(Agent.Movies):
                     FILMDICT['Status'] = True
                     break       # stop processing
 
-                startRecord += 100          # JSon retrieves 100 records at a time
-                if FILMDICT['Status']:      # if search and process sucessful stop processing
+                if FILMDICT['Status'] is True:      # if search and process sucessful stop processing
                     break
 
         # End Search Routine
@@ -453,7 +458,7 @@ class GEVI(Agent.Movies):
 
         # update the metadata
         utils.log(LOG_BIGLINE)
-        if FILMDICT['Status']:
+        if FILMDICT['Status'] is True:
             utils.log(LOG_BIGLINE)
             '''
             The following bits of metadata need to be established and used to update the movie on plex
@@ -483,7 +488,7 @@ class GEVI(Agent.Movies):
             utils.setMetadata(metadata, media, FILMDICT)
 
         # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
-        if not FILMDICT['Status']:
+        if FILMDICT['Status'] is False:
             metadata.originally_available_at = None
             metadata.year = 0
 

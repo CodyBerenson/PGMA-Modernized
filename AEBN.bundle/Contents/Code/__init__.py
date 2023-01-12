@@ -126,41 +126,45 @@ class AEBN(Agent.Movies):
         # Search Query - for use to search the internet, remove all non alphabetic characters.
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
         for searchTitle in FILMDICT['SearchTitles']:
-            if FILMDICT['Status']:
+            if FILMDICT['Status'] is True:
                 break
 
             searchTitle = self.CleanSearchString(searchTitle)
             searchQuery = BASE_SEARCH_URL.format(searchTitle)
             morePages = True
+            pageNumber = 0
             while morePages:
+                utils.log('SEARCH:: {0:<29} {1}'.format('Search Query', searchQuery))
+                pageNumber += 1
+                if pageNumber > 10:
+                    morePages = False     # search a maximum of 10 pages
+                    utils.log('SEARCH:: Warning: Page Search Limit Reached [10]')
+                    continue
+
                 try:
-                    utils.log('SEARCH:: {0:<29} {1}'.format('Search Query', searchQuery))
                     html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=utils.delay())
                     filmsList = html.xpath('//div[@class="dts-collection-item dts-collection-item-movie"][@id]/div[contains(@id, "dtsImageOverlayContainer")]')
                     if not filmsList:
                         raise Exception('< No Films! >')
+    
+                    # if there is a list of films - check if there are further pages returned
+                    try:
+                        searchQuery = html.xpath('//ul[@class="dts-pagination"]/li[@class="active" and text()!="..."]/following::li/a[@class="dts-paginator-tagging"]/@href')[0]
+                        searchQuery = (BASE_URL if BASE_URL not in searchQuery else '') + searchQuery
+                        morePages = True    # next page search query determined so set as true
+                    except:
+                        morePages = False
+
                 except Exception as e:
                     utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
                     break
-
-                try:
-                    searchQuery = html.xpath('//ul[@class="dts-pagination"]/li[@class="active" and text()!="..."]/following::li/a[@class="dts-paginator-tagging"]/@href')[0]
-                    searchQuery = (BASE_URL if BASE_URL not in searchQuery else '') + searchQuery
-                    utils.log('SEARCH:: Next Page Search Query: %s', searchQuery)
-                    pageNumber = int(html.xpath('//ul[@class="dts-pagination"]/li[@class="active" and text()!="..."]/text()')[0]) - 1
-                    morePages = True if pageNumber <= 10 else False
-                except:
-                    searchQuery = ''
-                    utils.log('SEARCH:: Next Page Search Query: No More Pages Found')
-                    pageNumber = 1
-                    morePages = False
 
                 filmsFound = len(filmsList)
                 utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
                 utils.log(LOG_BIGLINE)
                 myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
                 for idx, film in enumerate(filmsList, start=1):
-                    utils.log('SEARCH:: {0:<29} {1}'.format('Processing', '{0} of {1} for {2} - {3} {4}'.format(idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
+                    utils.log('SEARCH:: {0:<29} {1}'.format('Processing', 'Page {0}: {1} of {2} for {3} - {4} {5}'.format(pageNumber, idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
                     utils.log(LOG_BIGLINE)
 
                     # Site Title
@@ -273,7 +277,7 @@ class AEBN(Agent.Movies):
                     FILMDICT['Status'] = True
                     break       # stop processing
 
-                if FILMDICT['Status']:      # if search and process sucessful stop processing
+                if FILMDICT['Status'] is True:      # if search and process sucessful stop processing
                     break
 
         # End Search Routine
@@ -317,7 +321,7 @@ class AEBN(Agent.Movies):
 
         # update the metadata
         utils.log(LOG_BIGLINE)
-        if FILMDICT['Status']:
+        if FILMDICT['Status'] is True:
             utils.log(LOG_BIGLINE)
             '''
             The following bits of metadata need to be established and used to update the movie on plex
@@ -347,7 +351,7 @@ class AEBN(Agent.Movies):
             utils.setMetadata(metadata, media, FILMDICT)
 
         # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
-        if not FILMDICT['Status']:
+        if FILMDICT['Status'] is False:
             metadata.originally_available_at = None
             metadata.year = 0
 

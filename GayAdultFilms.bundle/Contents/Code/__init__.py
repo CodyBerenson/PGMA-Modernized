@@ -109,7 +109,7 @@ class GayAdultFilms(Agent.Movies):
 
         # Access XML Film Source: Manually done by clicking on the humburger dots, then get info and view XML Source
         metadataURL = 'http://127.0.0.1:32400/library/metadata/{0}?X-Plex-Token={1}'.format(metadata.id, PLEXTOKEN)
-        xtml = XML.ElementFromURL(metadataURL, sleep=5)
+        xml = XML.ElementFromURL(metadataURL, sleep=5)
         strxml = XML.StringFromElement(xml)
         utils.log('UPDATE:: HTML Page Contents:\r\n%s', xml)
 

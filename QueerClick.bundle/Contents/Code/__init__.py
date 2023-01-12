@@ -231,6 +231,10 @@ class QueerClick(Agent.Movies):
                 # Site Title
                 utils.log(LOG_BIGLINE)
                 try:
+                    filmTitle = filmTitle.strip()
+                    pattern = ur'[^a-zA-Z0-9] [A-Z0-9!% ]*[!|%]$'           # pattern start with Hyphen followed by Capital letters,%,! but has to end with exclamation or percent
+                    matched = re.search(pattern, filmTitle, re.UNICODE)     # match against whole string
+                    filmTitle = re.sub(pattern, '', filmTitle).strip() if matched else filmTitle
                     utils.matchTitle(filmTitle, FILMDICT)
                 except Exception as e:
                     utils.log('SEARCH:: Error getting Site Title: %s', e)
@@ -287,7 +291,7 @@ class QueerClick(Agent.Movies):
                 FILMDICT['Status'] = True
                 break       # stop processing
 
-            if FILMDICT['Status']:      # if search and process sucessful stop processing
+            if FILMDICT['Status'] is True:      # if search and process sucessful stop processing
                 break
 
         # End Search Routine
@@ -331,7 +335,7 @@ class QueerClick(Agent.Movies):
 
         # update the metadata
         utils.log(LOG_BIGLINE)
-        if FILMDICT['Status']:
+        if FILMDICT['Status'] is True:
             utils.log(LOG_BIGLINE)
             '''
             The following bits of metadata need to be established and used to update the movie on plex
@@ -361,7 +365,7 @@ class QueerClick(Agent.Movies):
             utils.setMetadata(metadata, media, FILMDICT)
 
         # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
-        if not FILMDICT['Status']:
+        if FILMDICT['Status'] is False:
             metadata.originally_available_at = None
             metadata.year = 0
 

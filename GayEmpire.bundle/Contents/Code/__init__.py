@@ -124,25 +124,27 @@ class GayEmpire(Agent.Movies):
 
         morePages = True
         while morePages:
-            utils.log('SEARCH:: Search Query: %s', searchQuery)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Search Query', searchQuery))
+            pageNumber += 1
+            if pageNumber > 10:
+                morePages = False     # search a maximum of 10 pages
+                utils.log('SEARCH:: Warning: Page Search Limit Reached [10]')
+                continue
+
             try:
                 html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=utils.delay())
                 filmsList = html.xpath('.//div[contains(@class,"row list-view-item")]')
                 if not filmsList:
                     raise Exception('< No Film Titles >')   # out of WHILE loop
+
                 # if there is a list of films - check if there are further pages returned
                 try:
                     nextPage = html.xpath('.//a[@title="Next"]/@href')[0]
-                    if pageNumber < 11:
-                        morePages = True 
-                    else:
-                        morePages = False     # search a maximum of 10 pages
-                        utils.log('SEARCH:: Warning: Page Search Limit Reached [10]')
-                        continue
-                    pageNumber += 1
+                    morePages = True
                     searchQuery = BASE_SEARCH_URL.format(searchTitle, pageNumber)
                 except:
                     morePages = False
+
             except Exception as e:
                 utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
                 break
@@ -152,7 +154,7 @@ class GayEmpire(Agent.Movies):
             utils.log(LOG_BIGLINE)
             myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
             for idx, film in enumerate(filmsList, start=1):
-                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', 'Page {0}: {1} of {2} for {3} - {4} {5}'.format(pageNumber - 1, idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
+                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', 'Page {0}: {1} of {2} for {3} - {4} {5}'.format(pageNumber, idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
                 utils.log(LOG_BIGLINE)
 
                 # siteTitle = The text in the 'title' - Gay DVDEmpire - displays its titles in SORT order
@@ -205,6 +207,7 @@ class GayEmpire(Agent.Movies):
 
                 # Site Production Year found in brackets - if fails try Release Date 
                 utils.log(LOG_BIGLINE)
+                vReleaseDate = FILMDICT['CompareDate']
                 try:
                     filmProductionYear = film.xpath('.//small[contains(., "(")]/text()')[0].replace('(', '').replace(')', '').strip()
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Production Year', filmProductionYear))
@@ -329,7 +332,7 @@ class GayEmpire(Agent.Movies):
 
         # update the metadata
         utils.log(LOG_BIGLINE)
-        if FILMDICT['Status']:
+        if FILMDICT['Status'] is True:
             utils.log(LOG_BIGLINE)
             '''
             The following bits of metadata need to be established and used to update the movie on plex
@@ -359,7 +362,7 @@ class GayEmpire(Agent.Movies):
             utils.setMetadata(metadata, media, FILMDICT)
 
         # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
-        if not FILMDICT['Status']:
+        if FILMDICT['Status'] is False:
             metadata.originally_available_at = None
             metadata.year = 0
 

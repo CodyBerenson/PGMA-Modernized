@@ -147,27 +147,33 @@ class GayHotMovies(Agent.Movies):
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
         searchTitle = self.CleanSearchString(FILMDICT['SearchTitle'])
         searchQuery = BASE_SEARCH_URL.format(searchTitle)
-
+        pageNumber = 0
         morePages = True
         while morePages:
-            utils.log('SEARCH:: Search Query: %s', searchQuery)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Search Query', searchQuery))
+            pageNumber += 1
+            if pageNumber > 10:
+                morePages = False     # search a maximum of 10 pages
+                utils.log('SEARCH:: Warning: Page Search Limit Reached [10]')
+                continue
+
             try:
                 html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=utils.delay())
                 filmsList = html.xpath('//div[@class="item-preview-video"]')
                 if not filmsList:
                     raise Exception('< No Film Titles >')   # out of WHILE loop
+
+                # if there is a list of films - check if there are further pages returned
+                try:
+                    searchQuery = html.xpath('//a[@title="Next"]/@href')[0]
+                    searchQuery = (BASE_URL if BASE_URL not in searchQuery else '') + searchQuery
+                    morePages = True
+                except:
+                    morePages = False
+
             except Exception as e:
                 utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
                 break
-
-            try:
-                searchQuery = html.xpath('//a[@title="Next"]/@href')[0]
-                searchQuery = (BASE_URL if BASE_URL not in searchQuery else '') + searchQuery
-                pageNumber = int(searchQuery.split('=')[-1]) - 1
-                morePages = True if pageNumber <= 10 else False
-            except:
-                pageNumber = 1
-                morePages = False
 
             filmsFound = len(filmsList)
             utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
@@ -275,7 +281,7 @@ class GayHotMovies(Agent.Movies):
                 FILMDICT['Status'] = True
                 break       # stop processing
 
-            if FILMDICT['Status']:      # if search and process sucessful stop processing
+            if FILMDICT['Status'] is True:      # if search and process sucessful stop processing
                 break
 
         # End Search Routine
@@ -319,7 +325,7 @@ class GayHotMovies(Agent.Movies):
 
         # update the metadata
         utils.log(LOG_BIGLINE)
-        if FILMDICT['Status']:
+        if FILMDICT['Status'] is True:
             utils.log(LOG_BIGLINE)
             '''
             The following bits of metadata need to be established and used to update the movie on plex
@@ -349,7 +355,7 @@ class GayHotMovies(Agent.Movies):
             utils.setMetadata(metadata, media, FILMDICT)
 
         # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
-        if not FILMDICT['Status']:
+        if FILMDICT['Status'] is False:
             metadata.originally_available_at = None
             metadata.year = 0
 

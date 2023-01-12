@@ -185,7 +185,7 @@ Big Cock::Big Cocks
 Big Dick::Big Cocks
 Big Dicks (9'' or more)::Big Cocks
 Big Dicks::Big Cocks
-Bikers::Vehicles
+Bikers::Blue Collar
 Biography::Showcase
 Birthday::x
 Bisexual -> Amateur::Other
@@ -200,7 +200,7 @@ Black Men::x
 Black Studs::x
 Black::x
 Blacks::x
-Blindfolds::Fetish Wear
+Blindfolds::Fetish
 Blonde::x
 Blondes::x
 Blow Bang::Oral Sex
@@ -250,8 +250,8 @@ Canadian::Canada
 Canary Islands::Spain
 Candle Wax::BDSM
 Cape Verdean::Cape Verde
-Car, Bus, Van, RV::Vehicles
-Cars & Motorcycles::Vehicles
+Car, Bus, Van, RV::Cruising
+Cars & Motorcycles::Cruising
 Casting Couch / Auditions::Showcase
 Casting::Showcase
 Caymanian::Cayman Islands
@@ -305,18 +305,18 @@ Clothespins::BDSM
 Clothing -> Cops / Firemen::Role Play
 Clothing -> Cosplay::Role Play
 Clothing -> Doctor::Role Play
-Clothing -> Glasses::Fetish Wear
+Clothing -> Glasses::Fetish
 Clothing -> Goth::Role Play
-Clothing -> Jeans::Fetish Wear
-Clothing -> Jockstraps::Fetish Wear
-Clothing -> Masks::Fetish Wear
+Clothing -> Jeans::Fetish
+Clothing -> Jockstraps::Fetish
+Clothing -> Masks::Fetish
 Clothing -> Military::Fetish
 Clothing -> Nuns / Priests::Role Play
 Clothing -> Sports Gear::Fit Guys
 Clothing -> Striptease::Exhibitionism
 Clothing -> Suit / Business Attire::White Collar
-Clothing -> Underwear/Briefs::Fetish Wear
-Clothing -> Uniforms::Fetish Wear
+Clothing -> Underwear/Briefs::Fetish
+Clothing -> Uniforms::Fetish
 Clothing -> Western::Fetish
 Clothing::x
 Clowns::Role Play
@@ -357,7 +357,7 @@ Creampie::Cum
 Creamy::Cum
 Creator Content::x
 Croatian::Croatia
-Cross-Dressing::Fetish Wear
+Cross-Dressing::Fetish
 Cruising::Cruising
 CT::United States
 Cuban::Cuba
@@ -413,7 +413,7 @@ Double Oral::Oral Sex
 Double Penetration (DP)::Extreme Penetration
 Double Penetration::Extreme Penetration
 DP::Extreme Penetration
-Drag::Fetish Wear
+Drag::Fetish
 Dungeon::BDSM
 Dungeons::BDSM
 Dutch (Netherlands)::Netherlands
@@ -483,6 +483,7 @@ Family Roleplay::Role Play
 Fantasies::Role Play
 Fantasy & Supernatural::Role Play
 Fantasy::Role Play
+Fauxcest::Role Play
 Feature / Movie::x
 Feature::x
 Featured::x
@@ -501,18 +502,18 @@ Fetish -> Bdsm -> Hazing::BDSM
 Fetish -> Bdsm -> Humiliation::BDSM
 Fetish -> Bdsm -> Orgasm Control::BDSM
 Fetish -> Bdsm::BDSM
-Fetish -> Crossdressing::Fetish Wear
+Fetish -> Crossdressing::Fetish
 Fetish -> Enemas::Fetish
 Fetish -> Feet & Shoes -> Bare Feet::Feet
 Fetish -> Feet & Shoes -> Foot Worship::Feet
 Fetish -> Feet & Shoes::Feet
 Fetish -> Foreign Kink::Fetish
 Fetish -> Kinky Sex::Fetish
-Fetish -> Latex & Rubber::Fetish Wear
-Fetish -> Leather::Fetish Wear
-Fetish -> Legs & Nylons -> Pantyhose::Fetish Wear
-Fetish -> Legs & Nylons -> Stockings::Fetish Wear
-Fetish -> Legs & Nylons::Fetish Wear
+Fetish -> Latex & Rubber::Fetish
+Fetish -> Leather::Fetish
+Fetish -> Legs & Nylons -> Pantyhose::Fetish
+Fetish -> Legs & Nylons -> Stockings::Fetish
+Fetish -> Legs & Nylons::Fetish
 Fetish -> Medical::Role Play
 Fetish -> Shaving::Grooming
 Fetish -> Smoking::Fetish
@@ -520,7 +521,6 @@ Fetish -> Spanking (See Spanking)::BDSM
 Fetish -> Tickling::BDSM
 Fetish -> Watersports::Watersports
 Fetish -> Wrestling Men::Fit Guys
-Fetish Wear::Fetish Wear
 Fetish::Fetish
 Fijian::Fiji
 Filipino::Philippines
@@ -583,8 +583,8 @@ Gay - New Releases::x
 Gay - Sample Clip::x
 Gay - Solo::Masturbation
 Gay - TWK::Twinks/Young Men
-Gay & Straight::Straight/Closeted Men
-Gay for Pay::Straight/Closeted Men
+Gay & Straight::Other
+Gay for Pay::Other
 Gay::x
 Gaycest::Intergenerational
 Gender Queer::Transgender
@@ -599,7 +599,7 @@ Gilbertese::Kiribati
 Gimp::Fetish
 Girl on Girl action::x
 Glamour::x
-Glasses::Fetish Wear
+Glasses::Fetish
 Glory Hole::Oral Sex
 Gloryhole::Oral Sex
 Go-Go Boys::Exhibitionism
@@ -634,6 +634,7 @@ Handjob M on M::Masturbation
 Handjob::Masturbation
 Handjobs::Masturbation
 Hardcore::x
+Hardtied Bondage::BDSM
 Hawaii::United States
 Hawaiian::United States
 HD - High Definition::x
@@ -654,7 +655,7 @@ Home Made::Amateur
 Homemade Movies::Amateur
 Honduran::Honduras
 Hondurian::Honduras
-Hoods::Fetish Wear
+Hoods::Fetish
 Horror::x
 Horse::Big Cocks
 Horse Hung::Big Cocks
@@ -737,13 +738,13 @@ Jackhammer::United States
 Jamaican::Jamaica
 Japanese Unmosaic::Japan
 Japanese::Japan
-Jeans & Denim::Fetish Wear
+Jeans & Denim::Fetish
 Jewish::United States
-Jock Straps::Fetish Wear
+Jock Straps::Fetish
 Jocks & Muscle Hunks::Fit Guys
 Jocks::Fit Guys
-Jockstrap::Fetish Wear
-Jockstraps::Fetish Wear
+Jockstrap::Fetish
+Jockstraps::Fetish
 JOI::Masturbation
 Jordanian::Jordan
 Jousting::Fetish
@@ -779,18 +780,18 @@ Language -> Turkish::Turkey
 Language::x
 Laotian::Laos
 Las Vegas::United States
-Latex & Leather Items::Fetish Wear
-Latex & Leather::Fetish Wear
-Latex & Rubber::Fetish Wear
+Latex & Leather Items::Fetish
+Latex & Leather::Fetish
+Latex & Rubber::Fetish
 Latex::Fetish
 Latin::x
 Latino::x
 Latinos::x
 Latvian::Latvia
-Leather / Rubber::Fetish Wear
-Leather Films::Fetish Wear
-Leather Pride::Fetish Wear
-Leather::Fetish Wear
+Leather / Rubber::Fetish
+Leather Films::Fetish
+Leather Pride::Fetish
+Leather::Fetish
 Lebanese::Lebanon
 Legend / Diva::Showcase
 LGBT Interest::LGBT Interest
@@ -798,6 +799,7 @@ Liberian::Liberia
 Libyan::Libya
 Liechtensteiner::Liechtenstein
 Lifeguard::Outdoors
+Lite Bondage::BDSM
 Lithuanian::Lithuania
 Locale -> Atlanta::United States
 Locale -> Chicago::United States
@@ -815,7 +817,7 @@ Locale::x
 London::United Kingdom
 Louisiana::United States
 Luxembourgers::Luxembourg
-Lycra::Fetish Wear
+Lycra::Fetish
 MA::United States
 Macedonian::North Macedonia
 Madagascan::Madagascar
@@ -831,7 +833,7 @@ Manitoba::Canada
 Mardi Gras::x
 Marshallese::Marshall Islands
 Maryland::United States
-Masks::Fetish Wear
+Masks::Fetish
 Massachusetts::United States
 Massage::Massage
 Masturbate::Masturbation
@@ -851,7 +853,7 @@ MB::Canada
 MD::United States
 ME::United States
 Media::x
-Men's Underwear::Fetish Wear
+Men's Underwear::Fetish
 Mexican::Mexico
 Mexico::Mexico
 MI::United States
@@ -859,7 +861,7 @@ Miami::Canada
 Michigan::United States
 Micronesian::Micronesia
 Middle Eastern::x
-Military / Uniform::Fetish Wear
+Military / Uniform::Fetish
 Military::Fetish
 Minnesota::United States
 Mississippi::United States
@@ -1001,7 +1003,7 @@ Palestinian::Palestine
 Palm Springs::United States
 Panamanian::Panama
 Pantyhose & Stockings Fetish::Fetish
-Pantyhose & Stockings::Fetish Wear
+Pantyhose & Stockings::Fetish
 Papua New Guinean::Papua New Guinea
 Paraguayan::Paraguay
 Paris::France
@@ -1082,7 +1084,7 @@ Puerto Rican::United States
 Puerto Rico::United States
 Pumping::Sex Toys
 Punishment::BDSM
-Punk::Fetish Wear
+Punk::Fetish
 Qatari::Qatar
 QC::Canada
 Quarantine::x
@@ -1113,7 +1115,7 @@ Role Play / Fantasy::Role Play
 Romance::x
 Romanian::Romania
 Rough Sex::Other
-Rubber::Fetish Wear
+Rubber::Fetish
 Russian::Russia
 Rusty Trombone::Rimming
 Rwandan::Rwanda
@@ -1133,7 +1135,7 @@ San Luis Obispo County::United States
 Santo Domingo::Dominican Republic
 Sao Tomean::Sao Tome and Principe
 Saskatchewan::Canada
-Satin PJ's::Fetish Wear
+Satin PJ's::Fetish
 Saudi::Saudi Arabia
 SC::United States
 Schoolboys::Intergenerational
@@ -1184,7 +1186,7 @@ Sex Toy Play::Sex Toys
 Sex Toys::Sex Toys
 Sex Wrestling::Fit Guys
 Sex::Anal Sex
-Sexy Wear::Fetish Wear
+Sexy Wear::Fetish
 Seychellois::Seychelles
 Shaved::Shaved
 Shaving Creme Wrestling::Fit Guys
@@ -1233,7 +1235,7 @@ South Dakota::United States
 South Korean::South Korea
 South Sudanese::South Sudan
 Spain::Spain
-Spandex::Fetish Wear
+Spandex::Fetish
 Spanish Language::x
 Spanish Speaking::x
 Spanish::Spain
@@ -1256,15 +1258,15 @@ Star Spotlight::Showcase
 Star-Power::Showcase
 Stockade::BDSM
 Story Line / Drama::x
-Str8 Bait::Straight/Closeted Men
-Straight For Gay::Straight/Closeted Men
-Straight Trade -> Amateur::Straight/Closeted Men
-Straight Trade -> Blowjobs::Straight/Closeted Men
-Straight Trade -> Sex::Straight/Closeted Men
-Straight Trade -> Straight Porn Stars::Straight/Closeted Men
-Straight Trade::Straight/Closeted Men
-Straight-To-Anal::Straight/Closeted Men
-Straight/Closeted Men::Straight/Closeted Men
+Str8 Bait::Other
+Straight For Gay::Other
+Straight Trade -> Amateur::Other
+Straight Trade -> Blowjobs::Other
+Straight Trade -> Sex::Other
+Straight Trade -> Straight Porn Stars::Other
+Straight Trade::Other
+Straight-To-Anal::Other
+Straight/Closeted Men::Other
 Strap-On::Sex Toys
 Strap-Ons::Sex Toys
 Strip Dancers::Exhibitionism
@@ -1356,7 +1358,7 @@ Trans::Transgender
 Transexual / She-Male::Transgender
 Transgendered::Transgender
 Transsexual::Transgender
-Transvestite::Fetish Wear
+Transvestite::Fetish
 Trinidadians::Trinidad and Tobago
 Triple Feature::x
 Tropical Sex / By The Pool::Outdoors
@@ -1378,8 +1380,8 @@ UK::United Kingdom
 Ukrainian::Ukraine
 Ultra High Definition::x
 Uncut::Uncut
-Uniform::Fetish Wear
-Uniforms::Fetish Wear
+Uniform::Fetish
+Uniforms::Fetish
 United Kingdom::United Kingdom
 Urethra Play::Extreme Penetration
 Uruguayan::Uruguay

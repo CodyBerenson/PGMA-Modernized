@@ -46,6 +46,8 @@ General Functions found in all agents
                     Add Director and Cast Nationalities to Country Metadata
     29 Dec 2022     Correction to Poster/Art images - Scene Agents cropped images were not been saved to metadata
                     Queerclick - managed to determine cast from other tags.... will need further testing
+    06 Jan 2023     Allow scrape to continue if poster/art processing fails
+
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, random, re, requests, subprocess, time, unicodedata
@@ -59,7 +61,7 @@ from PIL import Image
 
 # IAFD Related variables
 IAFD_BASE = 'https://www.iafd.com'
-IAFD_SEARCH_URL = IAFD_BASE + '/results.asp?searchtype=comprehensive&searchstring={0}'
+IAFD_SEARCH_URL = IAFD_BASE + '/ramesearch.asp?searchtype=comprehensive&searchstring={0}'
 IAFD_FILTER = '&FirstYear={0}&LastYear={1}&Submit=Filter'
 IAFD_ABSENT = u'\U0000274C'        # red cross mark - not on IAFD
 IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
@@ -2892,8 +2894,8 @@ def getSiteInfoGayFetishandBDSM(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Images', '{0:>} - {1}'.format(len(htmlimages), htmlimages)))
             images = []
             [images.append(x) for x in htmlimages if x not in images]
-            poster = images[0]
-            art = images[1] if len(images) > 1 else poster
+            poster = [images[0]]
+            art = [images[1]] if len(images) > 1 else poster
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
@@ -3033,8 +3035,8 @@ def getSiteInfoGayMovie(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Images', '{0:>} - {1}'.format(len(htmlimages), htmlimages)))
             images = []
             [images.append(x) for x in htmlimages if x not in images]
-            poster = images[0]
-            art = images[1] if len(images) > 1 else poster
+            poster = [images[0]]
+            art = [images[1]] if len(images) > 1 else poster
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
@@ -3321,8 +3323,8 @@ def getSiteInfoGayWorld(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Images', '{0:>} - {1}'.format(len(htmlimages), htmlimages)))
             images = []
             [images.append(x) for x in htmlimages if x not in images]
-            poster = images[0]
-            art = images[1] if len(images) > 1 else poster
+            poster = [images[0]]
+            art = [images[1]] if len(images) > 1 else poster
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
 
@@ -5190,25 +5192,26 @@ def logHeader(myFunc, media, lang):
     log(LOG_ASTLINE)
     log('%s:: Version:                              v.%s', myFunc, VERSION_NO)
     log('%s:: Python:                               %s (%s): %s', myFunc, platform.python_version(), platform.architecture()[0], platform.python_build())
-    log('%s:: Platform:                             %s - %s %s', myFunc, platform.machine(), platform.system(), platform.release())
-    log('%s:: Operating System Name                 %s', myFunc, os.name)
+    log('%s:: Platform:', myFunc)
+    log('%s::   > Operating System:                 %s', myFunc, platform.system())
+    log('%s::   > Release:                          %s', myFunc, platform.release())
     log('%s:: Preferences:', myFunc)
-    log('%s::  > Legend Before Summary:             %s', myFunc, PREFIXLEGEND)
-    log('%s::  > Reset Metadata:                    %s', myFunc, RESETMETA)
-    log('%s::  > Collection Gathering:', myFunc)
+    log('%s::   > Legend Before Summary:            %s', myFunc, PREFIXLEGEND)
+    log('%s::   > Reset Metadata:                   %s', myFunc, RESETMETA)
+    log('%s::   > Collection Gathering:', myFunc)
     log('%s::      > System:                        %s', myFunc, 'Yes' if COLSYSTEM else 'No')
-    log('%s::      > Genres:                        %s, Prefix genres with %s symbol?: %s', myFunc, 'Yes' if COLGENRE else 'No', AGENT_TYPE, PREFIXGENRE)
+    log('%s::      > Genres:                        %s, Prefix genres with %s symbol?: %s', myFunc, 'Yes' if COLGENRE else 'No', AGENT_TYPE, 'Yes' if PREFIXGENRE is True else 'No')
     log('%s::      > Countries                      %s, Display poster as %s', myFunc, 'Yes' if COLCOUNTRY else 'No', COUNTRYPOSTERTYPE)
     log('%s::      > Studio:                        %s', myFunc, 'Yes' if COLSTUDIO else 'No')
     log('%s::      > Series:                        %s', myFunc, 'Yes' if COLSERIES else 'No')
     log('%s::      > Directors:                     %s', myFunc, 'Yes' if COLDIRECTOR else 'No')
     log('%s::      > Cast:                          %s', myFunc, 'Yes' if COLCAST else 'No')
-    log('%s::  > Poster Source - Download?          %s', myFunc, POSTERSOURCEDOWNLOAD)
-    log('%s::  > Match IAFD Duration:               %s', myFunc, MATCHIAFDDURATION)
-    log('%s::  > Match Site Duration:               %s', myFunc, MATCHSITEDURATION)
-    log('%s::  > Duration Dx                        ±%s Minutes', myFunc, DURATIONDX)
-    log('%s::  > Language Detection:                %s', myFunc, DETECT)
-    log('%s::  > Library:Site Language:             (%s:%s)', myFunc, lang, SITE_LANGUAGE)
+    log('%s::   > Poster Source - Download?         %s', myFunc, POSTERSOURCEDOWNLOAD)
+    log('%s::   > Match IAFD Duration:              %s', myFunc, MATCHIAFDDURATION)
+    log('%s::   > Match Site Duration:              %s', myFunc, MATCHSITEDURATION)
+    log('%s::   > Duration Dx                       ±%s Minutes', myFunc, DURATIONDX)
+    log('%s::   > Language Detection:               %s', myFunc, DETECT)
+    log('%s::   > Library:Site Language:            (%s:%s)', myFunc, lang, SITE_LANGUAGE)
     log('%s:: Media Title:                          %s', myFunc, media.title)
     log('%s:: File Path:                            %s', myFunc, media.items[0].parts[0].file)
     log(LOG_ASTLINE)
@@ -5931,7 +5934,7 @@ def matchFilename(media):
 
     # strip definite and indefinite english articles and take after articles
     pattern = ur'^(The|An|A) '
-    filmVars['IAFDTitle']= re.sub(pattern, '', filmVars['IAFDTitle'], re.IGNORECASE)  # match against whole string
+    filmVars['IAFDTitle'] = re.sub(pattern, '', filmVars['IAFDTitle'], re.IGNORECASE)  # match against whole string
     filmVars['NormaliseIAFDTitle'] = Normalise(filmVars['IAFDTitle'])
     filmVars['CompareTitle'].add(sortAlphaChars(filmVars['NormaliseIAFDTitle']))
     filmVars['CompareTitle'] = sorted(list(filmVars['CompareTitle']))
@@ -6528,9 +6531,7 @@ def setMetadata(metadata, media, FILMDICT):
                 PlexSaveFile(downloadPoster, imageContent)
 
         except Exception as e:
-            log('UTILS :: Error setting Poster: %s', e)
-            FILMDICT['Status'] = False
-            return
+            log('UTILS :: Error setting Poster: %s', e)         # do not fail scrape if poster can not be set
 
         # 2i.   Art - Back Cover of DVD : Determined by user preference
         # There is no working way to reset Art
@@ -6557,9 +6558,7 @@ def setMetadata(metadata, media, FILMDICT):
                 log('UTILS :: {0:<29} {1}'.format('Art Image', 'Not Set By Preference'))
 
         except Exception as e:
-            log('UTILS :: Error setting Art: %s', e)
-            FILMDICT['Status'] = False
-            return
+            log('UTILS :: Error setting Art: %s', e)          # do not fail scrape if art can not be set
 
         # 2j.   Reviews - Put all Scene information as default unless there are none and website has actual reviews
         log(LOG_SUBLINE)
@@ -7109,48 +7108,36 @@ def setupStartVariables():
             log('START :: Error: Tidy Categories Source File: %s', tidy_txt)   
             continueSetup = False
 
-    #   8.     Retrieve Plex Token
+    #   8.     Retrieve Plex Token/Machine ID
     if continueSetup:
         log(LOG_SUBLINE)
-        log('START :: 8.\tRetrieve Plex Token')
-        if os.name == 'nt':
-            preferences_xml = os.path.join(PlexSupportPath, 'Preferences.xml').replace('Plex', 'Plex\Plex')
-        elif os.name == 'posix':
-            preferences_xml = os.path.join(PlexSupportPath, 'Preferences.xml')
+        log('START :: 8.\tRetrieve Plex Token and Machine ID')
+        if platform.system() == 'Windows':
+            preferences_file = os.path.join(PlexSupportPath, 'Preferences.xml').replace('Plex', 'Plex\Plex')
+        elif platform.system() == 'Linux':
+            preferences_file = os.path.join(PlexSupportPath, 'Preferences.xml')
+        elif platform.system() == 'Darwin':     # MAC OS
+            preferences_file = os.path.join(PlexSupportPath, 'Preferences', 'com.plexapp.plexmediaserver.plist').replace('Application Support/Plex Media Server', '')
         else:
-            preferences_xml = ''        # will error when trying to load file
+            preferences_file = ''       # will error when plexloadfile runs
 
-        log('START :: {0:<29} {1}'.format('Preference XML', preferences_xml if preferences_xml else 'Error: Not Found'))
+        log('START :: {0:<29} {1}'.format('Preference {0}'.format('PLIST' if platform.system() == 'Darwin' else 'XML'), preferences_file if preferences_file else 'Error: Not Found'))
         MACHINEID = ''
-
-        if not PLEXTOKEN:
-            try:
-                txtfile = PlexLoadFile(preferences_xml)
-                txtrows = txtfile.split('\n')
-                for row in txtrows:
-                    if 'PlexOnlineToken=' in row:
-                        item = row.split('PlexOnlineToken=')[1]
-                        item = item.split()[0].replace('"', '').strip()
-                        PLEXTOKEN = item
-
-                    if 'MachineIdentifier=' in row:
-                        item = row.split('MachineIdentifier=')[1]
-                        item = item.split()[0].replace('"', '').strip()
-                        MACHINEID = item
-
-                log('START :: {0:<29} {1}'.format('Machine ID', MACHINEID))
-
-            except Exception as e:
-                log('START :: Error retrieving Plex Token: %s', e)
-                log('START :: Error: Preferences XML File: %s', preferences_xml)
-        else:
-            PLEXTOKEN = Prefs['plextoken']
-
-        if PLEXTOKEN and PLEXTOKEN is not None:
+        PLEXTOKEN = Prefs['plextoken']
+        try:
+            preferenceFileContents = PlexLoadFile(preferences_file)
+            xml = XML.ElementFromString(preferenceFileContents)
+            PLEXTOKEN = xml.xpath('//key[.="PlexOnlineToken"]/following-sibling::string/text()' if platform.system() == 'Darwin' else '/Preferences/@PlexOnlineToken')[0]
             log('START :: {0:<29} {1}'.format('Plex Token', '*' * len(PLEXTOKEN)))
-        else:
-            log('START :: {0:<29} {1}'.format('Plex Token', 'MISSING'))
+            MACHINEID = xml.xpath('//key[.="MachineIdentifier"]/following-sibling::string/text()' if platform.system() == 'Darwin' else '/Preferences/@MachineIdentifier')[0]
+            log('START :: {0:<29} {1}'.format('Machine ID', MACHINEID))
+
+        except Exception as e:
             PLEXTOKEN = ''
+            MACHINEID = ''
+            log('START :: Error: Retrieving Plex Token and Machine ID: %s', e)
+            log('START :: Error: Preferences %s File: %s', 'PLIST' if platform.system() == 'Darwin' else 'XML', preferences_file)
+            log('START :: {0:<29} {1}'.format('Plex Token', 'MISSING'))
             continueSetup = False
 
     #   9. Get paths to Default Posters for Agent, Compilations Genre, IAFD, Stacks

@@ -98,12 +98,12 @@ class IAFD(Agent.Movies):
         utils.log(LOG_BIGLINE)
 
         if FILMDICT['FoundOnIAFD'] == 'Yes':
-                FILMDICT['id'] = media.id
-                myID = json.dumps(FILMDICT, default=utils.jsonDumper)
-                results.Append(MetadataSearchResult(id=myID, name=FILMDICT['Title'], score=100, lang=lang))
+            FILMDICT['id'] = media.id
+            myID = json.dumps(FILMDICT, default=utils.jsonDumper)
+            results.Append(MetadataSearchResult(id=myID, name=FILMDICT['Title'], score=100, lang=lang))
 
-                # Film Scraped Sucessfully - update status and break out!
-                FILMDICT['Status'] = True
+            # Film Scraped Sucessfully - update status and break out!
+            FILMDICT['Status'] = True
 
         # End Search Routine
         utils.logFooter('SEARCH', FILMDICT)
@@ -124,7 +124,7 @@ class IAFD(Agent.Movies):
 
         # update the metadata
         utils.log(LOG_BIGLINE)
-        if FILMDICT['Status']:
+        if FILMDICT['Status'] is True:
             utils.log(LOG_BIGLINE)
             '''
             The following bits of metadata need to be established and used to update the movie on plex
@@ -154,7 +154,7 @@ class IAFD(Agent.Movies):
             utils.setMetadata(metadata, media, FILMDICT)
 
         # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
-        if not FILMDICT['Status']:
+        if FILMDICT['Status'] is False:
             metadata.originally_available_at = None
             metadata.year = 0
 
