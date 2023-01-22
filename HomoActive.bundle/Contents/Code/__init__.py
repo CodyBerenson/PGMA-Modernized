@@ -72,9 +72,7 @@ class HomoActive(Agent.Movies):
         ''' Prepare Title for search query '''
         utils.log('AGENT :: {0:<29} {1}'.format('Original Search Query', myString))
 
-        myString = myString.strip().lower()
-        myString = myString.replace(' -', ':').replace(ur'\u2013', '-').replace(ur'\u2014', '-').replace('& ', '')
-
+        myString = myString.replace(' -', ':').replace(ur'\u2013', '-').replace(ur'\u2014', '-').replace('& ', '').strip().lower()
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString)
 

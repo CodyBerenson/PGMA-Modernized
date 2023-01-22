@@ -1,0 +1,1 @@
+from .winregistry import WinRegistry

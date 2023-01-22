@@ -1,0 +1,14 @@
+winregistry-0.8.3.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+winregistry-0.8.3.dist-info/METADATA,sha256=e65p2yEPdx91IcTB5MfR6br0meRKn9i0Rcx3spRRjBI,636
+winregistry-0.8.3.dist-info/RECORD,,
+winregistry-0.8.3.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+winregistry-0.8.3.dist-info/WHEEL,sha256=1VPi6hfNQaRRNuEdK_3dv9o8COtLGnHWJghhj4CQ28k,92
+winregistry-0.8.3.dist-info/top_level.txt,sha256=OCcUWKcUevFQE9VMqcu3a86UQd_hzOID6PAuGJ5CuEQ,12
+winregistry/__init__.py,sha256=lNbXe4rVyGMzdE8e5nwi4o5wQnf6Ahwr6mPQPN_Yj2c,38
+winregistry/__init__.pyc,,
+winregistry/robot/__init__.py,sha256=pTTAlNaMHzsnaSTRXxLiqeTvJai26uZdqaHyuEN6UQo,745
+winregistry/robot/__init__.pyc,,
+winregistry/robot/keywords.py,sha256=PD0VYf8MTVTBmlgbuj8FZrn-qXUaqIXg6mZqEPLKwXQ,1376
+winregistry/robot/keywords.pyc,,
+winregistry/winregistry.py,sha256=Q_sbZpu-MTFznJwys3V-JwL0KZOiHdj03S6hA9478KI,7341
+winregistry/winregistry.pyc,,

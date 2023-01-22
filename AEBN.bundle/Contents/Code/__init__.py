@@ -77,7 +77,6 @@ class AEBN(Agent.Movies):
         utils.log('AGENT :: {0:<29} {1}'.format('Original Search Query', myString))
 
         # convert to lower case and trim and strip diacritics, fullstops, enquote
-        #myString = myString.replace('.', '').replace('-', '')
         myString = myString.lower().strip()
         myString = String.StripDiacritics(myString)
 

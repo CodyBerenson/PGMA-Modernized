@@ -77,8 +77,7 @@ class CDUniverse(Agent.Movies):
         ''' Prepare Title for search query '''
         utils.log('AGENT :: {0:<29} {1}'.format('Original Search Query', myString))
 
-        myString = myString.strip().lower()
-        myString = myString.replace('-', '').replace(ur'\u2013', '').replace(ur'\u2014', '')
+        myString = myString.replace('-', '').replace(ur'\u2013', '').replace(ur'\u2014', '').strip().lower()
         myString = ' '.join(myString.split())   # remove continous white space
 
         myString = String.StripDiacritics(myString)

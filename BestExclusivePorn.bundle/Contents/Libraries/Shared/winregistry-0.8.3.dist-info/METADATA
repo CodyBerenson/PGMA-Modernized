@@ -1,0 +1,20 @@
+Metadata-Version: 2.1
+Name: winregistry
+Version: 0.8.3
+Summary: Library aimed at working with Windows registry
+Home-page: https://github.com/shpaker/winregistry
+Author: Alexander Shpak
+Author-email: shpaker@gmail.com
+License: UNKNOWN
+Keywords: windows registry regedit winreg
+Platform: windows
+Classifier: Programming Language :: Python
+Classifier: Development Status :: 3 - Alpha
+Classifier: Framework :: Robot Framework :: Library
+Classifier: Environment :: Win32 (MS Windows)
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Operating System :: Microsoft :: Windows
+
+UNKNOWN
+
+

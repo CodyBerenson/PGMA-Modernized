@@ -82,7 +82,7 @@ class GEVI(Agent.Movies):
         # convert to lower case and trim
         myString = myString.lower().strip()
 
-        # replace &, and with space
+        # replace &, and with space, ~ with /
         myString = myString.replace(' & ', ' ').replace(' and ', ' ')
         utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Replaced ampersands & " and " with ', 'Space')))
 

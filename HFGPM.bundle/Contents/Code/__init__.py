@@ -73,8 +73,8 @@ class HFGPM(Agent.Movies):
         utils.log('AGENT :: {0:<29} {1}'.format('Original Search Query', myString))
 
         # convert to lower case and trim
-        myString = myString.replace(' - ', ': ')
-        myString = myString.lower().strip()
+
+        myString = myString.replace(' - ', ': ').lower().strip()
         myString = String.StripDiacritics(myString)
 
         # strip non-alphanumeric characters

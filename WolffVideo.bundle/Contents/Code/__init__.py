@@ -79,9 +79,7 @@ class WolffVideo(Agent.Movies):
         utils.log('AGENT :: {0:<29} {1}'.format('Original Search Query', myString))
 
         # convert to lower case and trim and strip diacritics
-        myString = myString.replace(' - ', ': ')
-        myString = myString.replace('- ', ': ')
-        myString = myString.lower().strip()
+        myString = myString.replace(' - ', ': ').replace('- ', ': ').lower().strip()
         myString = String.StripDiacritics(myString)
 
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string 

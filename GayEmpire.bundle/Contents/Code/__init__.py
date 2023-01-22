@@ -77,8 +77,7 @@ class GayEmpire(Agent.Movies):
         ''' Prepare Title for search query '''
         utils.log('AGNT  :: Original Search Query        : {0}'.format(myString))
 
-        myString = myString.lower().strip()
-        myString = myString.replace(' -', ':').replace(ur'\u2013', '-').replace(ur'\u2014', '-')
+        myString = myString.replace(' -', ':').replace(ur'\u2013', '-').replace(ur'\u2014', '-').lower().strip()
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString)
@@ -159,7 +158,7 @@ class GayEmpire(Agent.Movies):
 
                 # siteTitle = The text in the 'title' - Gay DVDEmpire - displays its titles in SORT order
                 try:
-                    filmTitle = film.xpath('./div/h3/a[@category and @label="Title"]/@title')[0]
+                    filmTitle = film.xpath('./div/h3/a[@category and @label="Title"]/@title')[0].strip()
                     # convert sort order version to normal version i.e "Best of Zak Spears, The -> The Best of Zak Spears"
                     pattern = u', (The|An|A)$'
                     matched = re.search(pattern, filmTitle, re.IGNORECASE)  # match against string

@@ -47,10 +47,13 @@ General Functions found in all agents
     29 Dec 2022     Correction to Poster/Art images - Scene Agents cropped images were not been saved to metadata
                     Queerclick - managed to determine cast from other tags.... will need further testing
     06 Jan 2023     Allow scrape to continue if poster/art processing fails
+    22 Jan 2023     ~ in filename on disk is a marker for / in film title on website
+                    processing preferences plist file for MAC OS
+                    Correction to setup scraping code
 
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
-import cloudscraper, fake_useragent, os, platform, random, re, requests, subprocess, time, unicodedata
+import cloudscraper, fake_useragent, os, platform, plistlib, random, re, requests, subprocess, time, unicodedata, winreg
 from datetime import datetime, timedelta
 from collections import OrderedDict
 from unidecode import unidecode
@@ -779,7 +782,7 @@ def getRecordedCast(html):
     filmCast = {}
     try:
         castList = html.xpath('//div[@class[contains(.,"castbox")]]/p')
-        log('UTILS :: {0:<29} {1}'.format('Cast on IAFD', len(castList)))
+        log('UTILS :: {0:<29} {1:>2}'.format('Cast on IAFD', len(castList)))
         for cast in castList:
             castName = cast.xpath('./a/text()[normalize-space()]')[0].strip()
             castName = 'Unknown Actor' if 'Unknown' in castName else castName
@@ -842,7 +845,7 @@ def getRecordedDirectors(html):
     filmDirectors = {}
     try:
         directorList = html.xpath('//p[@class="bioheading" and text()="Directors"]//following-sibling::p[1]/a')
-        log('UTILS :: {0:<29} {1}'.format('Directors on IAFD', len(directorList)))
+        log('UTILS :: {0:<29} {1:>2}'.format('Directors on IAFD', len(directorList)))
         for director in directorList:
             directorName = director.xpath('./text()')[0]
             directorURL = director.xpath('./@href')[0]
@@ -5388,7 +5391,7 @@ def matchCast(unmatchedCastList, FILMDICT):
 
             castFound = len(castList)
             log('UTILS :: {0:<29} {1}'.format('{0}:'.format('Cast Found'), '{0:>2} - {1}'.format(castFound, 'Skipping: > 25 Cast Names Returned' if castFound > 25 else 'Processing: <= 25 Cast Names Returned')))
-            if castFound > 25:
+            if castFound == 0 or castFound > 25:
                 log(LOG_SUBLINE)
                 continue            # next unmatchedCast
 
@@ -5837,7 +5840,7 @@ def matchFilename(media):
 
     #   Title
     filmVars['CompareTitle'] = set()
-    filmVars['Title'] = groups['fnTITLE']
+    filmVars['Title'] = groups['fnTITLE'].replace('~', '/')             # ~ invalid character marker in filename
     filmVars['NormaliseTitle'] = Normalise(filmVars['Title'])
     filmVars['CompareTitle'].add(sortAlphaChars(filmVars['NormaliseTitle']))
 
@@ -5918,7 +5921,7 @@ def matchFilename(media):
 
     #       IAFD Title - IAFD uses standard Latin Alphabet Characters for its entries.
     filmVars['IAFDTitle'] = makeASCII(groups['fnTITLE']).replace(' - ', ': ').replace('- ', ': ')       # iafd needs colons in place to search correctly
-    filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace(' &', ' and')                                 # iafd does not use &
+    #filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace(' &', ' and')                                 # iafd does not use &
     filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace('!', '')                                      # remove !
 
     # split and take up to first occurence of character
@@ -5941,6 +5944,7 @@ def matchFilename(media):
 
     # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string
     searchString = filmVars['IAFDTitle'].split(':')[0]
+    searchString = searchString.replace('~', '/')
     searchString = String.StripDiacritics(searchString).strip()
     searchString = String.URLEncode(searchString).replace('%25', '%').replace('%26', '&').replace('*', '')
     filmVars['IAFDSearchTitle'] = searchString
@@ -6124,7 +6128,7 @@ def Normalise(myString):
     myString = myString.strip().lower()
 
     # replace ampersand with 'and'
-    myString = myString.replace('&', 'and')
+    myString = myString.replace('&', 'and') if AGENT != 'IAFD' else myString
 
     # replace ": " with " - "
     myString = myString.replace(': ', ' - ')
@@ -6735,7 +6739,8 @@ def setMetadata(metadata, media, FILMDICT):
             ssn = requests.Session()
             ssn.headers.update({'Accept': 'application/json'})
             ssn.params.update({'X-Plex-Token': PLEXTOKEN})
-            machineID = MACHINEID if MACHINEID else ssn.get('{0}/'.format(plexBaseURL)).json()['MediaContainer']['machineIdentifier']
+            machineID = ssn.get('{0}/'.format(plexBaseURL)).json()['MediaContainer']['machineIdentifier']
+
             for idx, entry in enumerate(sorted(collectionsDict.keys()), start=1):
                 myDictionary = collectionsDict.get(entry)
                 if myDictionary is None:
@@ -6887,7 +6892,7 @@ def setupStartVariables():
     global MATCHIAFDDURATION, MATCHSITEDURATION, PLEXTOKEN, PREFIXLEGEND, RESETMETA, THUMBOR, USEBACKGROUNDART
 
     # variables
-    global COUNTRYSET, GENRESDICT, TIDYDICT, MACHINEID, PGMA_CASTDICT, PGMA_DIRECTORDICT
+    global COUNTRYSET, GENRESDICT, TIDYDICT, PGMA_CASTDICT, PGMA_DIRECTORDICT
 
     START_SCRAPE = 'No'
 
@@ -6896,7 +6901,7 @@ def setupStartVariables():
     log('START :: {0:<29} {1}'.format('1.\tPlex Support Path', PlexSupportPath))
     continueSetup = True if os.path.isdir(PlexSupportPath) else False
     #   2.    Agent Preference Settings
-    if continueSetup:
+    if continueSetup is True:
         log(LOG_SUBLINE)
         log('START :: 2.\tAgent Preference Settings')
         log('START :: {0:<29} {1}'.format('Agent Type', AGENT_TYPE))
@@ -6946,7 +6951,7 @@ def setupStartVariables():
 
 
     #   3. PGMA - Folder Location, where all general files needed for the PGMA Agents are stored, like posters, gayTidy, Countries et cetera
-    if continueSetup:
+    if continueSetup is True:
         log(LOG_SUBLINE)
         log('START :: 3.\tPGMA Usage Folder Locations')
         global PGMA_FOLDER, PGMA_CASTFACEFOLDER, PGMA_DIRECTORFACEFOLDER, PGMA_CASTPOSTERFOLDER, PGMA_DIRECTORPOSTERFOLDER, PGMA_COUNTRYART, PGMA_COUNTRYPOSTERFLAGS, PGMA_COUNTRYPOSTERMAPS, PGMA_GENREFOLDER
@@ -6984,11 +6989,11 @@ def setupStartVariables():
         log('START :: {0:<29} {1}'.format('    Director Posters', PGMA_DIRECTORPOSTERFOLDER if PGMA_DIRECTORPOSTERFOLDER else '** FAIL **'))
 
         # only contunue with setup if all folders are present
-        continueSetup = (PGMA_FOLDER and PGMA_SYSTEMFOLDER and PGMA_CASTFACEFOLDER and PGMA_DIRECTORFACEFOLDER and PGMA_CASTPOSTERFOLDER and 
-                         PGMA_DIRECTORPOSTERFOLDER and PGMA_COUNTRYART and PGMA_COUNTRYPOSTERFLAGS and PGMA_COUNTRYPOSTERMAPS and PGMA_GENREFOLDER)
+        continueSetup = (bool(PGMA_FOLDER) and bool(PGMA_SYSTEMFOLDER) and bool(PGMA_CASTFACEFOLDER) and bool(PGMA_DIRECTORFACEFOLDER) and bool(PGMA_CASTPOSTERFOLDER) and 
+                         bool(PGMA_DIRECTORPOSTERFOLDER) and bool(PGMA_COUNTRYART) and bool(PGMA_COUNTRYPOSTERFLAGS) and bool(PGMA_COUNTRYPOSTERMAPS) and bool(PGMA_GENREFOLDER))
 
     #   4. PGMA - On disk Cast and Director Collection Posters
-    if continueSetup:
+    if continueSetup is True:
         log(LOG_SUBLINE)
         log('START :: 4.\tPGMA Cast and Director Collection Poster Dictionaries')
         PGMA_CASTDICT = {}
@@ -7005,7 +7010,7 @@ def setupStartVariables():
             continueSetup = False
 
     #   5. Country Dictionary: create dictionary containing countries and flag urls from Country.txt located in plugins code directory
-    if continueSetup:
+    if continueSetup is True:
         log(LOG_SUBLINE)
         log('START :: 5.\tPrepare Dictionary of Country Names and Flags')
         COUNTRYSET = set() 
@@ -7024,7 +7029,7 @@ def setupStartVariables():
             continueSetup = False
 
     #   6. Genres Dictionary: create dictionary containing genres and image urls from Genres.txt located in plugins code directory
-    if continueSetup:
+    if continueSetup is True:
         log(LOG_SUBLINE)
         log('START :: 6.\tPrepare Dictionary of Genres and Symbols')
         GENRESDICT = {}
@@ -7057,7 +7062,7 @@ def setupStartVariables():
 
     #   7.     Tidy Genres: create dictionary containing the tidy genres from genres.tsv file located in plugins code directory
     #                       unless second field is an 'x', it should appear in the COUNTRYSET or GENRESDICT
-    if continueSetup:
+    if continueSetup is True:
         log(LOG_SUBLINE)
         log('START :: 7.\tPrepare Tidied Dictionary of Genres and Countries')
         TIDYDICT = {}
@@ -7083,8 +7088,7 @@ def setupStartVariables():
                     key = keyValue[0].lower()
                     value = keyValue[1]
                     if key in TIDYDICT:
-                        log('START :: {0:<29} {1}'.format('Duplicate/Error Row', 'Row {0} - {1}'.format(idx, row)))
-                        continue
+                        log('START :: {0:<29} {1}'.format('Duplicate Row: Original Setting will be replaced', 'Row {0} - {1}'.format(idx, row)))
 
                     TIDYDICT[key] = value if value != 'x' else None
                     if value in COUNTRYSET:                 # useful for comparing cities, locations to the country they are in when debugging
@@ -7109,39 +7113,42 @@ def setupStartVariables():
             continueSetup = False
 
     #   8.     Retrieve Plex Token/Machine ID
-    if continueSetup:
+    if continueSetup is True:
         log(LOG_SUBLINE)
         log('START :: 8.\tRetrieve Plex Token and Machine ID')
-        if platform.system() == 'Windows':
-            preferences_file = os.path.join(PlexSupportPath, 'Preferences.xml').replace('Plex', 'Plex\Plex')
-        elif platform.system() == 'Linux':
-            preferences_file = os.path.join(PlexSupportPath, 'Preferences.xml')
-        elif platform.system() == 'Darwin':     # MAC OS
-            preferences_file = os.path.join(PlexSupportPath, 'Preferences', 'com.plexapp.plexmediaserver.plist').replace('Application Support/Plex Media Server', '')
-        else:
-            preferences_file = ''       # will error when plexloadfile runs
-
-        log('START :: {0:<29} {1}'.format('Preference {0}'.format('PLIST' if platform.system() == 'Darwin' else 'XML'), preferences_file if preferences_file else 'Error: Not Found'))
-        MACHINEID = ''
         PLEXTOKEN = Prefs['plextoken']
-        try:
-            preferenceFileContents = PlexLoadFile(preferences_file)
-            xml = XML.ElementFromString(preferenceFileContents)
-            PLEXTOKEN = xml.xpath('//key[.="PlexOnlineToken"]/following-sibling::string/text()' if platform.system() == 'Darwin' else '/Preferences/@PlexOnlineToken')[0]
-            log('START :: {0:<29} {1}'.format('Plex Token', '*' * len(PLEXTOKEN)))
-            MACHINEID = xml.xpath('//key[.="MachineIdentifier"]/following-sibling::string/text()' if platform.system() == 'Darwin' else '/Preferences/@MachineIdentifier')[0]
-            log('START :: {0:<29} {1}'.format('Machine ID', MACHINEID))
+        if not PLEXTOKEN:
+            preferences_file = ''
+            if platform.system() == 'Windows':
+                try:
+                    hKey = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Plex, Inc.\Plex Media Server")
+                    PLEXTOKEN = winreg.QueryValueEx(hKey, "PlexOnlineToken")[0]
 
-        except Exception as e:
-            PLEXTOKEN = ''
-            MACHINEID = ''
-            log('START :: Error: Retrieving Plex Token and Machine ID: %s', e)
-            log('START :: Error: Preferences %s File: %s', 'PLIST' if platform.system() == 'Darwin' else 'XML', preferences_file)
-            log('START :: {0:<29} {1}'.format('Plex Token', 'MISSING'))
-            continueSetup = False
+                except Exception as e:
+                    log('START :: {0:<29} {1}'.format('Failed to read registry: Search for Token Preferences.xml file', e))
+                    preferences_file = os.path.join(PlexSupportPath, 'Preferences.xml').replace('Plex', 'Plex\Plex')
+                    PLEXTOKEN = xml.xpath('/Preferences/@PlexOnlineToken')[0]
+
+                finally:
+                    winreg.CloseKey(hKey)
+
+            elif platform.system() == 'Linux':
+                preferences_file = os.path.join(PlexSupportPath, 'Preferences.xml')
+                preferenceFileContents = PlexLoadFile(preferences_file)
+                xml = XML.ElementFromString(preferenceFileContents)
+                PLEXTOKEN = xml.xpath('/Preferences/@PlexOnlineToken')[0]
+
+            elif platform.system() == 'Darwin':     # MAC OS
+                preferences_file = os.path.join(PlexSupportPath, 'Preferences', 'com.plexapp.plexmediaserver.plist').replace('Application Support/Plex Media Server', '')
+                preferences = plistlib.readPlist(preferences_file)
+                PLEXTOKEN = preferences['PlexOnlineToken']
+
+            log('START :: {0:<29} {1}'.format('Plex Token', PLEXTOKEN))
+
+        continueSetup = True if PLEXTOKEN else False
 
     #   9. Get paths to Default Posters for Agent, Compilations Genre, IAFD, Stacks
-    if continueSetup:
+    if continueSetup is True:
         log(LOG_SUBLINE)
         log('START :: 9.\tRetrieve Agent and Default Posters')
         global AGENT_POSTER, COMPILATIONS_POSTER, IAFDFOUND_POSTER, IAFDNOTFOUND_POSTER, STACKED_POSTER, NOTSTACKED_POSTER, NOCAST_POSTER, NODIRECTOR_POSTER, WATERMARK

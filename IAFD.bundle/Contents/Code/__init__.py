@@ -19,7 +19,7 @@ from datetime import datetime
 # Version / Log Title
 VERSION_NO = '2020.04.22.18'
 AGENT = 'IAFD'
-AGENT_TYPE = '⚣'   # '⚤' if straight agent
+AGENT_TYPE = '⚣'   # '⚤' if straight agent and ⚢ if lesbian
 
 # URLS
 WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'

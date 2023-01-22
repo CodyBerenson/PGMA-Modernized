@@ -75,6 +75,8 @@ class GayHotMovies(Agent.Movies):
         ''' Prepare Title for search query - do not change search string to lower case as this does not work all the time'''
         utils.log('AGENT :: {0:<29} {1}'.format('Original Search Query', myString))
 
+        myString = myString.strip()
+
         nullChars = ['-', "'", ',' '&', '!', '.', '#'] # to be replaced with null
         pattern = u'[{0}]'.format(''.join(nullChars))
         matched = re.search(pattern, myString)  # match against whole string
