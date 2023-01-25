@@ -53,7 +53,7 @@ General Functions found in all agents
 
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
-import cloudscraper, fake_useragent, os, platform, plistlib, random, re, requests, subprocess, time, unicodedata, winreg
+import cloudscraper, fake_useragent, os, platform, plistlib, random, re, requests, subprocess, time, unicodedata
 from datetime import datetime, timedelta
 from collections import OrderedDict
 from unidecode import unidecode
@@ -7121,27 +7121,42 @@ def setupStartVariables():
             preferences_file = ''
             if platform.system() == 'Windows':
                 try:
+                    import winreg
                     hKey = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Plex, Inc.\Plex Media Server")
                     PLEXTOKEN = winreg.QueryValueEx(hKey, "PlexOnlineToken")[0]
 
                 except Exception as e:
                     log('START :: {0:<29} {1}'.format('Failed to read registry: Search for Token Preferences.xml file', e))
-                    preferences_file = os.path.join(PlexSupportPath, 'Preferences.xml').replace('Plex', 'Plex\Plex')
-                    PLEXTOKEN = xml.xpath('/Preferences/@PlexOnlineToken')[0]
+                    try:
+                        preferences_file = os.path.join(PlexSupportPath, 'Preferences.xml').replace('Plex', 'Plex\Plex')
+                        preferenceFileContents = PlexLoadFile(preferences_file)
+                        xml = XML.ElementFromString(preferenceFileContents)
+                        PLEXTOKEN = xml.xpath('/Preferences/@PlexOnlineToken')[0]
+
+                    except Exception as e:
+                        log('START :: Error retrieving Plex Token: Input Manually in Preferences: %s', e)
 
                 finally:
                     winreg.CloseKey(hKey)
 
             elif platform.system() == 'Linux':
-                preferences_file = os.path.join(PlexSupportPath, 'Preferences.xml')
-                preferenceFileContents = PlexLoadFile(preferences_file)
-                xml = XML.ElementFromString(preferenceFileContents)
-                PLEXTOKEN = xml.xpath('/Preferences/@PlexOnlineToken')[0]
+                try:
+                    preferences_file = os.path.join(PlexSupportPath, 'Preferences.xml')
+                    preferenceFileContents = PlexLoadFile(preferences_file)
+                    xml = XML.ElementFromString(preferenceFileContents)
+                    PLEXTOKEN = xml.xpath('/Preferences/@PlexOnlineToken')[0]
+
+                except Exception as e:
+                    log('START :: Error retrieving Plex Token: Input Manually in Preferences: %s', e)
 
             elif platform.system() == 'Darwin':     # MAC OS
-                preferences_file = os.path.join(PlexSupportPath, 'Preferences', 'com.plexapp.plexmediaserver.plist').replace('Application Support/Plex Media Server', '')
-                preferences = plistlib.readPlist(preferences_file)
-                PLEXTOKEN = preferences['PlexOnlineToken']
+                try:
+                    preferences_file = os.path.join(PlexSupportPath, 'Preferences', 'com.plexapp.plexmediaserver.plist').replace('Application Support/Plex Media Server', '')
+                    preferences = plistlib.readPlist(preferences_file)
+                    PLEXTOKEN = preferences['PlexOnlineToken']
+
+                except Exception as e:
+                    log('START :: Error retrieving Plex Token: Input Manually in Preferences: %s', e)
 
             log('START :: {0:<29} {1}'.format('Plex Token', PLEXTOKEN))
 

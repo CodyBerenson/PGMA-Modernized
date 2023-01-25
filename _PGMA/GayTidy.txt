@@ -403,6 +403,7 @@ Discipline::BDSM
 District of Columbia::United States
 Djiboutian::Djibouti
 Docking::Fetish
+Doctor::Role Play
 Documentary::x
 Domination - M on F::BDSM
 Domination::BDSM
@@ -853,6 +854,7 @@ MB::Canada
 MD::United States
 ME::United States
 Media::x
+Medical::Role Play
 Men's Underwear::Fetish
 Mexican::Mexico
 Mexico::Mexico
