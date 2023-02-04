@@ -13,6 +13,9 @@
     02 Nov 2022     2020.01.18.30   Enclosed Search String in quotes as navigate to 2nd page of results was failing without it
     30 Nov 2022     2019.01.18.31   Updated to use latest version of utils.py
     28 Dec 2022     2019.01.18.32   removed quotes around search string
+    29 Jan 2023     2019.01.18.33   Improved Logging
+                                    corrected case of HTTP.Headers - was failing to download cast pics from iafd
+                                    changed search string to improve scene retrieval
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -20,7 +23,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.32'
+VERSION_NO = '2020.01.18.33'
 AGENT = 'Fagalicious'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -53,7 +56,7 @@ import utils
 def Start():
     ''' initialise process '''
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
+    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
     utils.setupStartVariables()
     ValidatePrefs()
 
@@ -79,39 +82,48 @@ class Fagalicious(Agent.Movies):
 
         myString = myString.lower().strip()
 
-        # replace ampersand/ and  with  ' ' 
-        pattern = u' & | and '
+        # replace all full stops with double space
+        if '.' in myString:
+            myString = myString.replace('.', '  ')
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Removed Pattern', 'Full Stop', myString)))
+
+        # remove single letters, ampersands, "and", "a"
+        pattern = u' & | and | [a-z] '
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
+            # first replace all spaces with double spaces in case you get the patterns following each other
+            myString = myString.replace(' ', '  ')
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Added Pattern', 'Space', myString)))
             myString = re.sub(pattern, ' ', myString)
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Removed Pattern', pattern, myString)))
             myString = ' '.join(myString.split())   # remove continous white space
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Pattern', pattern)))
 
+        '''
         # replace curly single apostrophes with straight quote
         singleQuoteChars = [ur'\u2018', ur'\u2019']
         pattern = u'({0})'.format('|'.join(singleQuoteChars))
         matchedSingleQuote = re.search(pattern, myString)  # match against whole string
         if matchedSingleQuote:
             myString = re.sub(pattern, "'", myString)
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Replaced Pattern', pattern, myString)))
             myString = ' '.join(myString.split())   # remove continous white space
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Pattern', pattern)))
-
+        '''
         # Fagalicious seems to fail to find Titles which have invalid chars in them split at first incident and take first split, just to search but not compare
         # the back tick is added to the list as users who can not include quotes in their filenames can use these to replace them without changing the scrappers code
-        badChars = ['"', '`', ur'\u201c', ur'\u201d', ur'\u2018', ur'\u2019']
+        badChars = ['"', "'"]
         pattern = u'({0})'.format('|'.join(badChars))
         matched = re.search(pattern, myString[0])  # match against first character
         if matched:
             myString = myString[1:]
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Dropped 1st Word', myString[0])))
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Found Pattern', pattern)))
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Found Pattern', pattern, myString)))
 
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             badPos = matched.start()
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Crop at', badPos)))
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Found Pattern', pattern)))
             myString = myString[:badPos]
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Crop at', badPos)))
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Found Pattern', pattern, myString)))
 
         # string can not be longer than 20 characters and enquote
         if len(myString) > 19:
@@ -171,34 +183,38 @@ class Fagalicious(Agent.Movies):
         searchQuery = BASE_SEARCH_URL.format(searchTitle)
 
         morePages = True
+        pageNumber = 0
         while morePages:
-            utils.log('SEARCH:: Search Query: %s', searchQuery)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Search Query', searchQuery))
+            pageNumber += 1
+            if pageNumber > 10:
+                morePages = False     # search a maximum of 10 pages
+                utils.log('SEARCH:: Warning: Page Search Limit Reached [10]')
+                continue
+
             try:
                 html = HTML.ElementFromURL(searchQuery, cacheTime=3, timeout=20, sleep=utils.delay())
                 filmsList = html.xpath('//header[@class="entry-header"]')
                 if not filmsList:
-                    raise Exception('< No Films! >')
+                    raise Exception('< No Scene Titles >')
+
+                # if there is a list of films - check if there are further pages returned
+                try:
+                    searchQuery = html.xpath('//a[@class="next page-numbers"]/@href')[0]
+                    morePages = True
+                except:
+                    morePages = False
+
             except Exception as e:
                 utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
                 break
-
-            try:
-                searchQuery = html.xpath('//a[@class="next page-numbers"]/@href')[0]
-                utils.log('SEARCH:: Next Page Search Query: %s', searchQuery)
-                pageNumber = int(html.xpath('//span[@class="page-numbers current"]/text()[normalize-space()]')[0])
-                morePages = True if pageNumber <= 10 else False
-            except:
-                searchQuery = ''
-                utils.log('SEARCH:: No More Pages Found')
-                pageNumber = 1
-                morePages = False
 
             filmsFound = len(filmsList)
             utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
             utils.log(LOG_BIGLINE)
             myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
             for idx, film in enumerate(filmsList, start=1):
-                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', '{0} of {1} for {2} - {3} {4}'.format(idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
+                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', 'Page {0}: {1} of {2} for {3} - {4} {5}'.format(pageNumber, idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
                 utils.log(LOG_BIGLINE)
 
                 # Site Entry : Composed of Studio, then Scene Title separated by a Colon

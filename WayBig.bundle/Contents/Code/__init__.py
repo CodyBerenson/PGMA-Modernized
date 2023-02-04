@@ -10,6 +10,8 @@
                                     - tidy up of countries and locations
                                     - introduced Grouped Collections and Default to keep track of films
     30 Nov 2022     2019.08.12.37   Updated to use latest version of utils.py
+    29 Jan 2023     2019.08.12.38   Improved Logging
+                                    changed processing of & character in search string
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -17,7 +19,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.22.37'
+VERSION_NO = '2019.12.22.38'
 AGENT = 'WayBig'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -87,10 +89,10 @@ class WayBig(Agent.Movies):
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Replaced {0} with ":"', pattern)))
 
         # replace ampersand with nothing
-        pattern = u'&'
+        pattern = u' & '
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
-            myString = re.sub(pattern, '', myString)
+            myString = re.sub(pattern, '  ', myString)
             myString = ' '.join(myString.split())   # remove continous white space
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Pattern', pattern)))
 
@@ -181,34 +183,38 @@ class WayBig(Agent.Movies):
         utils.log('SEARCH:: Search Title: %s', searchTitle)
 
         morePages = True
+        pageNumber = 0
         while morePages:
-            utils.log('SEARCH:: Search Query: %s', searchQuery)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Search Query', searchQuery))
+            pageNumber += 1
+            if pageNumber > 10:
+                morePages = False     # search a maximum of 10 pages
+                utils.log('SEARCH:: Warning: Page Search Limit Reached [10]')
+                continue
+
             try:
                 html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=utils.delay())
                 filmsList = html.xpath('.//div[@class="row"]/div[@class="content-col col"]/article')
                 if not filmsList:
-                    raise Exception('< No Scenes! >')
+                    raise Exception('< No Scene Titles >')
+
+                # if there is a list of films - check if there are further pages returned
+                try:
+                    searchQuery = html.xpath('//div[@class="nav-links"]/a[@class="next page-numbers"]/@href')[0]
+                    morePages = True
+                except:
+                    morePages = False
+
             except Exception as e:
                 utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
                 break
-
-            try:
-                searchQuery = html.xpath('//div[@class="nav-links"]/a[@class="next page-numbers"]/@href')[0]
-                utils.log('SEARCH:: Next Page Search Query: %s', searchQuery)
-                pageNumber = int(html.xpath('//div[@class="nav-links"]/span[@class="page-numbers current"]/text()[normalize-space()]')[0])
-                morePages = True if pageNumber <= 10 else False
-            except:
-                searchQuery = ''
-                utils.log('SEARCH:: Next Page Search Query: No More Pages Found')
-                pageNumber = 1
-                morePages = False
 
             filmsFound = len(filmsList)
             utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
             utils.log(LOG_BIGLINE)
             myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
             for idx, film in enumerate(filmsList, start=1):
-                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', '{0} of {1} for {2} - {3} {4}'.format(idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
+                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', 'Page {0}: {1} of {2} for {3} - {4} {5}'.format(pageNumber, idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
                 utils.log(LOG_BIGLINE)
 
                 # Site Entry

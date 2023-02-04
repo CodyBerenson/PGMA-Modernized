@@ -13,13 +13,14 @@
                                     - introduced Grouped Collections and Default to keep track of films
     07 Nov 2022     2019.12.25.39   Search String corrections taking in to account the new GEVI Search Engine
     27 Nov 2022     2019.12.25.40   Updated to use latest version of utils.py
+    01 Feb 2023     2019.12.25.41   Corrected release date matching code
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.40'
+VERSION_NO = '2019.12.25.41'
 AGENT = 'GEVI'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -104,8 +105,10 @@ class GEVI(Agent.Movies):
 
         # remove continuous spaces in string
         myString = ' '.join(myString.split())
+        fraction = True if '½' in myString else False
 
-        myString = String.StripDiacritics(myString)
+        myString = String.StripDiacritics(myString) 
+        myString = myString if not fraction else myString.replace('12', '½')
         myString = String.URLEncode(myString.strip())
 
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string
@@ -292,7 +295,6 @@ class GEVI(Agent.Movies):
                     releaseDateMatch = False
                     vReleaseDate = FILMDICT['CompareDate']
                     try:
-                        compareYear = datetime.now().year + 2
                         fhtmlReleaseDate = fhtml.xpath('//td[.="released" or .="produced"]/following-sibling::td[1]/text()[normalize-space()]')
                         fhtmlReleaseDate = [x.replace('?', '').strip() for x in fhtmlReleaseDate]
                         fhtmlReleaseDate = [x for x in fhtmlReleaseDate if x.strip()]
@@ -301,21 +303,22 @@ class GEVI(Agent.Movies):
 
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Release Date(s)', '{0:>2} - {1}'.format(len(fhtmlReleaseDate), fhtmlReleaseDate)))
                         for item in fhtmlReleaseDate:
+                            item = item.strip()
                             if 'b' in item or 'c' in item:                                                                  # format 4
                                 item = item.replace('b', '').replace('c', '')
                             elif ',' in item:                                                                               # format 3 - take year after the comma
                                 item = item.split(',')[1]
                             elif '-' in item:                                                                               # format 2 - take year after dash:
                                 items = item.split('-')
+                                century = item[0:2]
+                                decade = item[2]
                                 items = [x.strip() for x in items]
-                                if len(items[1]) == 1:
-                                    item = '{0}{1}'.format(item[0][0:2], item.split('-')[1])                                # e.g 1995-7  -> 199 + 7
-                                    item = '{0}{1}'.format(20 if item > compareYear else 19, item)                          # if year format YY is > than the comparison Year then it's in the previous century
-                                elif len(items[1]) == 2:             # e.g 1995-97
-                                    item = '{0}{1}'.format(item[0][0:1], item.split('-')[1])                                # e.g 1995-97 -> 19 + 97
-                                    item = '{0}{1}'.format(20 if item > compareYear else 19, item)                          # if year format YY is > than the comparison Year then it's in the previous century
+                                if len(items[1]) == 1:                                                                      # format 2a e.g. 1995-7
+                                    item = '{0}{1}{2}'.format(century, decade, items[1])
+                                elif len(items[1]) == 2:                                                                    # format 2b e.g. 1995-97
+                                    item = '{0}{1}'.format(century, items[1])
                                 else:
-                                    item = items[1]                                                                         # eg 1995-1997 -> 1997
+                                    item = items[1]                                                                         # format 2c eg 1995-1997
 
                             # item should now be in YYYY format, if year format YY is less than the comparison date it's 1999, convert to date and add to set
                             item = '{0}1231'.format(item)

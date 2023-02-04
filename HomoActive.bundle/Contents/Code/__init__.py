@@ -7,14 +7,14 @@
     Date            Version                         Modification
     12 Aug 2019     2019.08.12.01   Creation
     05 Dec 2022     2019.08.12.10   Updated to use latest version of utils.py
-
+    04 Feb 2023     2019.08.12.11   added code to retrieve studio from site entry
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.10'
+VERSION_NO = '2019.08.12.11'
 AGENT = 'HomoActive'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -188,9 +188,15 @@ class HomoActive(Agent.Movies):
                     fhtmlStudio = fhtml.xpath('//div[@class="product-name"]/span/dd/a/text()')[0]
                     utils.matchStudio(fhtmlStudio, FILMDICT)
                 except Exception as e:
-                    utils.log('SEARCH:: Error getting Site Studio: %s', e)
-                    utils.log(LOG_SUBLINE)
-                    continue
+                    # some entries have the studio title within the site title enclosed in brackets
+                    try:
+                        filmStudio = film.xpath('./a/@title')[0]
+                        filmStudio = re.search(r'\((.*?)\)', filmStudio).group(1)
+                        utils.matchStudio(filmStudio, FILMDICT)
+                    except Exception as e:
+                        utils.log('SEARCH:: Error getting Site Studio: %s', e)
+                        utils.log(LOG_SUBLINE)
+                        continue
 
                 # Site Release Date
                 utils.log(LOG_BIGLINE)

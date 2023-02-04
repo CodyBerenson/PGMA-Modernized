@@ -12,6 +12,7 @@
     27 Nov 2022     2019.08.12.18   Updated to use latest version of utils.py
     04 Dec 2022     2019.08.12.19   Renamed GayEmpire
     03 Jan 2022     2019.08.12.20   Corrected multipage search results processing
+    03 Feb 2023     2019.08.12.21   Use both production year and release dates in matching
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -19,7 +20,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.19'
+VERSION_NO = '2019.08.12.21'
 AGENT = 'GayEmpire'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -207,38 +208,46 @@ class GayEmpire(Agent.Movies):
                 # Site Production Year found in brackets - if fails try Release Date 
                 utils.log(LOG_BIGLINE)
                 vReleaseDate = FILMDICT['CompareDate']
+                releaseDateMatch = False
+                releaseDates = set()
                 try:
                     filmProductionYear = film.xpath('.//small[contains(., "(")]/text()')[0].replace('(', '').replace(')', '').strip()
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Production Year', filmProductionYear))
+                    # add 31st december to production year
+                    filmReleaseDate = '12/31/{0}'.format(filmProductionYear)
+                    # add to set
+                    releaseDates.add(filmReleaseDate)
+
+                except Exception as e:
+                    utils.log('SEARCH:: Error getting Site Production Year: %s', e)
+
+                # Release Date - On GayEmpire - this date pertains to the day it was added to the site
+                try:
+                    filmReleaseDate = film.xpath('.//small[text()="released"]/following-sibling::text()')[0].strip()
+                    utils.log('SEARCH:: {0:<29} {1}'.format('Site Release Date', filmReleaseDate))
+                    # add to set
+                    releaseDates.add(filmReleaseDate)
+
+                except Exception as e:
+                    utils.log('SEARCH:: Error getting Site URL Release Date: %s', e)
+
+                for item in releaseDates:
                     try:
-                        # add 31st december to production year
-                        filmReleaseDate = '12/31/{0}'.format(filmProductionYear)
-                        filmReleaseDate = datetime.strptime(filmReleaseDate, DATEFORMAT)
-                        utils.matchReleaseDate(filmReleaseDate, FILMDICT)
-                        vReleaseDate = filmReleaseDate
+                        releaseDate = datetime.strptime(item, DATEFORMAT)
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Selected Release Date', releaseDate))
+                        utils.matchReleaseDate(releaseDate, FILMDICT)
+                        releaseDateMatch = True
+                        vReleaseDate = releaseDate
+                        break
                     except Exception as e:
-                        utils.log('SEARCH:: Error getting Site Production Year: %s', e)
-                        if FILMDICT['Year']:
-                            utils.log(LOG_SUBLINE)
-                            continue
-                except:
-                    # failed to scrape production year - On GayEmpire - this date pertains to the day it was added to the site
-                    try:
-                        filmReleaseDate = film.xpath('.//small[text()="released"]/following-sibling::text()')[0].strip()
-                        utils.log('SEARCH:: {0:<29} {1}'.format('Site Release Date', filmReleaseDate))
-                        try:
-                            filmReleaseDate = datetime.strptime(filmReleaseDate, DATEFORMAT)
-                            utils.matchReleaseDate(filmReleaseDate, FILMDICT)
-                            vReleaseDate = filmReleaseDate
-                        except Exception as e:
-                            utils.log('SEARCH:: Error getting Site URL Release Date: %s', e)
-                            if FILMDICT['Year']:
-                                utils.log(LOG_SUBLINE)
-                                continue
-                    except:
-                        # failed to scrape release date too
+                        utils.log('SEARCH:: Error getting Release Date: %s', e)
+
+                if not releaseDateMatch:
+                    if FILMDICT['Year']:
+                        utils.log(LOG_SUBLINE)
+                        continue
+                    else:
                         utils.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
-                        utils.log(LOG_BIGLINE)
 
                 # Site Film Duration
                 utils.log(LOG_BIGLINE)

@@ -50,7 +50,9 @@ General Functions found in all agents
     22 Jan 2023     ~ in filename on disk is a marker for / in film title on website
                     processing preferences plist file for MAC OS
                     Correction to setup scraping code
-
+    29 Jan 2023     Check for UserGayTidy - if missing continue processing. This is because I provide the file as _UserGayTidy so as not to overwrite other users customised files
+    03 Feb 2023     if curly quotes and ` are found in film title replace with straight quotes
+                    changes to homoactive code - was retrieving countries as genre
 '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, plistlib, random, re, requests, subprocess, time, unicodedata
@@ -4037,9 +4039,11 @@ def getSiteInfoHomoActive(FILMDICT, **kwargs):
                         continue
 
                     log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    genresSet.add(newItem)
+                    if newItem not in COUNTRYSET:
+                        genresSet.add(newItem)
 
                 showSetData(genresSet, 'Genres (set*)')
+
             else:
                 log('UTILS :: No Synopsis Recorded: %s', e)
 
@@ -4061,9 +4065,9 @@ def getSiteInfoHomoActive(FILMDICT, **kwargs):
                 newItem = findTidy(item)
                 log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
 
-                if newItem is None:        # Don't process
+                if not newItem or newItem is None:        # Don't process
                     continue
-                
+
                 countriesSet.add(newItem)
 
             showSetData(countriesSet, 'Countries (set*)')
@@ -5840,7 +5844,9 @@ def matchFilename(media):
 
     #   Title
     filmVars['CompareTitle'] = set()
-    filmVars['Title'] = groups['fnTITLE'].replace('~', '/')             # ~ invalid character marker in filename
+    filmVars['Title'] = groups['fnTITLE']
+    filmVars['Title'] = filmVars['Title'].replace('~', '/')                             # ~ invalid character marker in filename
+    filmVars['Title'] = standardQuotes(filmVars['Title'])
     filmVars['NormaliseTitle'] = Normalise(filmVars['Title'])
     filmVars['CompareTitle'].add(sortAlphaChars(filmVars['NormaliseTitle']))
 
@@ -5853,7 +5859,7 @@ def matchFilename(media):
     for index, partTitle in enumerate(splitFilmTitle):
         matchedSearchTitle = re.subn(pattern, '', partTitle)
         if matchedSearchTitle[1]:
-            searchTitlesTemp.insert(0, matchedSearchTitle[0].strip())                       # e.g. Pissing
+            searchTitlesTemp.insert(0, matchedSearchTitle[0].strip())                   # e.g. Pissing
         else:
             if index < splitCount:                                                      # only add to collection if not last part of title e.g. Hardcore Fetish Series
                 searchTitlesTemp.insert(0, partTitle)
@@ -5882,9 +5888,13 @@ def matchFilename(media):
     for item in episodes:
         filmVars['CompareTitle'].add(sortAlphaChars(Normalise(item)))
 
-    filmVars['Title'] = re.sub(ur' - |- ', ': ', filmVars['Title'])                     # replace dashes with colons
+    # process Title
+    # replace hyphens with colon-space
+    filmVars['Title'] = re.sub(ur' - |- ', ': ', filmVars['Title'])
+
+    # strip punctuations at end of string
     pattern = ur'[' + re.escape(''.join(['.', '!', '%', '?'])) + ']+$'
-    shortTitle = re.sub(pattern, '', ' '.join(splitFilmTitle).strip())      # strip punctuations at end of string
+    shortTitle = re.sub(pattern, '', ' '.join(splitFilmTitle).strip())
     filmVars['ShortTitle'] = shortTitle
     filmVars['NormaliseShortTitle'] = Normalise(filmVars['ShortTitle'])
     filmVars['CompareTitle'].add(sortAlphaChars(filmVars['NormaliseShortTitle']))
@@ -5921,7 +5931,7 @@ def matchFilename(media):
 
     #       IAFD Title - IAFD uses standard Latin Alphabet Characters for its entries.
     filmVars['IAFDTitle'] = makeASCII(groups['fnTITLE']).replace(' - ', ': ').replace('- ', ': ')       # iafd needs colons in place to search correctly
-    #filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace(' &', ' and')                                 # iafd does not use &
+    #filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace(' &', ' and')                                # iafd does not use &
     filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace('!', '')                                      # remove !
 
     # split and take up to first occurence of character
@@ -6105,6 +6115,7 @@ def matchTitle(filmTitle, FILMDICT):
 # ----------------------------------------------------------------------------------------------------------------------------------
 def Normalise(myString):
     ''' Normalise string for, strip uneeded characters for comparison of web site values to file name regex group values '''
+   
     # Check if string has roman numerals as in a series; note the letter I will be converted
     # myString = '{0} '.format(myString)  # append space at end of string to match last characters
     pattern = r'(?=\b[MDCLXVI]+\b)M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$'
@@ -7076,6 +7087,9 @@ def setupStartVariables():
             log('START :: {0:<29} {1}'.format('Tidy Files', tidyList))
             for tidy in tidyList:
                 tidy_txt = os.path.join(PGMA_FOLDER, tidy)
+                if not os.path.isfile(tidy_txt):        # skip files that are missing
+                    continue
+
                 txtfile = PlexLoadFile(tidy_txt)
                 txtrows = txtfile.split('\n')
                 for idx, row in enumerate(txtrows, start=1):
@@ -7261,6 +7275,27 @@ def soundex(name, len=5):
 
     # Return soundex code truncated or 0-padded to len characters
     return (sndx + (len * '0'))[:len]
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+def standardQuotes(myString):
+    ''' replace all curly quotes and accent marks with their straight versions '''
+    # replace single curly quotes and accent marks with straight quotes
+    singleQuoteChars = [ur'\u2018', ur'\u2019', ur'\u0060', ur'\u00B4']
+    pattern = u'({0})'.format('|'.join(singleQuoteChars))
+    matched = re.search(pattern, myString)                 # match against whole string
+    if matched:
+        myString = re.sub(pattern, "'", myString)
+        myString = ' '.join(myString.split())     # remove continous white space
+
+    # replace double curly quotes with straight ones
+    doubleQuoteChars = [ur'\u201C', ur'\u201D']
+    pattern = u'({0})'.format('|'.join(doubleQuoteChars))
+    matched = re.search(pattern, myString)                 # match against whole string
+    if matched:
+        myString = re.sub(pattern, '"', myString)
+        myString = ' '.join(myString.split())     # remove continous white space
+    
+    return myString
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def TranslateString(myString, siteLanguage, plexLibLanguageCode, detectLanguage):

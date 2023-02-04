@@ -145,7 +145,7 @@ class AEBN(Agent.Movies):
                     filmsList = html.xpath('//div[@class="dts-collection-item dts-collection-item-movie"][@id]/div[contains(@id, "dtsImageOverlayContainer")]')
                     if not filmsList:
                         raise Exception('< No Films! >')
-    
+
                     # if there is a list of films - check if there are further pages returned
                     try:
                         searchQuery = html.xpath('//ul[@class="dts-pagination"]/li[@class="active" and text()!="..."]/following::li/a[@class="dts-paginator-tagging"]/@href')[0]

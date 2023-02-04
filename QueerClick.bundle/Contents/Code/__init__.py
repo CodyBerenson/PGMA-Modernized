@@ -12,6 +12,7 @@
                                     - tidy up of countries and locations
                                     - introduced Grouped Collections and Default to keep track of films
     30 Nov 2022     2020.02.14.24   Updated to use latest version of utils.py
+    29 Jan 2023     2020.02.14.25   Improved Logging
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -19,7 +20,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.02.14.23'
+VERSION_NO = '2020.02.14.25'
 AGENT = 'QueerClick'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -178,34 +179,38 @@ class QueerClick(Agent.Movies):
         compareTitle = utils.Normalise(compareTitle)
 
         morePages = True
+        pageNumber = 0
         while morePages:
-            utils.log('SEARCH:: Search Query: %s', searchQuery)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Search Query', searchQuery))
+            pageNumber += 1
+            if pageNumber > 10:
+                morePages = False     # search a maximum of 10 pages
+                utils.log('SEARCH:: Warning: Page Search Limit Reached [10]')
+                continue
+
             try:
                 html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=utils.delay())
                 filmsList = html.xpath('.//article[@id and @class]')
                 if not filmsList:
-                    raise Exception('< No Films! >')
+                    raise Exception('< No Scene Titles >')
+
+                # if there is a list of films - check if there are further pages returned
+                try:
+                    searchQuery = html.xpath('//div[@class="pagination post"]/span[@class="right"]/a/@href')[0]
+                    morePages = True
+                except:
+                    morePages = False
+
             except Exception as e:
                 utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
                 break
-
-            try:
-                searchQuery = html.xpath('//div[@class="pagination post"]/span[@class="right"]/a/@href')[0]
-                utils.log('SEARCH:: Next Page Search Query: %s', searchQuery)
-                pageNumber = int(searchQuery.split('?')[0].split('page/')[1]) - 1
-                morePages = True if pageNumber <= 10 else False
-            except:
-                searchQuery = ''
-                utils.log('SEARCH:: No More Pages Found')
-                pageNumber = 1
-                morePages = False
 
             filmsFound = len(filmsList)
             utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
             utils.log(LOG_BIGLINE)
             myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
             for idx, film in enumerate(filmsList, start=1):
-                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', '{0} of {1} for {2} - {3} {4}'.format(idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
+                utils.log('SEARCH:: {0:<29} {1}'.format('Processing', 'Page {0}: {1} of {2} for {3} - {4} {5}'.format(pageNumber, idx, filmsFound, FILMDICT['Studio'], FILMDICT['Title'], myYear)))
                 utils.log(LOG_BIGLINE)
 
                 # Site Entry

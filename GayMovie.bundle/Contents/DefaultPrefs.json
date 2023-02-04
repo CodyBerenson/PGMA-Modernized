@@ -46,7 +46,7 @@
         "id": "thumbor",
         "label": "Thumbor URL: Imaging service for online cropping, resizing and flipping",
         "type": "text",
-        "default": "http://34.127.127.212:8888/unsafe"
+        "default": "http://34.16.129.235:8888/unsafe"
     },
     {
         "id": "resetmeta",
