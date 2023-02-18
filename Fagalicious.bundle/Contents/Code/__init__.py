@@ -16,6 +16,7 @@
     29 Jan 2023     2019.01.18.33   Improved Logging
                                     corrected case of HTTP.Headers - was failing to download cast pics from iafd
                                     changed search string to improve scene retrieval
+    09 Feb 2023     2019.01.18.34   removed checks for apostrophes in search string creation
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -23,7 +24,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.33'
+VERSION_NO = '2020.01.18.34'
 AGENT = 'Fagalicious'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -97,33 +98,6 @@ class Fagalicious(Agent.Movies):
             myString = re.sub(pattern, ' ', myString)
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Removed Pattern', pattern, myString)))
             myString = ' '.join(myString.split())   # remove continous white space
-
-        '''
-        # replace curly single apostrophes with straight quote
-        singleQuoteChars = [ur'\u2018', ur'\u2019']
-        pattern = u'({0})'.format('|'.join(singleQuoteChars))
-        matchedSingleQuote = re.search(pattern, myString)  # match against whole string
-        if matchedSingleQuote:
-            myString = re.sub(pattern, "'", myString)
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Replaced Pattern', pattern, myString)))
-            myString = ' '.join(myString.split())   # remove continous white space
-        '''
-        # Fagalicious seems to fail to find Titles which have invalid chars in them split at first incident and take first split, just to search but not compare
-        # the back tick is added to the list as users who can not include quotes in their filenames can use these to replace them without changing the scrappers code
-        badChars = ['"', "'"]
-        pattern = u'({0})'.format('|'.join(badChars))
-        matched = re.search(pattern, myString[0])  # match against first character
-        if matched:
-            myString = myString[1:]
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Dropped 1st Word', myString[0])))
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Found Pattern', pattern, myString)))
-
-        matched = re.search(pattern, myString)  # match against whole string
-        if matched:
-            badPos = matched.start()
-            myString = myString[:badPos]
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Crop at', badPos)))
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Found Pattern', pattern, myString)))
 
         # string can not be longer than 20 characters and enquote
         if len(myString) > 19:
@@ -219,9 +193,9 @@ class Fagalicious(Agent.Movies):
 
                 # Site Entry : Composed of Studio, then Scene Title separated by a Colon
                 try:
-                    filmEntry = film.xpath('./h1[@class="entry-title"]/a/text()')[0]
+                    filmEntry = film.xpath('./h1[@class="entry-title"]/a/text()')[0].strip()
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', filmEntry))
-                    filmStudio, filmTitle = filmEntry.split(": ", 1)
+                    filmStudio, filmTitle = filmEntry.split(': ', 1)
                 except Exception as e:
                     utils.log('SEARCH:: Error getting Site Entry: %s', e)
                     utils.log(LOG_SUBLINE)
@@ -239,6 +213,7 @@ class Fagalicious(Agent.Movies):
                 # Studio Name
                 utils.log(LOG_BIGLINE)
                 try:
+                    filmStudio = filmStudio.strip()
                     utils.matchStudio(filmStudio, FILMDICT)
                 except Exception as e:
                     utils.log('SEARCH:: Error getting Site Studio: %s', e)

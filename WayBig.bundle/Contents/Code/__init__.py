@@ -84,9 +84,9 @@ class WayBig(Agent.Movies):
         pattern = ' - |- '
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
-            myString = re.sub(pattern, ':', myString)
+            myString = re.sub(pattern, ': ', myString)
             myString = ' '.join(myString.split())   # remove continous white space
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Replaced {0} with ":"', pattern)))
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Replaced {0} with ": "', pattern)))
 
         # replace ampersand with nothing
         pattern = u' & '
@@ -97,24 +97,13 @@ class WayBig(Agent.Movies):
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Pattern', pattern)))
 
         # remove all apostrophes with straight as strip diacritics will remove these, include back ticks 
-        quoteChars = [ur'‘', ur'’', ur'\u2018', ur'\u2019', "'", '"']
+        quoteChars = ["'", '"']
         pattern = u'({0})'.format('|'.join(quoteChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             myString = re.sub(pattern, ' ', myString)
             myString = ' '.join(myString.split())   # remove continous white space
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Pattern', pattern)))
-
-        # WayBig seems to fail to find Titles which have invalid chars in them, split at first incident and take first split
-        badChars = [ur'\u201c', ur'\u201d']
-        pattern = u'({0})'.format('|'.join(badChars))
-        myWords = myString.split()
-        for count, word in enumerate(myWords):
-            matched = re.search(pattern, word) # match against first word
-            if matched:
-                myWords.remove(myWords[count])
-                utils.log('AGENT :: {0:<29} {1}'.format('Search Query', 'Dropped Word {0}: found Pattern {1}'.format(word, pattern)))
-                myString = ' '.join(myWords)
 
         # string can not be longer than 50 characters
         if len(myString) > 50:
@@ -229,13 +218,16 @@ class WayBig(Agent.Movies):
                     if re.search(r' at ', filmEntry, flags=re.IGNORECASE) and ': ' in filmEntry and (filmEntry.endswith("'") or filmEntry.endswith('"')):  # err 123
                         utils.log('SEARCH:: Matched " at ", ": " and %s ends with apostrophe in Site entry', re.match(filmEntry, '[\'"]$'))
                         filmStudio, filmTitle = filmEntry.split(': ', 1)
-                    elif re.search(r' at ', filmEntry, flags=re.IGNORECASE):               # format:- Title at Studio
+                    elif re.search(r' at ', filmEntry, flags=re.IGNORECASE):                # format:- Title at Studio
                         utils.log('SEARCH:: Matched " at " in Site entry')
                         filmTitle, filmStudio = re.split(r' at ', filmEntry, flags=re.IGNORECASE, maxsplit=1)
+                    elif FILMDICT['Title'] in filmEntry:                                    # format:- Studio Title (Title has colon)
+                        filmTitle = FILMDICT['Title']
+                        filmStudio = re.sub(filmTitle, '', filmEntry, flags=re.IGNORECASE)
                     elif ': ' in filmEntry:                                                 # format:- Studio: Title
-                        utils.log('SEARCH:: Matched ": " Site entry')
+                        utils.log('SEARCH:: Matched ": " in Site entry')
                         filmStudio, filmTitle = filmEntry.split(': ', 1)
-                    elif re.search(r' on ', filmEntry, flags=re.IGNORECASE):               # format:- Title on Studio
+                    elif re.search(r' on ', filmEntry, flags=re.IGNORECASE):                # format:- Title on Studio
                         utils.log('SEARCH:: Matched " on " in Site entry')
                         filmTitle, filmStudio = re.split(r' on ', filmEntry, flags=re.IGNORECASE, maxsplit=1)
                     elif '? ' in filmEntry:                                                 # format:- Studio? Title

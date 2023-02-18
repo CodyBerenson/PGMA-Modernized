@@ -13,6 +13,7 @@
                                     - introduced Grouped Collections and Default to keep track of films
     30 Nov 2022     2020.02.14.24   Updated to use latest version of utils.py
     29 Jan 2023     2020.02.14.25   Improved Logging
+    08 Feb 2023     2020.02.14.26   Corrected Search String process - was trimming after url encoding
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -20,7 +21,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.02.14.25'
+VERSION_NO = '2020.02.14.26'
 AGENT = 'QueerClick'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -78,15 +79,6 @@ class QueerClick(Agent.Movies):
         utils.log('AGENT :: {0:<29} {1}'.format('Original Search Query', myString))
         myString = myString.lower().strip()
 
-        # replace curly apostrophes with straight as strip diacritics will remove these
-        quoteChars = [ur'\u2018', ur'\u2019']
-        pattern = u'({0})'.format('|'.join(quoteChars))
-        matched = re.search(pattern, myString)  # match against whole string
-        if matched:
-            myString = re.sub(pattern, "'", myString)
-            myString = ' '.join(myString.split())   # remove continous white space
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Pattern', pattern)))
-
         spaceChars = [',', '-', ur'\u2011', ur'\u2012', ur'\u2013', ur'\u2014'] # for titles with commas, colons in them on disk represented as ' - '
         pattern = u'({0})'.format('|'.join(spaceChars))
         matched = re.search(pattern, myString)  # match against whole string
@@ -96,8 +88,7 @@ class QueerClick(Agent.Movies):
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Pattern', pattern)))
 
         # QueerClick seems to fail to find Titles which have invalid chars in them split at first incident and take first split, just to search but not compare
-        # the back tick is added to the list as users who can not include quotes in their filenames can use these to replace them without changing the scrappers code
-        badChars = ["'", '"', '`', ur'\u201c', ur'\u201d', ur'\u2018', ur'\u2019']
+        badChars = ["'", '"']
         pattern = u'({0})'.format('|'.join(badChars))
 
         # check that title section of string does not start with a bad character, if it does remove studio from search string
@@ -114,18 +105,19 @@ class QueerClick(Agent.Movies):
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Found Pattern', pattern)))
             myString = myString[:badPos]
 
+        # string can not be longer than 50 characters and enquote
+        if len(myString) > 50:
+            lastSpace = myString[:51].rfind(' ')
+            utils.log('sssssssssss  %s', lastSpace)
+            myString = myString[:lastSpace]
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: "{1} <= 50"'.format('Search Query Length', lastSpace)))
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: "{1}"'.format('Shorten Search Query', myString[:lastSpace])))
+
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())
 
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string
         myString = myString.replace('%25', '%').replace('*', '')
-
-        # string can not be longer than 50 characters and enquote
-        if len(myString) > 50:
-            lastSpace = myString[:51].rfind(' ')
-            myString = myString[:lastSpace]
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: "{1} <= 50"'.format('Search Query Length', lastSpace)))
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: "{1}"'.format('Shorten Search Query', myString[:lastSpace])))
 
         utils.log('AGENT :: {0:<29} {1}'.format('Returned Search Query', myString))
         utils.log(LOG_BIGLINE)
@@ -172,7 +164,6 @@ class QueerClick(Agent.Movies):
         searchQuery = BASE_SEARCH_URL.format(searchTitle)
 
         # strip studio name from title to use in comparison
-        utils.log('SEARCH:: Search Title: %s', searchTitle)
         regex = ur'^{0} |at {0}$'.format(re.escape(FILMDICT['CompareStudio']))
         pattern = re.compile(regex, re.IGNORECASE)
         compareTitle = re.sub(pattern, '', searchTitle)

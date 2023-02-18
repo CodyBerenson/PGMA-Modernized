@@ -1,16 +1,16 @@
-'70s::x
-'80s::x
-'90s::x
 3 Some (Boy/Boy/Girl)::Group Sex (3+)
 3 Some::Group Sex (3+)
-3-Way::Group Sex (3+)
 3D::x
+3-Way::Group Sex (3+)
 4 Hour::x
 4K Ultra HD::x
 70's Porn Video::x
+'70s::x
 8 Hour::x
 80's Porn Video::x
+'80s::x
 90's Porn Video::x
+'90s::x
 AB::Canada
 Affairs & Love Triangles::x
 Afghan::Afghanistan
@@ -31,11 +31,11 @@ Algerian::Algeria
 All About Booty::x
 All Natural::x
 All Sex::Anal Sex
+Alt::Other
+Alte Chemiefabrik::Germany
+Alternative::Other
 Alt-porn -> Gender Queer::Transgender
 Alt-Porn -> Hipsters::Other
-Alt::Other
-Alternative::Other
-Alte Chemiefabrik::Germany
 Amateur -> Castings / Auditions::Amateur
 Amateur -> Gay Amateur::Amateur
 Amateur -> Home Made::Amateur
@@ -101,8 +101,8 @@ Aussie::Australia
 Australia::Australia
 Australian::Australia
 Austrian::Austria
-Auto-Fellatio::Oral Sex
 Autofellatio::Oral Sex
+Auto-Fellatio::Oral Sex
 Average Build::Average Men
 Average Cock::Average Men
 Average Dick::Average Men
@@ -158,15 +158,17 @@ Barter::x
 Baseball::Fit Guys
 Basement & Dark Room::Fetish
 Basotho::Lesotho
+Bathhouse / Sauna::Wet/Oiled
 Bathroom::Wet/Oiled
 BC::Canada
 BDSM::BDSM
-Beach::Outdoors
 Beach/Wet::Outdoors
+Beach::Outdoors
 Bear::Bears
 Beards::Beards/Hairy
-Bears::Bears
 Bears/HairyMen::Beards/Hairy
+Bears::Bears
+Beefy::Muscles
 Behind the Scenes::x
 Belarusian::Belarus
 Belgian::Belgium
@@ -177,11 +179,11 @@ Berlin-Rudersdorf::Germany
 Bermudan::Bermuda
 Bestsellers::x
 Bhutanese::Bhutan
-Bi-Sexual::Other
 Bicycles::Fit Guys
 Big Asses::Bubble Butt
 Big Butt::Bubble Butt
 Big Cock::Big Cocks
+Big Cocks::Big Cocks
 Big Dick::Big Cocks
 Big Dicks (9'' or more)::Big Cocks
 Big Dicks::Big Cocks
@@ -193,17 +195,21 @@ Bisexual -> Fetish::Other
 Bisexual -> Foreign::Other
 Bisexual -> Military::Other
 Bisexual::Other
+Bi-Sexual::Other
 Bissau-Guinean::Guinea-Bissau
-BJOnly::Oral Sex
 Bizarre::x
+BJOnly::Oral Sex
 Black Men::x
 Black Studs::x
 Black::x
 Blacks::x
+Blindfold::Fetish
 Blindfolds::Fetish
 Blonde::x
 Blondes::x
 Blow Bang::Oral Sex
+Blow Job::Oral Sex
+Blow Jobs::Oral Sex
 Blowjob::Oral Sex
 Blowjobs::Oral Sex
 Blue Collar Guys::Blue Collar
@@ -220,6 +226,7 @@ Bosnian::Bosnia and Herzegovina
 Botswanan::Botswana
 Bottom::Anal Sex
 Bottoms::Anal Sex
+Bound::BDSM
 Boxed Sets::x
 Boxing::Fit Guys
 Boyfriends::Couples
@@ -292,8 +299,8 @@ Chubby / Fat / Big / BBW::Bears
 Chubs::Bears
 Circle Jerk::Masturbation
 Circle-Jerk::Masturbation
-Classic::x
 Classic Plot::Role Play
+Classic::x
 Classics -> 70'S::x
 Classics -> 80'S::x
 Classics -> 90'S::x
@@ -323,10 +330,10 @@ Clothing::x
 Clowns::Role Play
 Clubbing::Other
 CO::United States
-Cock Bondage::BDSM
 Cock & Balls Torture::BDSM
-Cock-Sucking::Oral Sex
+Cock Bondage::BDSM
 Cocksucking::Oral Sex
+Cock-Sucking::Oral Sex
 Collar & Lead/Leash::BDSM
 Collars & Leashes::BDSM
 Collection::x
@@ -346,8 +353,8 @@ Congolese ROC::Congo-Brazzaville
 Connecticut::United States
 Construction Worker::Blue Collar
 Cook Islander::Cook Islands
-Cops::Role Play
 Cops/Prison::Role Play
+Cops::Role Play
 Cosplay::Role Play
 Costa Rican::Costa Rica
 Couple::Couples
@@ -366,6 +373,7 @@ Cuckold / Cuckquean::Fetish
 Cuckold::Fetish
 Cuckolds::Fetish
 Cum Inside / Internal::Anal Sex
+Cum Shot::Cum
 Cum Shots -> Body::Cum
 Cum Shots -> Bukkake::Cum
 Cum Shots -> Cream Pies::Cum
@@ -377,13 +385,13 @@ Cum Swallow / Swap::Oral Sex
 Cum Swallowing::Oral Sex
 Cum Swap::Cum
 Cum Swapping::Cum
-Cum-Eating::Cum
 Cum::Cum
+Cum-Eating::Cum
 Cumshot::Cum
 Cumshots::Cum
 Cypriot::Cyprus
-Czech::Czech Republic
 Czech Language::Czech Republic
+Czech::Czech Republic
 Daddies::Mature
 Daddy::Mature
 Dane::Denmark
@@ -538,8 +546,9 @@ Fishhooking::Oral Sex
 Fisting::Fisting
 FL::United States
 Flexible::Fit Guys
-Flip::Anal Sex
+Flip Flop::Anal Sex
 Flip Fuck::Anal Sex
+Flip::Anal Sex
 Flog::BDSM
 Flogging::BDSM
 Flogs::BDSM
@@ -617,10 +626,10 @@ Grenadan::Grenada
 Grinding::x
 Grooming::Grooming
 Group Orgy / Swingin::Group Sex (3+)
+Group Sex / Gangbang::Group Sex (3+)
 Group Sex -> Gangbang - M On M::Group Sex (3+)
 Group Sex -> Orgies::Group Sex (3+)
 Group Sex -> Threesomes::Group Sex (3+)
-Group Sex / Gangbang::Group Sex (3+)
 Group Sex::Group Sex (3+)
 Group::Group Sex (3+)
 GS::Watersports
@@ -661,16 +670,20 @@ Honduran::Honduras
 Hondurian::Honduras
 Hoods::Fetish
 Horror::x
-Horse::Big Cocks
 Horse Hung::Big Cocks
+Horse::Big Cocks
 Hospital / Dr. Office::Role Play
 Hot Gay Sex::x
 Huge Cock::Big Cocks
+Huge Cocks::Big Cocks
 Huge Dick::Big Cocks
+Huge Dicks::Big Cocks
 Humiliation::BDSM
 Humiliations::BDSM
 Hung::Big Cocks
 Hungarian::Hungary
+Hunk::Muscles
+Hunks::Muscles
 Hustler::Role Play
 Hustlers::Role Play
 Hvy::Bears
@@ -686,8 +699,8 @@ Indiana::United States
 Indonesian::Indonesia
 Industrial::Blue Collar
 Industry::Blue Collar
-Instructional -> For Men::x
 Instructional / Sex 101 / How To...::x
+Instructional -> For Men::x
 Instructional::x
 Interactive Sex::Voyeurism
 Interactive::Voyeurism
@@ -714,8 +727,8 @@ International -> Spain::Spain
 International -> Thailand::Thailand
 International -> Turkey::Turkey
 International -> United Kingdom::United Kingdom
-International::x
 International Star Showcase::Showcase
+International::x
 Interracial - Asian Men::Interracial
 Interracial - Black Men::Interracial
 Interracial - Caucasian Men::Interracial
@@ -738,16 +751,18 @@ Italian::Italy
 Italy::Italy
 Ivoirien::Côte d'Ivoire
 J/O::Masturbation
-Jack-Offs::Masturbation
 Jackhammer::United States
+Jack-Offs::Masturbation
 Jamaican::Jamaica
 Japanese Unmosaic::Japan
 Japanese::Japan
 Jeans & Denim::Fetish
+Jerk Off::Masturbation
 Jewish::United States
 Jock Straps::Fetish
-Jocks & Muscle Hunks::Fit Guys
+Jocks & Muscle Hunks::Muscles
 Jocks::Fit Guys
+Jockstarp::Fetish
 Jockstrap::Fetish
 Jockstraps::Fetish
 JOI::Masturbation
@@ -758,6 +773,7 @@ Kazakh::Kazakhstan
 Kentucky::United States
 Kenyan::Kenya
 Kink::Fetish
+Kissing::x
 Kitchen::x
 Kittitian::Saint Kitts and Nevis
 Kiwi::New Zealand
@@ -838,6 +854,7 @@ Manitoba::Canada
 Mardi Gras::x
 Marshallese::Marshall Islands
 Maryland::United States
+Mask::Fetish
 Masks::Fetish
 Massachusetts::United States
 Massage::Massage
@@ -882,6 +899,8 @@ Moldovan::Moldova
 Moldovian::Moldova
 Monégasque::Monaco
 Mongolian::Mongolia
+Monster Cock::Big Cocks
+Monster Cocks::Big Cocks
 Montana::United States
 Montenegrin::Montenegro
 Montreal::Canada
@@ -891,11 +910,11 @@ Mozambican::Mozambique
 MS::United States
 MT::United States
 Mud Wrestling::Fit Guys
+Mulatto::x
 Multi-DVD Packs::x
 Multi-ethnic::Interracial
 Multi-Pack::x
 Multiple Pops::Cum
-Mulatto::x
 Muscle Bondage::BDSM
 Muscle Hunks::Muscles
 Muscle Studs::Muscles
@@ -974,8 +993,8 @@ OK::United States
 Oklahoma::United States
 Old - Young::Intergenerational
 Older Men::Mature
-Older-Younger::Intergenerational
 Older/Younger::Intergenerational
+Older-Younger::Intergenerational
 Omani::Oman
 ON::Canada
 Ontario::Canada
@@ -989,8 +1008,8 @@ Oral -> Rimming::Oral Sex
 Oral -> Swallowing::Oral Sex
 Oral Sex / Blow Job::Oral Sex
 Oral Sex::Oral Sex
-Oral::Oral Sex
 Oral/Anal Sex::Anal Sex
+Oral::Oral Sex
 Oregon::United States
 Orgies::Group Sex (3+)
 Orgy::Group Sex (3+)
@@ -1017,8 +1036,8 @@ Paris::France
 Park / Woods::Outdoors
 Parody / Spoof::Role Play
 Parody::Role Play
-Parties::Group Sex (3+)
 Parties / Clubs::Group Sex (3+)
+Parties::Group Sex (3+)
 PE::Canada
 Pee::Watersports
 Penis Pumps::Sex Toys
@@ -1069,14 +1088,14 @@ Porn Stars -> Modern::Showcase
 Porn Stars::Showcase
 Porno Filmmaking/Adult Star::Showcase
 Portugal::Portugal
-Portuguese::Portugal
 Portuguese Language::x
+Portuguese::Portugal
 POV::Voyeurism
 Prague::Czech Republic
+Prebooks::x
 Pre-Condom Era - Plot::x
 Pre-Condom Era::x
 Pre-Condom::x
-Prebooks::x
 Prince Edward Island::Canada
 Prison Sex::Role Play
 Prison::Role Play
@@ -1116,8 +1135,8 @@ Rhode Island::United States
 RI::United States
 Rim Job::Rimming
 Rimming::Rimming
-Rio::Brazil
 Rio de Janeiro::Brazil
+Rio::Brazil
 Role Play / Fantasy::Role Play
 Romance::x
 Romanian::Romania
@@ -1235,8 +1254,8 @@ Solos::Exhibitionism
 Somali::Somalia
 Sounding::Extreme Penetration
 South African::South Africa
-South America::x
 South America / Latin America::x
+South America::x
 South Carolina::United States
 South Dakota::United States
 South Korean::South Korea
@@ -1248,14 +1267,14 @@ Spanish Speaking::x
 Spanish::Spain
 Spanking - M on M::BDSM
 Spanking -> M On M::BDSM
-Spanking::BDSM
 Spanking/Paddling::BDSM
+Spanking::BDSM
 Spies & Secret Agents::Role Play
 Spit::BDSM
 Spits::BDSM
 Spitting::BDSM
-Sports Gear::Fit Guys
 Sport Plots::Fit Guys
+Sports Gear::Fit Guys
 Sports Sex::Fit Guys
 Spring Break::College/Frat/Studs
 Squirting::Cum
@@ -1272,8 +1291,8 @@ Straight Trade -> Blowjobs::Other
 Straight Trade -> Sex::Other
 Straight Trade -> Straight Porn Stars::Other
 Straight Trade::Other
-Straight-To-Anal::Other
 Straight/Closeted Men::Other
+Straight-To-Anal::Other
 Strap-On::Sex Toys
 Strap-Ons::Sex Toys
 Strip Dancers::Exhibitionism
@@ -1289,12 +1308,12 @@ Suck::Oral Sex
 Sucking::Oral Sex
 Sucks::Oral Sex
 Sudanese::Sudan
-Suits::White Collar
 Suits & Tie::White Collar
 Suits & Ties::White Collar
+Suits::White Collar
 Superhero::Role Play
-Superheroes::Role Play
 SuperHeroes vs Villains::Role Play
+Superheroes::Role Play
 Surinamese::Suriname
 Swallow::Oral Sex
 Swallowing::Oral Sex
@@ -1443,8 +1462,8 @@ West Virginia::United States
 Western::Fetish
 Wet / Messy::Wet/Oiled
 Whipping::BDSM
-white-on-black::Interracial
 White::x
+white-on-black::Interracial
 WI::United States
 Wincest::Intergenerational
 Wisconsin::United States

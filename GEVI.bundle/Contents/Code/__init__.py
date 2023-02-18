@@ -14,19 +14,22 @@
     07 Nov 2022     2019.12.25.39   Search String corrections taking in to account the new GEVI Search Engine
     27 Nov 2022     2019.12.25.40   Updated to use latest version of utils.py
     01 Feb 2023     2019.12.25.41   Corrected release date matching code
+    11 Feb 2023     2019.12.25.42   display json retreival data, and use its entries to match against studio.
+                                    use sets rather than lists to remove duplicate entries thus sppeding up scrape
+                                    changed search url string so that alternate studio names (lines) are retrieved
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.41'
+VERSION_NO = '2019.12.25.42'
 AGENT = 'GEVI'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
 # URLS
 BASE_URL = 'https://www.gayeroticvideoindex.com'
-BASE_SEARCH_URL = BASE_URL + '/shtt.php?draw=1&order[0][dir]=desc&start={0}&length=100&search[value]={1}&where={2}&_=1665855952743'
+BASE_SEARCH_URL = BASE_URL + '/shtt.php?draw=4&columns[0][data]=0&columns[0][name]=title&columns[0][searchable]=true&columns[0][orderable]=true&columns[0][search][value]=&columns[0][search][regex]=false&columns[1][data]=1&columns[1][name]=release&columns[1][searchable]=true&columns[1][orderable]=true&columns[1][search][value]={2}&columns[1][search][regex]=false&columns[2][data]=2&columns[2][name]=company&columns[2][searchable]=true&columns[2][orderable]=true&columns[2][search][value]=&columns[2][search][regex]=false&columns[3][data]=3&columns[3][name]=line&columns[3][searchable]=true&columns[3][orderable]=true&columns[3][search][value]=&columns[3][search][regex]=false&columns[4][data]=4&columns[4][name]=type&columns[4][searchable]=true&columns[4][orderable]=true&columns[4][search][value]=show+compilation&columns[4][search][regex]=false&columns[5][data]=5&columns[5][name]=rating&columns[5][searchable]=true&columns[5][orderable]=true&columns[5][search][value]=&columns[5][search][regex]=false&columns[6][data]=6&columns[6][name]=category&columns[6][searchable]=true&columns[6][orderable]=true&columns[6][search][value]=&columns[6][search][regex]=false&order[0][column]=0&order[0][dir]=asc&start={0}&length=100&search[value]={1}&search[regex]=false&_=1676140164112'
 WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Date Formats used by website
@@ -201,11 +204,18 @@ class GEVI(Agent.Movies):
 
                     # Site Entry
                     try:
-                        filmEntry = film[0]
-                        pattern = re.compile("<a href='(?P<FilmURL>.*?)'>(?P<FilmTitle>.*?)</a>")
-                        matched = pattern.search(filmEntry)
+                        utils.log('SEARCH:: {0:<29} {1}'.format('JSON Film Entry', film))
+                        utils.log('SEARCH:: {0:<29} {1}'.format('      URL/Title', film[0]))
+                        utils.log('SEARCH:: {0:<29} {1}'.format('           Year', film[1]))
+                        utils.log('SEARCH:: {0:<29} {1}'.format('         Studio', film[2]))
+                        utils.log('SEARCH:: {0:<29} {1}'.format('           Line', film[3]))
+                        utils.log('SEARCH:: {0:<29} {1}'.format('    Compilation', film[4]))
+                        utils.log('SEARCH:: {0:<29} {1}'.format('         Rating', film[5]))
+                        utils.log('SEARCH:: {0:<29} {1}'.format('          Genre', film[6]))
+                        pattern = re.compile("<a href='(?P<FilmURL>.*?)'>(?P<FilmTitle>.*?)</a>")       # pattern to retrieve Site URL and Film Title
+                        matched = pattern.search(film[0])
                         if not matched:
-                            raise Exception("< Film Entry [{0}] not in the expected format: <a href='....'>Film Title<a/>! >".format(filmEntry))
+                            raise Exception("< Film Entry [{0}] not in the expected format: <a href='url'>Film Title<a/>! >".format(film[0]))
                         groups = matched.groupdict()
                     except Exception as e:
                         utils.log('SEARCH:: Error getting Site Entry: %s', e)
@@ -213,6 +223,7 @@ class GEVI(Agent.Movies):
                         continue
 
                     # Site Title
+                    utils.log(LOG_BIGLINE)
                     try:
                         filmTitle = groups['FilmTitle']
                         unwantedWords = ['[sic]', '(sic)']
@@ -266,9 +277,11 @@ class GEVI(Agent.Movies):
                     try:
                         foundStudio = False
                         fhtmlStudio = fhtml.xpath('//a[contains(@href, "/company/")]/parent::td//text()[normalize-space()]')
-                        fhtmlStudio = [x.strip() for x in fhtmlStudio if x.strip()]
-                        fhtmlStudio = list(set(fhtmlStudio))
+                        fhtmlStudio = {x.strip() for x in fhtmlStudio if x.strip()}
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Distributor/Studio', fhtmlStudio))
+                        if film[3] and film[3] is not None:             # Studios Lines in GEVI at this possition in json retrieval
+                            fhtmlStudio.add(film[3])
+                            utils.log('SEARCH:: {0:<29} {1}'.format('Added Line', fhtmlStudio))
                         for siteStudio in fhtmlStudio:
                             try:
                                 utils.matchStudio(siteStudio, FILMDICT)
@@ -296,15 +309,16 @@ class GEVI(Agent.Movies):
                     vReleaseDate = FILMDICT['CompareDate']
                     try:
                         fhtmlReleaseDate = fhtml.xpath('//td[.="released" or .="produced"]/following-sibling::td[1]/text()[normalize-space()]')
-                        fhtmlReleaseDate = [x.replace('?', '').strip() for x in fhtmlReleaseDate]
-                        fhtmlReleaseDate = [x for x in fhtmlReleaseDate if x.strip()]
+                        fhtmlReleaseDate = {x.replace('?', '').strip() for x in fhtmlReleaseDate if x.strip()}
                         if len(fhtmlReleaseDate) == 0:
                             raise Exception('< No Valid Dates Found! >')
 
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Release Date(s)', '{0:>2} - {1}'.format(len(fhtmlReleaseDate), fhtmlReleaseDate)))
                         for item in fhtmlReleaseDate:
                             item = item.strip()
-                            if 'b' in item or 'c' in item:                                                                  # format 4
+                            if not item:
+                                continue
+                            elif 'b' in item or 'c' in item:                                                                # format 4
                                 item = item.replace('b', '').replace('c', '')
                             elif ',' in item:                                                                               # format 3 - take year after the comma
                                 item = item.split(',')[1]
@@ -348,9 +362,13 @@ class GEVI(Agent.Movies):
                     durationMatch = False
                     try:
                         fhtmlDuration = fhtml.xpath('//td[.="length"]/following-sibling::td[1]/text()[normalize-space()]')
-                        fhtmlDuration = [x.strip() for x in fhtmlDuration if x.strip()]
+                        fhtmlDuration = {x.strip() for x in fhtmlDuration if x.strip()}
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Duration(s)', '{0:>2} - {1}'.format(len(fhtmlDuration), fhtmlDuration)))
                         for item in fhtmlDuration:
+                            item = item.strip()
+                            if not item:
+                                continue
+
                             item = int(item) * 60                       # convert to seconds
                             try:
                                 duration = datetime.fromtimestamp(item)
