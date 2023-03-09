@@ -17,13 +17,14 @@
     11 Feb 2023     2019.12.25.42   display json retreival data, and use its entries to match against studio.
                                     use sets rather than lists to remove duplicate entries thus sppeding up scrape
                                     changed search url string so that alternate studio names (lines) are retrieved
+    23 Feb 2023     2019.12.25.43   Cater for titles that did not have a year provided and no external websites year of production
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.42'
+VERSION_NO = '2019.12.25.43'
 AGENT = 'GEVI'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -181,7 +182,9 @@ class GEVI(Agent.Movies):
                 utils.log('SEARCH:: Search Query: %s', searchQuery)
                 try:
                     JSon = JSON.ObjectFromURL(searchQuery, timeout=20, sleep=utils.delay())
+                    utils.log('SEARCH:: JSOn: %s', JSon)
                     filmsList = JSon.get('data', '')
+                    utils.log('SEARCH:: Film List: %s', filmsList)
                     if not filmsList:
                         raise Exception('< No Film Titles! >')   # out of WHILE loop
 
@@ -309,7 +312,8 @@ class GEVI(Agent.Movies):
                     vReleaseDate = FILMDICT['CompareDate']
                     try:
                         fhtmlReleaseDate = fhtml.xpath('//td[.="released" or .="produced"]/following-sibling::td[1]/text()[normalize-space()]')
-                        fhtmlReleaseDate = {x.replace('?', '').strip() for x in fhtmlReleaseDate if x.strip()}
+                        fhtmlReleaseDate = {x.replace('?', '') for x in fhtmlReleaseDate if x.strip()}
+                        fhtmlReleaseDate = {x.strip() for x in fhtmlReleaseDate if x.strip()}
                         if len(fhtmlReleaseDate) == 0:
                             raise Exception('< No Valid Dates Found! >')
 
@@ -349,7 +353,7 @@ class GEVI(Agent.Movies):
                                 utils.log('SEARCH:: Error matching Site URL Release Date: %s', e)
 
                     except Exception as e:
-                        utils.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date: %s', e)
+                        utils.log('SEARCH:: Error getting Site URL Release Date: %s - Default to Filename Date: %s', e, vReleaseDate)
 
                     else:
                         if FILMDICT['Year'] and not releaseDateMatch:

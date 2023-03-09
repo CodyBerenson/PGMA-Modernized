@@ -17,6 +17,7 @@
                                     corrected case of HTTP.Headers - was failing to download cast pics from iafd
                                     changed search string to improve scene retrieval
     09 Feb 2023     2019.01.18.34   removed checks for apostrophes in search string creation
+    08 Mar 2023     2019.01.18.35   Added detection and removal of brackets from search string
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -24,7 +25,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.34'
+VERSION_NO = '2020.01.18.35'
 AGENT = 'Fagalicious'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -88,18 +89,25 @@ class Fagalicious(Agent.Movies):
             myString = myString.replace('.', '  ')
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Removed Pattern', 'Full Stop', myString)))
 
-        # remove single letters, ampersands, "and", "a"
-        pattern = u' & | and | [a-z] '
+        # remove brackets
+        pattern = r' \(|\)|\[|\]|\{|\}'
+        matched = re.search(pattern, myString)  # match against whole string
+        if matched:
+            myString = re.sub(pattern, ' ', myString)
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Removed Pattern', pattern, myString)))
+
+        # remove single letters, ampersands, "and"
+        pattern = r' & | and | [a-z] '
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             # first replace all spaces with double spaces in case you get the patterns following each other
             myString = myString.replace(' ', '  ')
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Added Pattern', 'Space', myString)))
             myString = re.sub(pattern, ' ', myString)
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Removed Pattern', pattern, myString)))
-            myString = ' '.join(myString.split())   # remove continous white space
 
-        # string can not be longer than 20 characters and enquote
+        # string can not be longer than 20 characters
+        myString = ' '.join(myString.split())   # remove continous white space
+        utils.log('AGENT :: {0:<29} {1}'.format('Search Query', myString))
         if len(myString) > 19:
             lastSpace = myString[:20].rfind(' ')
             myString = myString[:lastSpace]

@@ -10,6 +10,7 @@
                                     - tidy up of countries and locations
                                     - introduced Grouped Collections and Default to keep track of films
     05 Dec 2022     2020.04.22.18   Updated to use latest version of utils.py
+    26 Feb 2023     2020.04.22.19   Restrict search string to 72 Characters
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''

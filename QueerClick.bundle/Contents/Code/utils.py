@@ -59,7 +59,14 @@ General Functions found in all agents
                     fixed code to sort out replacing roman numerals with arabic ones
     11 Feb 2023     Improved logging in START section to identify invalid entries in usergaytidy.txt and indented entries and identify operating system
                     added UserGenres.txt file to hold user configured genres
-'''
+    19 Feb 2023     Standardised the use of cast added to filename for all agents
+                    corrected errors in HFGPM
+                    All agents now extract genres and countries from the synopsis as standard
+                    Warnings now gave in scene agent if tidied genre not set, Studios can also be given a tidied genre
+    23 Feb 2023     Improve genre/country retrieval from synopsis
+    26 Feb 2023     Restrict IAFD search string to 72 Characters
+    08 Mar 2023     Error in getting images BEP
+    '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, plistlib, random, re, requests, subprocess, time, unicodedata
 from datetime import datetime, timedelta
@@ -997,17 +1004,21 @@ def getSiteInfoAdultFilmDatabase(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//span[@itemprop="actor"]//text()[normalize-space()]')
-            htmlcast = [x.strip() for x in htmlcast if x.strip()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//span[@itemprop="actor"]//text()[normalize-space()]')
+                htmlcast = [x.strip() for x in htmlcast if x.strip()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections
         log(LOG_SUBLINE)
@@ -1025,8 +1036,7 @@ def getSiteInfoAdultFilmDatabase(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
-        countriesSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         try:
             htmlgenres = html.xpath('//a[contains(@href,"&cf=")]/span/text()')
@@ -1169,17 +1179,21 @@ def getSiteInfoAEBN(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//div[@class="dts-star-name-overlay"]/text()')
-            htmlcast = [x.strip() for x in htmlcast if x.strip()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//div[@class="dts-star-name-overlay"]/text()')
+                htmlcast = [x.strip() for x in htmlcast if x.strip()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections
         log(LOG_SUBLINE)
@@ -1197,8 +1211,7 @@ def getSiteInfoAEBN(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
-        countriesSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         try:
             try:
@@ -1492,17 +1505,21 @@ def getSiteInfoAVEntertainments(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//div[@class="single-info"]/span[@class="title" and text()="Starring"]/following-sibling::span/a/text()')
-            htmlcast = [x.strip() for x in htmlcast if x.strip()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//div[@class="single-info"]/span[@class="title" and text()="Starring"]/following-sibling::span/a/text()')
+                htmlcast = [x.strip() for x in htmlcast if x.strip()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections
         log(LOG_SUBLINE)
@@ -1520,8 +1537,8 @@ def getSiteInfoAVEntertainments(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
-        countriesSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
+        compilation = 'No'
         try:
             htmlgenres = html.xpath('//div[@class="single-info"]/span[@class="title" and text()="Category"]/following-sibling::span/a/text()')
             htmlgenres = [x.strip() for x in htmlgenres if x.strip()]
@@ -1541,24 +1558,6 @@ def getSiteInfoAVEntertainments(FILMDICT, **kwargs):
 
                 genresSet.add(newItem if newItem else item)
 
-            # AV Entertainments is mainly geared for Straight Porn - Not a lot of Gay Genres - process synopsis
-            if siteInfoDict['Synopsis']:
-                synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
-                synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
-                setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
-                for idx, item in enumerate(setSynopsis, start=1):
-                    newItem = findTidy(item)
-                    if not newItem or newItem is None:        # Don't process
-                        continue
-
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    if newItem in COUNTRYSET:
-                        countriesSet.add(newItem)
-                    else:
-                        genresSet.add(newItem)
-
-
             showSetData(countriesSet, 'Countries (set*)')
             showSetData(genresSet, 'Genres (set*)')
             log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
@@ -1572,7 +1571,7 @@ def getSiteInfoAVEntertainments(FILMDICT, **kwargs):
 
         #   5b.  Compilation
         kwCompilation = kwargs.get('kwCompilation')
-        siteInfoDict['Compilation'] = 'No' if kwCompilation is None else kwCompilation
+        siteInfoDict['Compilation'] = compilation if kwCompilation is None else kwCompilation
 
         #   6.  Release Date
         log(LOG_SUBLINE)
@@ -1673,18 +1672,22 @@ def getSiteInfoBestExclusivePorn(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('.//div[@class="entry"]/p/text()[contains(.,"Starring: ")]')[0].strip().replace('Starring: ', '')
-            htmlcast = htmlcast.split(',') 
-            htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('.//div[@class="entry"]/p/text()[contains(.,"Starring: ")]')[0].strip().replace('Starring: ', '')
+                htmlcast = htmlcast.split(',') 
+                htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -1693,7 +1696,7 @@ def getSiteInfoBestExclusivePorn(FILMDICT, **kwargs):
 
         #   5.  Genres and Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         try:
             htmlgenres = html.xpath('.//div[@class="entry"]/p/text()[contains(.,"Genre: ")]')[0].strip().replace('Genre: ', '')
@@ -1795,7 +1798,6 @@ def getSiteInfoBestExclusivePorn(FILMDICT, **kwargs):
             poster = [htmlimages[0]]
             art = [htmlimages[0] if len(htmlimages) == 1 else htmlimages[1]]
             poster = [htmlimages[0]]
-            art = [htmlimages[1]]
 
             log('UTILS :: {0:<29} {1}'.format('Poster', poster))
             log('UTILS :: {0:<29} {1}'.format('Art', art))
@@ -1857,17 +1859,21 @@ def getSiteInfoCDUniverse(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//td[text()="Starring"]/following-sibling::td/a/text()')
-            htmlcast = [x.strip() for x in htmlcast if x.strip()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//td[text()="Starring"]/following-sibling::td/a/text()')
+                htmlcast = [x.strip() for x in htmlcast if x.strip()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -1876,8 +1882,7 @@ def getSiteInfoCDUniverse(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
-        countriesSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         try:
             htmlgenres = html.xpath('//td[text()="Category"]/following-sibling::td/a/text()')
@@ -2100,8 +2105,12 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        log('UTILS :: No Cast List on Agent: Built From Tag List')
-        siteInfoDict['Cast'] = []
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            log('UTILS :: No Cast List on Agent: Built From Tag List')
+            siteInfoDict['Cast'] = []
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -2110,9 +2119,7 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
 
         #   5.  Tag List: Genres, Cast and possible Countries, Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
-        countriesSet = set()
-        castSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         testStudio = [FILMDICT['Studio'].lower().replace(' ', ''), FILMDICT['CompareStudio']]
         testCast = [x.strip().replace(' ', '') for x in FILMDICT['FilenameCast']]
@@ -2128,41 +2135,29 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
             for idx, item in enumerate(htmltags, start=1):
                 newItem = findTidy(item)
                 log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                if newItem is None:                                                         # Don't process
+                    continue
 
-                if newItem is None:                                                       # Don't process
+                if not newItem:                                                             # missing gay tidy will not cause error later down
+                    log('UTILS :: {0:<29} {1}'.format('Warning: Missing Tidied Genre', item))
                     continue
 
                 tempItem = item.lower().replace(' ', '')
-                if tempItem in testStudio or 'Movie' in item or 'Series' in item:         # skip if tag is studio
+                if tempItem in testStudio and not newItem:                                  # skip if tag is studio and studio does not have a genre applied to it
                     continue
 
-                if testCast and tempItem in testCast:                                     # Check in filename cast list
+                if 'Movie' in item or 'Series' in item:                                     # skip if tag is a movie or series
                     continue
 
-                if newItem in COUNTRYSET:                                                 # check if country
+                if testCast and tempItem in testCast:                                       # Check in filename cast list
+                    continue
+
+                if newItem in COUNTRYSET:                                                   # check if country
                     countriesSet.add(newItem)
                     continue
 
-                genresSet.add(newItem) if newItem else castSet.add(item)
+                genresSet.add(newItem)
 
-            # also use synopsis to populate genres/countries as sometimes Scenes are not tagged with genres
-            if siteInfoDict['Synopsis']:
-                synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
-                synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
-                setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
-                for idx, item in enumerate(setSynopsis, start=1):
-                    newItem = findTidy(item)
-                    if not newItem or newItem is None:        # Don't process
-                        continue
-
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    if newItem in COUNTRYSET:
-                        countriesSet.add(newItem)
-                    else:
-                        genresSet.add(newItem)
-
-            showSetData(castSet, 'Cast (set*)')
             showSetData(genresSet, 'Genres (set*)')
             showSetData(countriesSet, 'Countries (set*)')
             log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
@@ -2171,9 +2166,6 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
             log('UTILS :: Error getting Tags: Genres/Countries/Cast: %s', e)
 
         finally:
-            for x in castSet:
-                siteInfoDict['Cast'].append(x)
-
             siteInfoDict['Genres'] = genresSet
             siteInfoDict['Countries'] = countriesSet
             siteInfoDict['Compilation'] = compilation
@@ -2272,17 +2264,21 @@ def getSiteInfoGayEmpire(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//a[@class="PerformerName" and @label="Performers - detail"]/text()')
-            htmlcast = [x.strip() for x in htmlcast if x.strip()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//a[@class="PerformerName" and @label="Performers - detail"]/text()')
+                htmlcast = [x.strip() for x in htmlcast if x.strip()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections: none recorded on this website
         log(LOG_SUBLINE)
@@ -2301,8 +2297,7 @@ def getSiteInfoGayEmpire(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
-        countriesSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         try:
             htmlgenres = html.xpath('//ul[@class="list-unstyled m-b-2"]//a[@label="Category"]/text()[normalize-space()]')
@@ -2567,17 +2562,21 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//a[@label="Performer"]/text()[normalize-space()]')
-            htmlcast = [x.strip() for x in htmlcast if x.strip()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//a[@label="Performer"]/text()[normalize-space()]')
+                htmlcast = [x.strip() for x in htmlcast if x.strip()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections
         log(LOG_SUBLINE)
@@ -2595,8 +2594,7 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
-        countriesSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         try:
             htmlgenres = html.xpath('//a[@label="Category"]/text()[normalize-space()]')
@@ -2834,18 +2832,22 @@ def getSiteInfoGayFetishandBDSM(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//strong[contains(.,"Actors")]//following::text()[normalize-space()]')[0]
-            htmlcast = htmlcast.replace(':', '').split(',') if 'fusion' not in htmlcast else []
-            htmlcast = [x.strip() for x in htmlcast if x.strip()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//strong[contains(.,"Actors")]//following::text()[normalize-space()]')[0]
+                htmlcast = htmlcast.replace(':', '').split(',') if 'fusion' not in htmlcast else []
+                htmlcast = [x.strip() for x in htmlcast if x.strip()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -2854,37 +2856,12 @@ def getSiteInfoGayFetishandBDSM(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        log('UTILS :: No Genres, Countries or Compilation Info on Agent - Try to Extract Information from key words in synopsis')
-        genresSet = set()
-        countriesSet = set()
-        try:
-            if siteInfoDict['Synopsis']:
-                synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
-                synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
-                setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
-                for idx, item in enumerate(setSynopsis, start=1):
-                    newItem = findTidy(item)
-                    if not newItem or newItem is None:        # Don't process
-                        continue
-
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    if newItem in COUNTRYSET:
-                        countriesSet.add(newItem)
-                    else:
-                        genresSet.add(newItem)
-
-                showSetData(countriesSet, 'Countries (set*)')
-                showSetData(genresSet, 'Genres (set*)')
-            else:
-                log('UTILS :: No Synopsis Recorded: %s', e)
-
-        except Exception as e:
-            log('UTILS :: Error getting Genres/Countries: %s', e)
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
+        compilation = 'No'
 
         siteInfoDict['Genres'] = genresSet
         siteInfoDict['Countries'] = countriesSet
-        siteInfoDict['Compilation'] = 'No'
+        siteInfoDict['Compilation'] = compilation
 
         #   6.  Release Date - No Release Date on Agent Site
         log(LOG_SUBLINE)
@@ -2976,18 +2953,22 @@ def getSiteInfoGayMovie(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//strong[contains(.,"Actors")]/following::text()[normalize-space()]')[0]
-            htmlcast = htmlcast.replace(':', '').split(',') if 'fusion' not in htmlcast else []
-            htmlcast = [x.strip() for x in htmlcast if x.strip()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//strong[contains(.,"Actors")]/following::text()[normalize-space()]')[0]
+                htmlcast = htmlcast.replace(':', '').split(',') if 'fusion' not in htmlcast else []
+                htmlcast = [x.strip() for x in htmlcast if x.strip()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -2996,37 +2977,11 @@ def getSiteInfoGayMovie(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        log('UTILS :: No Genres, Countries or Compilation Info on Agent - Try to Extract Information from key words in synopsis')
-        genresSet = set()
-        countriesSet = set()
-        try:
-            if siteInfoDict['Synopsis']:
-                synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
-                synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
-                setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
-                for idx, item in enumerate(setSynopsis, start=1):
-                    newItem = findTidy(item)
-                    if not newItem or newItem is None:        # Don't process
-                        continue
-
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    if newItem in COUNTRYSET:
-                        countriesSet.add(newItem)
-                    else:
-                        genresSet.add(newItem)
-
-                showSetData(countriesSet, 'Countries (set*)')
-                showSetData(genresSet, 'Genres (set*)')
-            else:
-                log('UTILS :: No Synopsis Recorded: %s', e)
-
-        except Exception as e:
-            log('UTILS :: Error getting Genres/Countries: %s', e)
-
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
+        compilation = 'No'
         siteInfoDict['Genres'] = genresSet
         siteInfoDict['Countries'] = countriesSet
-        siteInfoDict['Compilation'] = 'No'
+        siteInfoDict['Compilation'] = compilation
 
         #   6.  Release Date - No Release Date on Agent Site
         log(LOG_SUBLINE)
@@ -3116,17 +3071,21 @@ def getSiteInfoGayRado(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//p[@style]/text()[contains(.,"Starring: ")]')[0].replace('Starring: ', '').split(',')
-            htmlcast = [x.strip() for x in htmlcast if x.strip()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//p[@style]/text()[contains(.,"Starring: ")]')[0].replace('Starring: ', '').split(',')
+                htmlcast = [x.strip() for x in htmlcast if x.strip()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -3135,8 +3094,7 @@ def getSiteInfoGayRado(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
-        countriesSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         try:
             htmlgenres = html.xpath('//span[@style=""]/text()')
@@ -3266,18 +3224,22 @@ def getSiteInfoGayWorld(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//strong[contains(.,"Actors")]/following::text()[normalize-space()]')[0]
-            htmlcast = htmlcast.replace(':', '').split(',') if 'fusion' not in htmlcast else []
-            htmlcast = [x.strip() for x in htmlcast if x.strip()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//strong[contains(.,"Actors")]/following::text()[normalize-space()]')[0]
+                htmlcast = htmlcast.replace(':', '').split(',') if 'fusion' not in htmlcast else []
+                htmlcast = [x.strip() for x in htmlcast if x.strip()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -3286,37 +3248,11 @@ def getSiteInfoGayWorld(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        log('UTILS :: No Genres, Countries or Compilation Info on Agent - Try to Extract Information from key words in synopsis')
-        genresSet = set()
-        countriesSet = set()
-        try:
-            if siteInfoDict['Synopsis']:
-                synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
-                synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
-                setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
-                for idx, item in enumerate(setSynopsis, start=1):
-                    newItem = findTidy(item)
-                    if not newItem or newItem is None:        # Don't process
-                        continue
-
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    if newItem in COUNTRYSET:
-                        countriesSet.add(newItem)
-                    else:
-                        genresSet.add(newItem)
-
-                showSetData(countriesSet, 'Countries (set*)')
-                showSetData(genresSet, 'Genres (set*)')
-            else:
-                log('UTILS :: No Synopsis Recorded: %s', e)
-
-        except Exception as e:
-            log('UTILS :: Error getting Genres/Countries: %s', e)
-
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
+        compilation = 'No'
         siteInfoDict['Genres'] = genresSet
         siteInfoDict['Countries'] = countriesSet
-        siteInfoDict['Compilation'] = 'No'
+        siteInfoDict['Compilation'] = compilation
 
         #   6.  Release Date - No Release Date on Agent Site
         log(LOG_SUBLINE)
@@ -3444,36 +3380,40 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            # GEVI has access to external websites: AEBN, GayHotMovies, then GayEmpire
-            htmlcast = html.xpath('//a[contains(@href, "/performer/")]//text()')
-            htmlcast = [x.split('(')[0].strip() for x in htmlcast if x.strip()]
-            cast = list(set(htmlcast))
-            castLength = len(cast)
-            cast.sort(key = lambda x: x.lower())
-            log('UTILS :: {0:<29} {1}'.format('GEVI Cast', '{0:>2} - {1}'.format(castLength, cast)))
-            for key in ['AEBN', 'GayHotMovies', 'GayEmpire']:
-                myExternalAgentDict = FILMDICT.get(key, '')
-                if myExternalAgentDict:
-                    myExternalCast = myExternalAgentDict.get('Cast', '')
-                    if myExternalCast:
-                        log('UTILS :: {0:<29} {1}'.format('{0} Cast'.format(key), '{0:>2} - {1}'.format(len(myExternalCast), sorted(myExternalCast))))
-                        # combine both lists and create a case insensitive List
-                        combinedCast = list(set(cast + myExternalCast))
-                        s = set()
-                        cast = []
-                        for x in combinedCast:
-                            if x.lower() not in s:
-                                s.add(x.lower())
-                                cast.append(x)                        
-                        cast.sort(key = lambda x: x.lower())
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                # GEVI has access to external websites: AEBN, GayHotMovies, then GayEmpire
+                htmlcast = html.xpath('//a[contains(@href, "/performer/")]//text()')
+                htmlcast = [x.split('(')[0].strip() for x in htmlcast if x.strip()]
+                cast = list(set(htmlcast))
+                castLength = len(cast)
+                cast.sort(key = lambda x: x.lower())
+                log('UTILS :: {0:<29} {1}'.format('GEVI Cast', '{0:>2} - {1}'.format(castLength, cast)))
+                for key in ['AEBN', 'GayHotMovies', 'GayEmpire']:
+                    myExternalAgentDict = FILMDICT.get(key, '')
+                    if myExternalAgentDict:
+                        myExternalCast = myExternalAgentDict.get('Cast', '')
+                        if myExternalCast:
+                            log('UTILS :: {0:<29} {1}'.format('{0} Cast'.format(key), '{0:>2} - {1}'.format(len(myExternalCast), sorted(myExternalCast))))
+                            # combine both lists and create a case insensitive List
+                            combinedCast = list(set(cast + myExternalCast))
+                            s = set()
+                            cast = []
+                            for x in combinedCast:
+                                if x.lower() not in s:
+                                    s.add(x.lower())
+                                    cast.append(x)                        
+                            cast.sort(key = lambda x: x.lower())
 
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Combined Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Combined Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -3482,8 +3422,7 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        countriesSet = set()
-        genresSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         try:
             try:
                 htmlbodytypes = html.xpath('//td[contains(text(),"body types")]//following-sibling::td[1]/text()')[0].strip()           # add GEVI body type to genres
@@ -3534,23 +3473,6 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
 
                 genresSet.add(newItem if newItem else item)
 
-            # also use synopsis to populate genres/countries as GEVI usually uses general hardcore as a Genre..
-            if siteInfoDict['Synopsis']:
-                synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
-                synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
-                setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
-                for idx, item in enumerate(setSynopsis, start=1):
-                    newItem = findTidy(item)
-                    if not newItem or newItem is None:        # Don't process
-                        continue
-
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    if newItem in COUNTRYSET:
-                        countriesSet.add(newItem)
-                    else:
-                        genresSet.add(newItem)
-
             log('UTILS :: {0:<29} {1}'.format('Combined Genres', '{0:>2} - {1}'.format(len(genresSet), sorted(genresSet))))
             siteInfoDict['Genres'] = genresSet
 
@@ -3585,7 +3507,7 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
 
         except Exception as e:
             siteInfoDict['Countries'] = set()
-            log('UTILS:: Error getting Countries: %s', e)
+            log('UTILS :: Error getting Countries: %s', e)
 
         #   5c.   Compilation
         kwCompilation = kwargs.get('kwCompilation')
@@ -3805,12 +3727,20 @@ def getSiteInfoHFGPM(FILMDICT, **kwargs):
         #   1.  Synopsis
         log(LOG_SUBLINE)
         try:
-            htmlsynopsis = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div[@id]/node()')[0]
-            htmlsynopsis = htmlsynopsis.xpath('./node()')
-            htmlsynopsis = [x for x in htmlsynopsis if 'ElementStringResult' in str(type(x))]
-            synopsis = max(htmlsynopsis, key=len).strip()
+            htmlsynopsis = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div[@id]/node()')
+            htmlsynopsis = [x for x in htmlsynopsis if len(x) > 1]
+            tempsynopsis = '\n'.join(htmlsynopsis)
+            tempsynopsis = tempsynopsis.split('\n')
+            synopsisList = []
+            for item in tempsynopsis:
+                if 'MiB' in item or 'GiB' in item:
+                    break
+                synopsisList.append(item)
+
+            synopsis = '\n'.join(synopsisList)
             siteInfoDict['Synopsis'] = synopsis
             log('UTILS :: {0:<29} {1}'.format('Synopsis', synopsis))
+
         except Exception as e:
             siteInfoDict['Synopsis'] = ''
             log('UTILS :: Error getting Synopsis: %s', e)
@@ -3833,19 +3763,38 @@ def getSiteInfoHFGPM(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div/node()[((self::strong or self::b) and (contains(.,"Cast") or contains(.,"Stars")))]/following-sibling::text()[1]')[0]
-            htmlcast = htmlcast.replace(': ', '')
-            htmlcast = htmlcast.split(',') 
-            htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div/node()[((self::strong or self::b) and (contains(.,"Cast") or contains(.,"Actors") or contains(.,"Stars")))]/following-sibling::text()[1]')[0]
+                htmlcast = htmlcast.replace(': ', '')
+                htmlcast = htmlcast.split(',') 
+                htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                # HFGPM sometimes lists the cast in the first line of the synopsis separated by commas or and
+                log('UTILS :: No Cast - Try and Extract from Synopsis: %s', e)
+                try:
+                    if siteInfoDict['Synopsis']:
+                        cast = siteInfoDict['Synopsis'].split('\n')[0]
+                        pattern = r', | and |\. '
+                        cast = re.sub(pattern, ',', cast, flags=re.IGNORECASE)
+                        cast = cast.split(',')
+                        cast = [x for x in cast if len(x.split()) < 3]      # names are usually 1 or 2 words
+                        cast = sorted(cast) if len(cast) > 3 else []        # assume that if there are greater than 3 elements in the list - that it is possibly a cast list
+                        log('UTILS :: {0:<29} {1}'.format('Synopsis Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+                        siteInfoDict['Cast'] = cast
+                    else:
+                        siteInfoDict['Cast'] = []
+                except Exception as e:
+                    siteInfoDict['Cast'] = []
+                    log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -3854,7 +3803,7 @@ def getSiteInfoHFGPM(FILMDICT, **kwargs):
 
         #   5.  Genres and Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         try:
             htmlgenres = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div/node()[((self::strong or self::b) and (contains(.,"Categories:") or contains(.,"Genres:")))]/following-sibling::text()[1]')[0]
@@ -3873,6 +3822,9 @@ def getSiteInfoHFGPM(FILMDICT, **kwargs):
 
                 genresSet.add(newItem if newItem else item)
 
+            log('UTILS :: {0:<29} {1}'.format('Combined Genres', '{0:>2} - {1}'.format(len(genresSet), sorted(genresSet))))
+            siteInfoDict['Genres'] = genresSet
+
             showSetData(genresSet, 'Genres (set*)')
             log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
 
@@ -3885,12 +3837,11 @@ def getSiteInfoHFGPM(FILMDICT, **kwargs):
 
         #   5b.  Countries
         log(LOG_SUBLINE)
-        countriesSet = set()
         try:
             htmlcountries = html.xpath('//div[@class="base fullstory"]/div[@class="maincont clr"]//div/node()[((self::strong or self::b) and (contains(.,"Country")))]/following-sibling::text()[1]')[0]
             htmlcountries = htmlcountries.replace(': ', '')
             htmlcountries = htmlcountries.split(',')
-            htmlcountries = [x.strip() for x in htmlgenres if x.strip()]
+            htmlcountries = [x.strip() for x in htmlcountries if x.strip()]
             htmlcountries.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(htmlcountries), htmlcountries)))
             for idx, item in enumerate(htmlcountries, start=1):
@@ -3899,7 +3850,7 @@ def getSiteInfoHFGPM(FILMDICT, **kwargs):
 
                 if newItem is None:        # Don't process
                     continue
-                
+
                 countriesSet.add(newItem)
 
             showSetData(countriesSet, 'Countries (set*)')
@@ -4020,17 +3971,21 @@ def getSiteInfoHomoActive(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//dt[text()="Actors:"]/following-sibling::dd[1]/a/text()')
-            htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//dt[text()="Actors:"]/following-sibling::dd[1]/a/text()')
+                htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -4039,32 +3994,8 @@ def getSiteInfoHomoActive(FILMDICT, **kwargs):
 
         #   5.  Genres and Compilation
         log(LOG_SUBLINE)
-        log('UTILS :: No Genres or Compilation Info on Agent - Try to Extract Information from key words in synopsis')
-        genresSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
-        try:
-            if siteInfoDict['Synopsis']:
-                synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
-                synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
-                setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
-                for idx, item in enumerate(setSynopsis, start=1):
-                    newItem = findTidy(item)
-                    if not newItem or newItem is None:        # Don't process
-                        continue
-
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    if newItem not in COUNTRYSET:
-                        genresSet.add(newItem)
-
-                showSetData(genresSet, 'Genres (set*)')
-
-            else:
-                log('UTILS :: No Synopsis Recorded: %s', e)
-
-        except Exception as e:
-            log('UTILS :: Error getting Genres/Countries: %s', e)
-
         siteInfoDict['Genres'] = genresSet
         siteInfoDict['Compilation'] = compilation
 
@@ -4202,15 +4133,19 @@ def getSiteInfoIAFD(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            cast  = getRecordedCast(html)
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), sorted(cast))))
-            siteInfoDict['Cast'] = cast
-            FILMDICT['Cast'] = cast                                  # this field holds the cast if the film is found on iafd
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                cast  = getRecordedCast(html)
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), sorted(cast))))
+                siteInfoDict['Cast'] = cast
+                FILMDICT['Cast'] = cast                                  # this field holds the cast if the film is found on iafd
 
-        except Exception as e:
-            siteInfoDict['Cast'] = {}
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = {}
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -4219,28 +4154,8 @@ def getSiteInfoIAFD(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        log('UTILS :: No Genres, Countries or Compilation Info on Agent - Try to Extract Information from key words in synopsis/cast roles')
-        genresSet = set()
-        countriesSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         try:
-            if siteInfoDict['Synopsis']:
-                synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
-                synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
-                setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
-                for idx, item in enumerate(setSynopsis, start=1):
-                    newItem = findTidy(item)
-                    if not newItem or newItem is None:        # Don't process
-                        continue
-
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    if newItem in COUNTRYSET:
-                        countriesSet.add(newItem)
-                    else:
-                        genresSet.add(newItem)
-            else:
-                log('UTILS :: No Synopsis Recorded: %s', e)
-
             #   IAFD lists the sexual activities of the cast members under their pictures at times
             if siteInfoDict['Cast']:
                 rolesSet = {cast[x]['Role'] for x in siteInfoDict['Cast'].keys()}
@@ -4278,7 +4193,7 @@ def getSiteInfoIAFD(FILMDICT, **kwargs):
                 htmlcompilation = html.xpath('//p[@class="bioheading" and text()="Compilation"]//following-sibling::p[1]/text()')[0].strip()
                 log('UTILS :: {0:<29} {1}'.format('Compilation?', htmlcompilation))
             except Exception as e:
-                siteInfoDict['Compilation'] = 'No'
+                siteInfoDict['Compilation'] = compilation
                 log('UTILS :: Error getting Compilation Information: %s', e)
         else:
             siteInfoDict['Compilation'] = kwCompilation
@@ -4417,17 +4332,21 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//a[@class="titletags"]/text()')
-            htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//a[@class="titletags"]/text()')
+                htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -4436,9 +4355,7 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
 
         #   5.  Tag List: Genres and possible Countries, Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
-        countriesSet = set()
-        castSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         testStudio = [FILMDICT['Studio'].lower().replace(' ', ''), FILMDICT['CompareStudio']]
         testCast = [x.strip().replace(' ', '') for x in FILMDICT['FilenameCast']]
@@ -4461,42 +4378,27 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
             for idx, item in enumerate(htmltags, start=1):
                 newItem = findTidy(item)
                 log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                if newItem is None:                                                         # Don't process
+                    continue
 
-                if newItem is None:                                                       # Don't process
+                if not newItem:                                                             # missing gay tidy will not cause error later down
+                    log('UTILS :: {0:<29} {1}'.format('Warning: Missing Tidied Genre', item))
                     continue
 
                 tempItem = item.lower().replace(' ', '')
-                if tempItem in testStudio or 'Movie' in item or 'Series' in item:         # skip if tag is studio
+                if tempItem in testStudio and not newItem:                                  # skip if tag is studio and studio does not have a genre applied to it
                     continue
 
-                if testCast and tempItem in testCast:                                     # Check in filename cast list
+                if 'Movie' in item or 'Series' in item:                                     # skip if tag is a movie or series
                     continue
 
-                if newItem in COUNTRYSET:                                                 # check if country
+                if testCast and tempItem in testCast:                                       # Check in filename cast list
+                    continue
+
+                if newItem in COUNTRYSET:                                                   # check if country
                     countriesSet.add(newItem)
                     continue
 
-                if newItem:
-                    genresSet.add(newItem)
-
-            # also use synopsis to populate genres/countries as sometimes Scenes are not tagged with genres
-            if siteInfoDict['Synopsis']:
-                synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
-                synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
-                setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
-                for idx, item in enumerate(setSynopsis, start=1):
-                    newItem = findTidy(item)
-                    if not newItem or newItem is None:        # Don't process
-                        continue
-
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    if newItem in COUNTRYSET:
-                        countriesSet.add(newItem)
-                    else:
-                        genresSet.add(newItem)
-
-            showSetData(castSet, 'Cast (set*)')
             showSetData(genresSet, 'Genres (set*)')
             showSetData(countriesSet, 'Countries (set*)')
             log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
@@ -4505,9 +4407,6 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
             log('UTILS :: Error getting Tags: Genres/Countries/Cast: %s', e)
 
         finally:
-            for x in castSet:
-                siteInfoDict['Cast'].append(x)
-
             siteInfoDict['Genres'] = genresSet
             siteInfoDict['Countries'] = countriesSet
             siteInfoDict['Compilation'] = compilation
@@ -4605,17 +4504,21 @@ def getSiteInfoSimplyAdult(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//div[@class="property-name"][text()="Cast:"]/following-sibling::div[@class="property-value"]/a/text()')
-            htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//div[@class="property-name"][text()="Cast:"]/following-sibling::div[@class="property-value"]/a/text()')
+                htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections
         log(LOG_SUBLINE)
@@ -4633,37 +4536,11 @@ def getSiteInfoSimplyAdult(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        log('UTILS :: No Genres, Countries or Compilation Info on Agent - Try to Extract Information from key words in synopsis')
-        genresSet = set()
-        countriesSet = set()
-        try:
-            if siteInfoDict['Synopsis']:
-                synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
-                synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
-                setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
-                for idx, item in enumerate(setSynopsis, start=1):
-                    newItem = findTidy(item)
-                    if not newItem or newItem is None:        # Don't process
-                        continue
-
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    if newItem in COUNTRYSET:
-                        countriesSet.add(newItem)
-                    else:
-                        genresSet.add(newItem)
-
-                showSetData(countriesSet, 'Countries (set*)')
-                showSetData(genresSet, 'Genres (set*)')
-            else:
-                log('UTILS :: No Synopsis Recorded: %s', e)
-
-        except Exception as e:
-            log('UTILS :: Error getting Genres/Countries: %s', e)
-
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
+        compilation = 'No'
         siteInfoDict['Genres'] = genresSet
         siteInfoDict['Countries'] = countriesSet
-        siteInfoDict['Compilation'] = 'No'
+        siteInfoDict['Compilation'] = compilation
 
         #   6.  Release Date - No Release Date on Agent Site
         log(LOG_SUBLINE)
@@ -4756,8 +4633,12 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        log('UTILS :: No Cast List on Agent: Built From Tag List')
-        siteInfoDict['Cast'] = []
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            log('UTILS :: No Cast List on Agent: Built From Tag List')
+            siteInfoDict['Cast'] = []
 
         #   4.  Collections - None in this Agent
         log(LOG_SUBLINE)
@@ -4766,9 +4647,7 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
 
         #   5.  Tag List: Genres, Cast and possible Countries, Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
-        countriesSet = set()
-        castSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         testStudio = [FILMDICT['Studio'].lower().replace(' ', ''), FILMDICT['CompareStudio']]
         testCast = [x.strip().replace(' ', '') for x in FILMDICT['FilenameCast']]
@@ -4790,41 +4669,27 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
             for idx, item in enumerate(htmltags, start=1):
                 newItem = findTidy(item)
                 log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                if newItem is None:                                                         # Don't process
+                    continue
 
-                if newItem is None:                                                       # Don't process
+                if not newItem:                                                             # missing gay tidy will not cause error later down
+                    log('UTILS :: {0:<29} {1}'.format('Warning: Missing Tidied Genre', item))
                     continue
 
                 tempItem = item.lower().replace(' ', '')
-                if tempItem in testStudio or 'Movie' in item or 'Series' in item:         # skip if tag is studio
+                if tempItem in testStudio and not newItem:                                  # skip if tag is studio and studio does not have a genre applied to it
                     continue
 
-                if testCast and tempItem in testCast:                                     # Check in filename cast list
+                if 'Movie' in item or 'Series' in item:                                     # skip if tag is a movie or series
                     continue
 
-                if newItem in COUNTRYSET:                                                 # check if country
+                if testCast and tempItem in testCast:                                       # Check in filename cast list
+                    continue
+
+                if newItem in COUNTRYSET:                                                   # check if country
                     countriesSet.add(newItem)
                     continue
 
-                genresSet.add(newItem) if newItem else castSet.add(item)
-
-            # also use synopsis to populate genres/countries as sometimes Scenes are not tagged with genres
-            if siteInfoDict['Synopsis']:
-                synopsis = re.sub(r'[^\w\s]',' ', siteInfoDict['Synopsis'])             # remove all punctuationion
-                synopsis = re.sub(r'\b\w{1,3}\b', '', synopsis)                         # remove all short words (3 letters or less) - to avoid processing letters like you, us, him
-                setSynopsis = set(synopsis.split())
-                log('UTILS :: {0:<29} {1}'.format('Synopsis Word Count', '{0:>2} - {1}'.format(len(setSynopsis), setSynopsis)))
-                for idx, item in enumerate(setSynopsis, start=1):
-                    newItem = findTidy(item)
-                    if not newItem or newItem is None:        # Don't process
-                        continue
-
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    if newItem in COUNTRYSET:
-                        countriesSet.add(newItem)
-                    else:
-                        genresSet.add(newItem)
-
-            showSetData(castSet, 'Cast (set*)')
             showSetData(genresSet, 'Genres (set*)')
             showSetData(countriesSet, 'Countries (set*)')
             log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
@@ -4833,9 +4698,6 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
             log('UTILS :: Error getting Tags: Genres/Countries/Cast: %s', e)
 
         finally:
-            for x in castSet:
-                siteInfoDict['Cast'].append(x)
-
             siteInfoDict['Genres'] = genresSet
             siteInfoDict['Countries'] = countriesSet
             siteInfoDict['Compilation'] = compilation
@@ -4933,17 +4795,21 @@ def getSiteInfoWolffVideo(FILMDICT, **kwargs):
 
         #   3.  Cast
         log(LOG_SUBLINE)
-        try:
-            htmlcast = html.xpath('//a[@href[contains(.,"/actor")]]/text()')
-            htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
-            cast = list(set(htmlcast))
-            cast.sort(key = lambda x: x.lower())
-            siteInfoDict['Cast'] = cast[:]
-            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
+        if FILMDICT['FilenameCast']:        # if a cast list has been provided, use it and don't process html
+            siteInfoDict['Cast'] = [x for x in FILMDICT['FilenameCast']]
+            log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
+        else:
+            try:
+                htmlcast = html.xpath('//a[@href[contains(.,"/actor")]]/text()')
+                htmlcast = [x.strip() for x in htmlcast if x.strip() and 'n/a' not in x.lower()]
+                cast = list(set(htmlcast))
+                cast.sort(key = lambda x: x.lower())
+                siteInfoDict['Cast'] = cast[:]
+                log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(cast), cast)))
 
-        except Exception as e:
-            siteInfoDict['Cast'] = []
-            log('UTILS :: Error getting Cast: %s', e)
+            except Exception as e:
+                siteInfoDict['Cast'] = []
+                log('UTILS :: Error getting Cast: %s', e)
 
         #   4.  Collections
         log(LOG_SUBLINE)
@@ -4961,8 +4827,7 @@ def getSiteInfoWolffVideo(FILMDICT, **kwargs):
 
         #   5.  Genres, Countries and Compilation
         log(LOG_SUBLINE)
-        genresSet = set()
-        countriesSet = set()
+        countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         try:
             htmlgenres = html.xpath('//p/a[@href[contains(.,"display-movies/category")]]/text()')
@@ -5944,7 +5809,6 @@ def matchFilename(media):
 
     #       IAFD Title - IAFD uses standard Latin Alphabet Characters for its entries.
     filmVars['IAFDTitle'] = makeASCII(groups['fnTITLE']).replace(' - ', ': ').replace('- ', ': ')       # iafd needs colons in place to search correctly
-    #filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace(' &', ' and')                                # iafd does not use &
     filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace('!', '')                                      # remove !
 
     # split and take up to first occurence of character
@@ -5968,6 +5832,13 @@ def matchFilename(media):
     # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string
     searchString = filmVars['IAFDTitle'].split(':')[0]
     searchString = searchString.replace('~', '/')
+    # iafd search string can not be longer than 73 characters
+    if len(searchString) > 72:
+        lastSpace = searchString[:73].rfind(' ')
+        searchString = searchString[:lastSpace]
+        log('UTILS :: {0:<29} {1}'.format('Search Query', '{0}: "{1} <= 72"'.format('Search Query Length', lastSpace)))
+        log('UTILS :: {0:<29} {1}'.format('Search Query', '{0}: "{1}"'.format('Shorten Search Query', searchString[:lastSpace])))
+
     searchString = String.StripDiacritics(searchString).strip()
     searchString = String.URLEncode(searchString).replace('%25', '%').replace('%26', '&').replace('*', '')
     filmVars['IAFDSearchTitle'] = searchString
@@ -5981,7 +5852,7 @@ def matchFilename(media):
         filmVars['CompareDate'] = None
 
     #   Stacked
-    filmVars['Stacked'] = 'Yes' if groups['fnSTACK'] is not None else 'No'
+    filmVars['Stacked'] = 'No' if groups['fnSTACK'] is None else 'Yes'
 
     #  Filname Cast List
     filmVars['FilenameCast'] = re.split(r',\s*', groups['fnCAST']) if groups['fnCAST'] else []
@@ -7327,6 +7198,44 @@ def standardQuotes(myString):
     
     return myString
 
+# ----------------------------------------------------------------------------------------------------------------------------------
+def synopsisCountriesGenres(myString):
+    ''' extract genres and countries from synopsis text'''
+    genresSet = set()
+    countriesSet = set()
+    log('UTILS :: Extract Countries and Genres from Synopsis:')
+    try:
+        synopsis = myString.strip()
+        if synopsis:
+            idx = 0
+            for key, value in TIDYDICT.items():
+                if value is None or value == 'x':                               # skip if tidied out
+                    continue
+
+                if len(key) < 3:                                                # skip American and Canadian State Abbreviations
+                    continue
+
+                pattern = r'(?<![^ .,?!;]){0}(?![^ .,?!;\r\n])'.format(key)     # look for genre followed by punctuation or whitespace - to prevent stuff like "rio" in "priority"
+                if re.search(pattern, synopsis, flags=re.IGNORECASE):
+                    idx += 1
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, key, value)))
+
+                    if value in COUNTRYSET:
+                        countriesSet.add(value)
+                        continue
+
+                    genresSet.add(value)
+
+        showSetData(countriesSet, 'Countries (set*)')
+        showSetData(genresSet, 'Genres (set*)')
+
+    except Exception as e:
+        log('UTILS :: Error Extract Countries and Genres from Synopsis: %s', e)
+
+    finally:
+        log(LOG_SUBLINE)
+
+    return countriesSet, genresSet
 # ----------------------------------------------------------------------------------------------------------------------------------
 def TranslateString(myString, siteLanguage, plexLibLanguageCode, detectLanguage):
     ''' Translate string into Library language '''

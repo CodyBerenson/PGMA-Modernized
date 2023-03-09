@@ -12,14 +12,14 @@
     30 Nov 2022     2019.08.12.37   Updated to use latest version of utils.py
     29 Jan 2023     2019.08.12.38   Improved Logging
                                     changed processing of & character in search string
-
+    08 Mar 2023     2019.08.12.39   Corrections to matching film entries - issues with square brackets in title
 ---------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.22.38'
+VERSION_NO = '2019.12.22.39'
 AGENT = 'WayBig'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -210,36 +210,41 @@ class WayBig(Agent.Movies):
                 try:
                     filmEntry = film.xpath('./a/*[@class="entry-title"]/text()')[0].strip()
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', filmEntry))
-                    # prepare the Site Entry
-                    singleQuotes = ["`", "‘", "’"]
-                    pattern = ur'[{0}]'.format(''.join(singleQuotes))
-                    filmEntry = re.sub(pattern, "'", filmEntry)
+                    filmEntry = r'{0}'.format(filmEntry)
                     # the filmEntry usual has the format Studio: Title
-                    if re.search(r' at ', filmEntry, flags=re.IGNORECASE) and ': ' in filmEntry and (filmEntry.endswith("'") or filmEntry.endswith('"')):  # err 123
+                    if ' at ' in filmEntry.lower() and ': ' in filmEntry and (filmEntry.endswith("'") or filmEntry.endswith('"')):  # err 123
                         utils.log('SEARCH:: Matched " at ", ": " and %s ends with apostrophe in Site entry', re.match(filmEntry, '[\'"]$'))
                         filmStudio, filmTitle = filmEntry.split(': ', 1)
+
                     elif re.search(r' at ', filmEntry, flags=re.IGNORECASE):                # format:- Title at Studio
                         utils.log('SEARCH:: Matched " at " in Site entry')
                         filmTitle, filmStudio = re.split(r' at ', filmEntry, flags=re.IGNORECASE, maxsplit=1)
+
                     elif FILMDICT['Title'] in filmEntry:                                    # format:- Studio Title (Title has colon)
                         filmTitle = FILMDICT['Title']
-                        filmStudio = re.sub(filmTitle, '', filmEntry, flags=re.IGNORECASE)
+                        filmStudio = filmEntry.replace(filmTitle, '').strip()
+
                     elif ': ' in filmEntry:                                                 # format:- Studio: Title
                         utils.log('SEARCH:: Matched ": " in Site entry')
                         filmStudio, filmTitle = filmEntry.split(': ', 1)
-                    elif re.search(r' on ', filmEntry, flags=re.IGNORECASE):                # format:- Title on Studio
+
+                    elif ' on ' in filmEntry.lower():                                       # format:- Title on Studio
                         utils.log('SEARCH:: Matched " on " in Site entry')
                         filmTitle, filmStudio = re.split(r' on ', filmEntry, flags=re.IGNORECASE, maxsplit=1)
+
                     elif '? ' in filmEntry:                                                 # format:- Studio? Title
                         utils.log('SEARCH:: Matched "? " in Site entry')
                         filmStudio, filmTitle = filmEntry.split('? ', 1)
+
                     elif ', ' in filmEntry:                                                 # format: Studio, Title
                         utils.log('SEARCH:: Matched ", " in Site entry')
                         filmStudio, filmTitle = filmEntry.split(', ', 1)
-                    elif re.match(FILMDICT['Studio'], filmEntry, flags=re.IGNORECASE):      # format:- Studio Title {no separtor}
+
+                    elif FILMDICT['Studio'].lower() in filmEntry.lower():                   # format:- Studio Title {no separtor}
                         utils.log('SEARCH:: Warning: Site Entry did not have a clear separator to separate Studio from Title')
                         filmStudio = FILMDICT['Studio']
-                        filmTitle = re.sub(filmStudio, '', filmEntry, re.IGNORECASE).strip()
+                        pattern = r'{0}'.format(filmStudio)
+                        filmTitle = re.sub(pattern, '', filmEntry, re.IGNORECASE).strip()
                     else:
                         utils.log('SEARCH:: Error determining Site Studio and Title from Site Entry')
                         utils.log(LOG_SUBLINE)

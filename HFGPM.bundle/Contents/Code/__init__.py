@@ -10,6 +10,8 @@
                                     - tidy up of countries and locations
                                     - introduced Grouped Collections and Default to keep track of films
     05 Dec 2022     2021.11.15.05   Updated to use latest version of utils.py
+    19 Feb 2023     2021.11.15.06   Corrected multiple errors processing site entries
+    26 Feb 2023     2021.11.15.07   Corrected error processing file titles
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -17,11 +19,13 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2021.11.15.05'
+VERSION_NO = '2021.11.15.07'
 AGENT = 'HFGPM'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
 # URLS
+BASE_URL = 'https://gay-hotfile.errio.net/'
+BASE_SEARCH_URL = BASE_URL + 'index.php?do=search'
 WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Date Formats used by website
@@ -118,6 +122,7 @@ class HFGPM(Agent.Movies):
         # if title is in a series the search string will be composed of the Film Title minus Series Name and No.
         searchTitle = self.CleanSearchString(FILMDICT['SearchTitle'])
         searchQuery = BASE_SEARCH_URL
+
         # Here are all of our headers
         formData = {'do': 'search', 'subaction': 'search', 'search_start': 1, 'full_search': 1, 'story': '{0}'.format(searchTitle),
                     'titleonly': 3, 'searchuser': '', 'replyless': 0, 'replylimit': 0, 'searchdate': 0, 'beforeafter': 'after', 'sortby': 'date',
@@ -136,6 +141,7 @@ class HFGPM(Agent.Movies):
 
         else:
             filmsFound = len(filmsList)
+            pageNumber = 1          # no need to increment as the agent returns up to 500 items
             utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
             utils.log(LOG_BIGLINE)
             myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
@@ -148,21 +154,21 @@ class HFGPM(Agent.Movies):
                     filmEntry = film.xpath('./div[@class="bshead"]/div[@class="bshead"]/h1/a/text()')[0]
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', filmEntry))
                     filmEntry = filmEntry.partition(' - ') # converts to tuple
-                    if not filmEntry[1]:
+                    if filmEntry[1] != ' - ':
                         utils.log('SEARCH:: Error in Site Entry Format')
                         utils.log(LOG_SUBLINE)
                         continue
-                    filmTitle = filmEntry[2]
                     filmStudio = filmEntry[0]
+                    filmTitle = filmEntry[2]
                 except Exception as e:
-                    utils.log('SEARCH:: Error getting Site Title: %s', e)
+                    utils.log('SEARCH:: Error getting Site Entry: %s', e)
                     utils.log(LOG_SUBLINE)
                     continue
 
                 # Site Title
                 utils.log(LOG_BIGLINE)
                 try:
-                    filmTitle = filmTitle.replace(FILMDICT['Year'], '') if FILMDICT['Year'] in filmTitle else filmTitle
+                    filmTitle = filmTitle.replace(str(FILMDICT['Year']), '')
                     utils.matchTitle(filmTitle, FILMDICT)
                 except Exception as e:
                     utils.log('SEARCH:: Error getting Site Title: %s', e)
@@ -181,7 +187,7 @@ class HFGPM(Agent.Movies):
                 # Site Title URL
                 utils.log(LOG_BIGLINE)
                 try:
-                    filmURL = title.xpath('./div[@class="bshead"]/div[@class="bshead"]/h1/a/@href')[0]
+                    filmURL = film.xpath('./div[@class="bshead"]/div[@class="bshead"]/h1/a/@href')[0]
                     FILMDICT['FilmURL'] = filmURL
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Title URL', filmURL))
                 except Exception as e:
@@ -208,7 +214,7 @@ class HFGPM(Agent.Movies):
 
                 # Site Film Duration - formatted as 99h 99mn 99sc 999ms 
                 utils.log(LOG_BIGLINE)
-                matchedDuration = False
+                durationMatch = False
                 vDuration = FILMDICT['Duration']
                 try:
                     filmduration = html.xpath('./div[@class="base shortstory"]/div[@class="maincont"]/div/text()[contains(.,"mn ")]')[0].strip()
@@ -220,21 +226,20 @@ class HFGPM(Agent.Movies):
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Film Duration', duration.strftime('%H:%M:%S')))
                     try:
                         utils.matchDuration(duration, FILMDICT)
-                        matchedDuration = True
+                        durationMatch = True
                         vDuration = duration
                     except Exception as e:
                         utils.log('SEARCH:: Error matching Site Film Duration: %s', e)
                 except Exception as e:
                     utils.log('SEARCH:: Error getting Site Film Duration')
 
-                if MATCHfilmduration and not matchedDuration:
+                if not durationMatch and MATCHSITEDURATION:
                     utils.log(LOG_SUBLINE)
                     continue
 
                 FILMDICT['vCompilation'] = ''
                 FILMDICT['vDuration'] = vDuration
                 FILMDICT['vReleaseDate'] = vReleaseDate
-                del FILMDICT['FilmHTML']
 
                 myID = json.dumps(FILMDICT, default=utils.jsonDumper)
                 results.Append(MetadataSearchResult(id=myID, name=FILMDICT['Title'], score=100, lang=lang))
