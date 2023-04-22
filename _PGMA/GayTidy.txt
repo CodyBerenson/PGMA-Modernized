@@ -933,6 +933,8 @@ Muscled Men::Muscles
 Muscles::Muscles
 Muscular::Muscles
 Music Themed -> Musicals::x
+Music Themed::x
+Musical::x
 Musicals::x
 Mystery::x
 Namibian::Namibia
@@ -1128,6 +1130,7 @@ Quebec::Canada
 Quickies -> Gay::x
 Ramrod Bar::United States
 Rape::Role Play
+Rare And Out Of Print::x
 Raw::Bareback
 Real Men::x
 Reality Porn -> Games & Game Shows::Role Play

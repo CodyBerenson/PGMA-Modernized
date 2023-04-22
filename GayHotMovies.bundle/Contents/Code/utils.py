@@ -66,6 +66,7 @@ General Functions found in all agents
     23 Feb 2023     Improve genre/country retrieval from synopsis
     26 Feb 2023     Restrict IAFD search string to 72 Characters
     08 Mar 2023     Error in getting images BEP
+    15 Apr 2023     Dealt with ² in titles as not used in IAFD titles
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, plistlib, random, re, requests, subprocess, time, unicodedata
@@ -5808,6 +5809,10 @@ def matchFilename(media):
     filmVars['CompareIAFDStudio'] = Normalise(filmVars['IAFDStudio']) if 'IAFDStudio' in filmVars and filmVars['IAFDStudio'] else ''
 
     #       IAFD Title - IAFD uses standard Latin Alphabet Characters for its entries.
+    #                  - deal with ² in title - replace with the word Squared
+    pattern = u'²'
+    matched = re.search(pattern, groups['fnTITLE'])  # match against whole string
+    groups['fnTITLE'] = re.sub(pattern, ' Squared', groups['fnTITLE']) if matched else groups['fnTITLE']
     filmVars['IAFDTitle'] = makeASCII(groups['fnTITLE']).replace(' - ', ': ').replace('- ', ': ')       # iafd needs colons in place to search correctly
     filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace('!', '')                                      # remove !
 

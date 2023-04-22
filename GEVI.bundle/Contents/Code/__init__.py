@@ -18,13 +18,14 @@
                                     use sets rather than lists to remove duplicate entries thus sppeding up scrape
                                     changed search url string so that alternate studio names (lines) are retrieved
     23 Feb 2023     2019.12.25.43   Cater for titles that did not have a year provided and no external websites year of production
+    15 Apr 2023     2019.12.25.44   Dealt with ² in titles as can not be included in search strings   
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.43'
+VERSION_NO = '2019.12.25.44'
 AGENT = 'GEVI'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -92,7 +93,7 @@ class GEVI(Agent.Movies):
         utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Replaced ampersands & " and " with ', 'Space')))
 
         # replace following with null
-        nullChars = [',', '!', '#', '+', '='] # to be replaced with null
+        nullChars = [',', '!', '#', '+', '=', u'²'] # to be replaced with null
         pattern = u'[{0}]'.format(''.join(nullChars))
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
@@ -182,7 +183,7 @@ class GEVI(Agent.Movies):
                 utils.log('SEARCH:: Search Query: %s', searchQuery)
                 try:
                     JSon = JSON.ObjectFromURL(searchQuery, timeout=20, sleep=utils.delay())
-                    utils.log('SEARCH:: JSOn: %s', JSon)
+                    utils.log('SEARCH:: JSON: %s', JSon)
                     filmsList = JSon.get('data', '')
                     utils.log('SEARCH:: Film List: %s', filmsList)
                     if not filmsList:
@@ -207,6 +208,7 @@ class GEVI(Agent.Movies):
 
                     # Site Entry
                     try:
+                        film[2] = film[2].split('>', 1)[1].split('<')[0]
                         utils.log('SEARCH:: {0:<29} {1}'.format('JSON Film Entry', film))
                         utils.log('SEARCH:: {0:<29} {1}'.format('      URL/Title', film[0]))
                         utils.log('SEARCH:: {0:<29} {1}'.format('           Year', film[1]))
@@ -281,10 +283,13 @@ class GEVI(Agent.Movies):
                         foundStudio = False
                         fhtmlStudio = fhtml.xpath('//a[contains(@href, "/company/")]/parent::td//text()[normalize-space()]')
                         fhtmlStudio = {x.strip() for x in fhtmlStudio if x.strip()}
-                        utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Distributor/Studio', fhtmlStudio))
+                        if film[2] and film[2] is not None:             # Company Name i.e. distributor in GEVI at this possition in json retrieval
+                            fhtmlStudio.add(film[2])
+                            utils.log('SEARCH:: {0:<29} {1}'.format('JSon Company', fhtmlStudio))
                         if film[3] and film[3] is not None:             # Studios Lines in GEVI at this possition in json retrieval
                             fhtmlStudio.add(film[3])
-                            utils.log('SEARCH:: {0:<29} {1}'.format('Added Line', fhtmlStudio))
+                            utils.log('SEARCH:: {0:<29} {1}'.format('JSon Line', fhtmlStudio))
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Distributor/Studio', fhtmlStudio))
                         for siteStudio in fhtmlStudio:
                             try:
                                 utils.matchStudio(siteStudio, FILMDICT)
