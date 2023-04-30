@@ -18,6 +18,7 @@
                                     changed search string to improve scene retrieval
     09 Feb 2023     2019.01.18.34   removed checks for apostrophes in search string creation
     08 Mar 2023     2019.01.18.35   Added detection and removal of brackets from search string
+    27 Apr 2023     2019.01.18.36   Corrections to Matching Film entries with apostrophes, cast retrieval from tags
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -25,7 +26,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.35'
+VERSION_NO = '2020.01.18.36'
 AGENT = 'Fagalicious'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -202,6 +203,7 @@ class Fagalicious(Agent.Movies):
                 # Site Entry : Composed of Studio, then Scene Title separated by a Colon
                 try:
                     filmEntry = film.xpath('./h1[@class="entry-title"]/a/text()')[0].strip()
+                    filmEntry = utils.standardQuotes(filmEntry)
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', filmEntry))
                     filmStudio, filmTitle = filmEntry.split(': ', 1)
                 except Exception as e:

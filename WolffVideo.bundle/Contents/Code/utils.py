@@ -67,6 +67,7 @@ General Functions found in all agents
     26 Feb 2023     Restrict IAFD search string to 72 Characters
     08 Mar 2023     Error in getting images BEP
     15 Apr 2023     Dealt with ² in titles as not used in IAFD titles
+    27 Apr 2023     Improved code to retrieve cast from tags in WayBig, Fagalicious and QueerClick
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, plistlib, random, re, requests, subprocess, time, unicodedata
@@ -2122,8 +2123,9 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
+        castSet = {x.strip() for x in FILMDICT['FilenameCast']}
+        tempCastSet = {x.strip().replace(' ', '') for x in FILMDICT['FilenameCast']}
         testStudio = [FILMDICT['Studio'].lower().replace(' ', ''), FILMDICT['CompareStudio']]
-        testCast = [x.strip().replace(' ', '') for x in FILMDICT['FilenameCast']]
         try:
             htmltags = html.xpath('//ul/a[contains(@href, "https://fagalicious.com/tag/")]/text()')
             htmltags = [x.strip() for x in htmltags if x.strip()]
@@ -2139,29 +2141,28 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
                 if newItem is None:                                                         # Don't process
                     continue
 
-                if not newItem:                                                             # missing gay tidy will not cause error later down
-                    log('UTILS :: {0:<29} {1}'.format('Warning: Missing Tidied Genre', item))
-                    continue
-
-                tempItem = item.lower().replace(' ', '')
-                if tempItem in testStudio and not newItem:                                  # skip if tag is studio and studio does not have a genre applied to it
-                    continue
-
-                if 'Movie' in item or 'Series' in item:                                     # skip if tag is a movie or series
-                    continue
-
-                if testCast and tempItem in testCast:                                       # Check in filename cast list
+                if newItem in GENRESDICT:                                                   # check if genre
+                    genresSet.add(newItem)
                     continue
 
                 if newItem in COUNTRYSET:                                                   # check if country
                     countriesSet.add(newItem)
                     continue
 
-                genresSet.add(newItem)
+                if 'Movie' in item or 'Series' in item:                                     # skip if tag is a movie or series
+                    continue
+
+                tempItem = item.lower().replace(' ', '')
+                if tempItem in testStudio:                                                  # skip if tag is studio and studio does not have a genre applied to it
+                    continue
+
+                if tempItem not in castSet:                                                 # Check in cast list
+                    castSet.add(item)
 
             showSetData(genresSet, 'Genres (set*)')
             showSetData(countriesSet, 'Countries (set*)')
             log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
+            showSetData(castSet, 'Cast (set*)')
 
         except Exception as e:
             log('UTILS :: Error getting Tags: Genres/Countries/Cast: %s', e)
@@ -2170,6 +2171,7 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
             siteInfoDict['Genres'] = genresSet
             siteInfoDict['Countries'] = countriesSet
             siteInfoDict['Compilation'] = compilation
+            siteInfoDict['Cast'] = sorted(castSet)
 
         #   6.  Release Date
         log(LOG_SUBLINE)
@@ -4358,8 +4360,9 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
+        castSet = {x.strip() for x in FILMDICT['FilenameCast']}
+        tempCastSet = {x.strip().replace(' ', '') for x in FILMDICT['FilenameCast']}
         testStudio = [FILMDICT['Studio'].lower().replace(' ', ''), FILMDICT['CompareStudio']]
-        testCast = [x.strip().replace(' ', '') for x in FILMDICT['FilenameCast']]
         try:
             htmltags = html.xpath('//div[@class="taxonomy"]/a/@title|//article[@id and @class]/p/a/text()[normalize-space()]')
             htmltags = [x.strip() for x in htmltags if x.strip()]
@@ -4382,27 +4385,28 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
                 if newItem is None:                                                         # Don't process
                     continue
 
-                if not newItem:                                                             # missing gay tidy will not cause error later down
-                    log('UTILS :: {0:<29} {1}'.format('Warning: Missing Tidied Genre', item))
-                    continue
-
-                tempItem = item.lower().replace(' ', '')
-                if tempItem in testStudio and not newItem:                                  # skip if tag is studio and studio does not have a genre applied to it
-                    continue
-
-                if 'Movie' in item or 'Series' in item:                                     # skip if tag is a movie or series
-                    continue
-
-                if testCast and tempItem in testCast:                                       # Check in filename cast list
+                if newItem in GENRESDICT:                                                   # check if genre
+                    genresSet.add(newItem)
                     continue
 
                 if newItem in COUNTRYSET:                                                   # check if country
                     countriesSet.add(newItem)
                     continue
 
+                if 'Movie' in item or 'Series' in item:                                     # skip if tag is a movie or series
+                    continue
+
+                tempItem = item.lower().replace(' ', '')
+                if tempItem in testStudio:                                                  # skip if tag is studio and studio does not have a genre applied to it
+                    continue
+
+                if tempItem not in castSet:                                                 # Check in cast list
+                    castSet.add(item)
+
             showSetData(genresSet, 'Genres (set*)')
             showSetData(countriesSet, 'Countries (set*)')
             log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
+            showSetData(castSet, 'Cast (set*)')
 
         except Exception as e:
             log('UTILS :: Error getting Tags: Genres/Countries/Cast: %s', e)
@@ -4411,6 +4415,7 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
             siteInfoDict['Genres'] = genresSet
             siteInfoDict['Countries'] = countriesSet
             siteInfoDict['Compilation'] = compilation
+            siteInfoDict['Cast'] = sorted(castSet)
 
         #   6.  Release Date: Format dd mm YY
         log(LOG_SUBLINE)
@@ -4650,8 +4655,9 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
+        castSet = {x.strip() for x in FILMDICT['FilenameCast']}
+        tempCastSet = {x.strip().replace(' ', '') for x in FILMDICT['FilenameCast']}
         testStudio = [FILMDICT['Studio'].lower().replace(' ', ''), FILMDICT['CompareStudio']]
-        testCast = [x.strip().replace(' ', '') for x in FILMDICT['FilenameCast']]
         try:
             htmltags = html.xpath('//a[contains(@href,"https://www.waybig.com/blog/tag/")]/text()')
             htmltags = [x.strip() for x in htmltags if x.strip()]
@@ -4673,27 +4679,28 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
                 if newItem is None:                                                         # Don't process
                     continue
 
-                if not newItem:                                                             # missing gay tidy will not cause error later down
-                    log('UTILS :: {0:<29} {1}'.format('Warning: Missing Tidied Genre', item))
-                    continue
-
-                tempItem = item.lower().replace(' ', '')
-                if tempItem in testStudio and not newItem:                                  # skip if tag is studio and studio does not have a genre applied to it
-                    continue
-
-                if 'Movie' in item or 'Series' in item:                                     # skip if tag is a movie or series
-                    continue
-
-                if testCast and tempItem in testCast:                                       # Check in filename cast list
+                if newItem in GENRESDICT:                                                   # check if genre
+                    genresSet.add(newItem)
                     continue
 
                 if newItem in COUNTRYSET:                                                   # check if country
                     countriesSet.add(newItem)
                     continue
 
+                if 'Movie' in item or 'Series' in item:                                     # skip if tag is a movie or series
+                    continue
+
+                tempItem = item.lower().replace(' ', '')
+                if tempItem in testStudio:                                                  # skip if tag is studio and studio does not have a genre applied to it
+                    continue
+
+                if tempItem not in castSet:                                                 # Check in cast list
+                    castSet.add(item)
+
             showSetData(genresSet, 'Genres (set*)')
             showSetData(countriesSet, 'Countries (set*)')
             log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
+            showSetData(castSet, 'Cast (set*)')
 
         except Exception as e:
             log('UTILS :: Error getting Tags: Genres/Countries/Cast: %s', e)
@@ -4702,6 +4709,7 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
             siteInfoDict['Genres'] = genresSet
             siteInfoDict['Countries'] = countriesSet
             siteInfoDict['Compilation'] = compilation
+            siteInfoDict['Cast'] = sorted(castSet)
 
         #   6.  Release Date
         log(LOG_SUBLINE)

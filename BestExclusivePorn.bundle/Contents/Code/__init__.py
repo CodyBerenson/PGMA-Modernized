@@ -11,6 +11,7 @@
                                    - introduced Grouped Collections and Default to keep track of films
     30 Nov 2022     2020.08.09.16   Updated to use latest version of utils.py
     29 Jan 2023     2020.08.09.17   Improved Logging
+    27 Apr 2023     2020.08.09.18   Corrections to Matching Film entries with apostrophes, cast retrieval from tags
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -18,7 +19,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.08.09.17'
+VERSION_NO = '2020.08.09.18'
 AGENT = 'BestExclusivePorn'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -180,6 +181,7 @@ class BestExclusivePorn(Agent.Movies):
                 # Site Entry
                 try:
                     filmEntry = film.xpath('./h2[@class="title"]/a/text()')[0]
+                    filmEntry = utils.standardQuotes(filmEntry)
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', filmEntry))
                 except Exception as e:
                     utils.log('SEARCH:: Error getting Site Entry: %s', e)

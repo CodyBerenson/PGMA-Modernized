@@ -13,16 +13,16 @@
     29 Jan 2023     2019.08.12.38   Improved Logging
                                     changed processing of & character in search string
     08 Mar 2023     2019.08.12.39   Corrections to matching film entries - issues with square brackets in title
+    27 Apr 2023     2019.08.12.40   Corrections to Matching Film entries with apostrophes, cast retrieval from tags
 ---------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.22.39'
+VERSION_NO = '2019.12.22.40'
 AGENT = 'WayBig'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
-
 
 # URLS
 BASE_URL = 'https://www.waybig.com'
@@ -209,6 +209,7 @@ class WayBig(Agent.Movies):
                 # Site Entry
                 try:
                     filmEntry = film.xpath('./a/*[@class="entry-title"]/text()')[0].strip()
+                    filmEntry = utils.standardQuotes(filmEntry)
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', filmEntry))
                     filmEntry = r'{0}'.format(filmEntry)
                     # the filmEntry usual has the format Studio: Title

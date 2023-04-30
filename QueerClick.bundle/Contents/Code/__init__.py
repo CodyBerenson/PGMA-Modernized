@@ -14,6 +14,7 @@
     30 Nov 2022     2020.02.14.24   Updated to use latest version of utils.py
     29 Jan 2023     2020.02.14.25   Improved Logging
     08 Feb 2023     2020.02.14.26   Corrected Search String process - was trimming after url encoding
+    27 Apr 2023     2020.02.14.27   Corrections to Matching Film entries with apostrophes, cast retrieval from tags
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -21,7 +22,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.02.14.26'
+VERSION_NO = '2020.02.14.27'
 AGENT = 'QueerClick'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -207,6 +208,7 @@ class QueerClick(Agent.Movies):
                 # Site Entry
                 try:
                     filmEntry = film.xpath('./h2[@class="entry-title"]/a/text()')[0]
+                    filmEntry = utils.standardQuotes(filmEntry)
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', filmEntry))
                 except Exception as e:
                     utils.log('SEARCH:: Error getting Site Entry: %s', e)
