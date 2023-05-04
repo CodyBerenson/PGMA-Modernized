@@ -68,6 +68,9 @@ General Functions found in all agents
     08 Mar 2023     Error in getting images BEP
     15 Apr 2023     Dealt with ² in titles as not used in IAFD titles
     27 Apr 2023     Improved code to retrieve cast from tags in WayBig, Fagalicious and QueerClick
+    03 May 2023     Correction to tag processing in WayBig, Fagalicious and QueerClick
+                    Standardise Quotes and Hyphens for matching between filenames and web entries
+                    Remove Thumbor from preferences and put in Thumbor.txt file in _PGMA
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, plistlib, random, re, requests, subprocess, time, unicodedata
@@ -627,12 +630,12 @@ def getIAFDArtist(artistURL):
                 tempNations = [x.strip() for x in biodata.split(',') if x.strip()]
                 nations = set()
                 for idx, item in enumerate(tempNations):
-                    newItem = findTidy(item)
-                    if newItem is None:        # Don't process
+                    tidyItem = findTidy(item)
+                    if tidyItem is None:        # Don't process
                         continue
-                    if newItem not in COUNTRYSET:
+                    if tidyItem not in COUNTRYSET:
                         continue
-                    nations.add(newItem)
+                    nations.add(tidyItem)
 
                 # pick first nationality
                 nations = list(nations)
@@ -647,12 +650,12 @@ def getIAFDArtist(artistURL):
                 tempNations = [x.strip() for x in biodata.split(',') if x.strip()]
                 nations = set()
                 for idx, item in enumerate(tempNations):
-                    newItem = findTidy(item)
-                    if newItem is None:        # Don't process
+                    tidyItem = findTidy(item)
+                    if tidyItem is None:        # Don't process
                         continue
-                    if newItem not in COUNTRYSET:
+                    if tidyItem not in COUNTRYSET:
                         continue
-                    nations.add(newItem)
+                    nations.add(tidyItem)
 
                 # pick first nationality
                 nations = list(nations)
@@ -1047,17 +1050,17 @@ def getSiteInfoAdultFilmDatabase(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(htmlgenres), htmlgenres)))
             compilation = 'Yes' if 'Compilation' in htmlgenres else 'No'
             for idx, item in enumerate(htmlgenres, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
 
-                if newItem in COUNTRYSET:
-                    countriesSet.add(newItem)
+                if tidyItem in COUNTRYSET:
+                    countriesSet.add(tidyItem)
                     continue
 
-                genresSet.add(newItem if newItem else item)
+                genresSet.add(tidyItem if tidyItem else item)
 
             showSetData(countriesSet, 'Countries (set*)')
             showSetData(genresSet, 'Genres (set*)')
@@ -1241,17 +1244,17 @@ def getSiteInfoAEBN(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Combined Genres', '{0:>2} - {1}'.format(len(htmlgenres), htmlgenres)))
             compilation = 'Yes' if 'Compilation' in htmlgenres else 'No'
             for idx, item in enumerate(htmlgenres, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
 
-                if newItem in COUNTRYSET:
-                    countriesSet.add(newItem)
+                if tidyItem in COUNTRYSET:
+                    countriesSet.add(tidyItem)
                     continue
 
-                genresSet.add(newItem if newItem else item)
+                genresSet.add(tidyItem if tidyItem else item)
 
             showSetData(countriesSet, 'Countries (set*)')
             showSetData(genresSet, 'Genres (set*)')
@@ -1415,11 +1418,11 @@ def getSiteInfoAEBN(FILMDICT, **kwargs):
                         reviewList.sort(key = lambda x: x.lower())
                         mySet = set()
                         for idx, item in enumerate(reviewList, start=1):
-                            newItem = findTidy(item)
-                            log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                            if newItem is None:
+                            tidyItem = findTidy(item)
+                            log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
+                            if tidyItem is None:
                                 continue
-                            mySet.add(newItem if newItem else item)
+                            mySet.add(tidyItem if tidyItem else item)
 
                         reviewList = list(mySet)
                         reviewList.sort(key = lambda x: x.lower())
@@ -1548,17 +1551,17 @@ def getSiteInfoAVEntertainments(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(htmlgenres), htmlgenres)))
             compilation = 'Yes' if 'Compilation' in htmlgenres else 'No'
             for idx, item in enumerate(htmlgenres, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
 
-                if newItem in COUNTRYSET:
-                    countriesSet.add(newItem)
+                if tidyItem in COUNTRYSET:
+                    countriesSet.add(tidyItem)
                     continue
 
-                genresSet.add(newItem if newItem else item)
+                genresSet.add(tidyItem if tidyItem else item)
 
             showSetData(countriesSet, 'Countries (set*)')
             showSetData(genresSet, 'Genres (set*)')
@@ -1708,13 +1711,13 @@ def getSiteInfoBestExclusivePorn(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(htmlgenres), htmlgenres)))
             compilation = 'Yes' if 'Compilation' in htmlgenres else 'No'
             for idx, item in enumerate(htmlgenres, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
 
-                genresSet.add(newItem if newItem else item)
+                genresSet.add(tidyItem if tidyItem else item)
 
             showSetData(genresSet, 'Genres (set*)')
             log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
@@ -1736,13 +1739,13 @@ def getSiteInfoBestExclusivePorn(FILMDICT, **kwargs):
             htmlcountries.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('Countries', '{0:>2} - {1}'.format(len(htmlcountries), htmlcountries)))
             for idx, item in enumerate(htmlcountries, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
                 
-                countriesSet.add(newItem)
+                countriesSet.add(tidyItem)
 
             showSetData(countriesSet, 'Countries (set*)')
 
@@ -1893,17 +1896,17 @@ def getSiteInfoCDUniverse(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(htmlgenres), htmlgenres)))
             compilation = 'Yes' if 'Compilation' in htmlgenres else 'No'
             for idx, item in enumerate(htmlgenres, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
 
-                if newItem in COUNTRYSET:
-                    countriesSet.add(newItem)
+                if tidyItem in COUNTRYSET:
+                    countriesSet.add(tidyItem)
                     continue
 
-                genresSet.add(newItem if newItem else item)
+                genresSet.add(tidyItem if tidyItem else item)
 
             showSetData(countriesSet, 'Countries (set*)')
             showSetData(genresSet, 'Genres (set*)')
@@ -2090,9 +2093,9 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
             pattern = re.compile(regex, re.IGNORECASE | re.DOTALL)
             synopsis = re.sub(pattern, '', synopsis)
 
-            regex = ur'– Get the .*|– Download the .*|– Watch .*'
+            regex = ur'– Get the .*|– Download the .*|– Watch .*|– Check out .*'
             pattern = re.compile(regex, re.IGNORECASE)
-            synopsis = re.sub(pattern, '', synopsis)
+            synopsis = re.sub(pattern, '', synopsis).strip()
 
             siteInfoDict['Synopsis'] = synopsis
             log('UTILS :: {0:<29} {1}'.format('Synopsis', synopsis))
@@ -2124,54 +2127,56 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
         countriesSet, genresSet = synopsisCountriesGenres(siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         compilation = 'No'
         castSet = {x.strip() for x in FILMDICT['FilenameCast']}
+        log('UTILS :: {0:<29} {1}'.format('FileName Cast', '{0}'.format(castSet)))
+
         tempCastSet = {x.strip().replace(' ', '') for x in FILMDICT['FilenameCast']}
         testStudio = [FILMDICT['Studio'].lower().replace(' ', ''), FILMDICT['CompareStudio']]
         try:
             htmltags = html.xpath('//ul/a[contains(@href, "https://fagalicious.com/tag/")]/text()')
             htmltags = [x.strip() for x in htmltags if x.strip()]
+            htmltags = [x for x in htmltags if not 'compilation' in x.lower()]
+            htmltags = [x for x in htmltags if not 'movie' in x.lower()]
+            htmltags = [x for x in htmltags if not 'series' in x.lower()]
             htmltags = [x for x in htmltags if not '.tv' in x.lower()]
             htmltags = [x for x in htmltags if not '.com' in x.lower()]
             htmltags = [x for x in htmltags if not '.net' in x.lower()]
+            htmltags = [x for x in htmltags if not x.lower().replace(' ', '') in testStudio]
+
+            # remove all tags with non name characters such as colons
+            htmltags = [setDashesQuotes(x) for x in htmltags]
+            htmltags = [x for x in htmltags if not ':' in x]
+            htmltags = [x for x in htmltags if not x + ':' in FILMDICT['Title']]
+            htmltags = list(set(htmltags))
             htmltags.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('Tags', '{0:>2} - {1}'.format(len(htmltags), htmltags)))
-            compilation = 'Yes' if 'Compilation' in htmltags else 'No'
             for idx, item in enumerate(htmltags, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                if newItem is None:                                                         # Don't process
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
+                if tidyItem is None:                                      # If none skip
                     continue
-
-                if newItem in GENRESDICT:                                                   # check if genre
-                    genresSet.add(newItem)
-                    continue
-
-                if newItem in COUNTRYSET:                                                   # check if country
-                    countriesSet.add(newItem)
-                    continue
-
-                if 'Movie' in item or 'Series' in item:                                     # skip if tag is a movie or series
-                    continue
-
-                tempItem = item.lower().replace(' ', '')
-                if tempItem in testStudio:                                                  # skip if tag is studio and studio does not have a genre applied to it
-                    continue
-
-                if tempItem not in castSet:                                                 # Check in cast list
+                elif tidyItem:                                            # gayTidy returned an item
+                    if tidyItem.lower() in GENRESDICT:                    # check if genre
+                        genresSet.add(tidyItem)
+                    elif tidyItem in COUNTRYSET:                          # check if country
+                        countriesSet.add(tidyItem)
+                    else:
+                        log('UTILS :: {0:<29} {1}'.format('Warning', 'Tidied Item is neither Country nor Genre'))
+                else:                                                     # tag is most probably cast
                     castSet.add(item)
 
             showSetData(genresSet, 'Genres (set*)')
             showSetData(countriesSet, 'Countries (set*)')
-            log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
             showSetData(castSet, 'Cast (set*)')
+            log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
 
         except Exception as e:
-            log('UTILS :: Error getting Tags: Genres/Countries/Cast: %s', e)
+            log('UTILS :: Error getting Tags: Genres/Countries/Cast/Compilation: %s', e)
 
         finally:
             siteInfoDict['Genres'] = genresSet
             siteInfoDict['Countries'] = countriesSet
-            siteInfoDict['Compilation'] = compilation
             siteInfoDict['Cast'] = sorted(castSet)
+            siteInfoDict['Compilation'] = compilation
 
         #   6.  Release Date
         log(LOG_SUBLINE)
@@ -2309,17 +2314,17 @@ def getSiteInfoGayEmpire(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(htmlgenres), htmlgenres)))
             compilation = 'Yes' if 'Compilation' in htmlgenres else 'No'
             for idx, item in enumerate(htmlgenres, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
 
-                if newItem in COUNTRYSET:
-                    countriesSet.add(newItem)
+                if tidyItem in COUNTRYSET:
+                    countriesSet.add(tidyItem)
                     continue
 
-                genresSet.add(newItem if newItem else item)
+                genresSet.add(tidyItem if tidyItem else item)
 
             showSetData(countriesSet, 'Countries (set*)')
             showSetData(genresSet, 'Genres (set*)')
@@ -2607,17 +2612,17 @@ def getSiteInfoGayHotMovies(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(genres), genres)))
             compilation = 'Yes' if 'Compilation' in genres else 'No'
             for idx, item in enumerate(genres, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
 
-                if newItem in COUNTRYSET:
-                    countriesSet.add(newItem)
+                if tidyItem in COUNTRYSET:
+                    countriesSet.add(tidyItem)
                     continue
 
-                genresSet.add(newItem if newItem else item)
+                genresSet.add(tidyItem if tidyItem else item)
 
             showSetData(countriesSet, 'Countries (set*)')
             showSetData(genresSet, 'Genres (set*)')
@@ -3106,17 +3111,17 @@ def getSiteInfoGayRado(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(htmlgenres), htmlgenres)))
             compilation = 'Yes' if 'Compilation' in htmlgenres else 'No'
             for idx, item in enumerate(htmlgenres, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
 
-                if newItem in COUNTRYSET:
-                    countriesSet.add(newItem)
+                if tidyItem in COUNTRYSET:
+                    countriesSet.add(tidyItem)
                     continue
 
-                genresSet.add(newItem if newItem else item)
+                genresSet.add(tidyItem if tidyItem else item)
 
             showSetData(countriesSet, 'Countries (set*)')
             showSetData(genresSet, 'Genres (set*)')
@@ -3468,13 +3473,13 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
             geviGenres = htmlbodytypes + htmlcategories + htmltypes
             log('UTILS :: {0:<29} {1}'.format('GEVI Genres', '{0:>2} - {1}'.format(len(geviGenres), geviGenres)))
             for idx, item in enumerate(geviGenres, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
 
-                genresSet.add(newItem if newItem else item)
+                genresSet.add(tidyItem if tidyItem else item)
 
             log('UTILS :: {0:<29} {1}'.format('Combined Genres', '{0:>2} - {1}'.format(len(genresSet), sorted(genresSet))))
             siteInfoDict['Genres'] = genresSet
@@ -3498,12 +3503,12 @@ def getSiteInfoGEVI(FILMDICT, **kwargs):
             htmlcountries = [x.strip() for x in htmlcountries.split(',')]
             log('UTILS :: {0:<29} {1}'.format('GEVI Countries', '{0:>2} - {1}'.format(len(htmlcountries), htmlcountries)))
             for idx, item in enumerate(htmlcountries, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                if newItem is None:        # Don't process
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
+                if tidyItem is None:        # Don't process
                     continue
 
-                countriesSet.add(newItem if newItem else item)
+                countriesSet.add(tidyItem if tidyItem else item)
 
             log('UTILS :: {0:<29} {1}'.format('Combined Countries', '{0:>2} - {1}'.format(len(countriesSet), sorted(countriesSet))))
             siteInfoDict['Countries'] = countriesSet
@@ -3817,13 +3822,13 @@ def getSiteInfoHFGPM(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(htmlgenres), htmlgenres)))
             compilation = 'Yes' if 'Compilation' in htmlgenres else 'No'
             for idx, item in enumerate(htmlgenres, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
 
-                genresSet.add(newItem if newItem else item)
+                genresSet.add(tidyItem if tidyItem else item)
 
             log('UTILS :: {0:<29} {1}'.format('Combined Genres', '{0:>2} - {1}'.format(len(genresSet), sorted(genresSet))))
             siteInfoDict['Genres'] = genresSet
@@ -3848,13 +3853,13 @@ def getSiteInfoHFGPM(FILMDICT, **kwargs):
             htmlcountries.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(htmlcountries), htmlcountries)))
             for idx, item in enumerate(htmlcountries, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
 
-                countriesSet.add(newItem)
+                countriesSet.add(tidyItem)
 
             showSetData(countriesSet, 'Countries (set*)')
 
@@ -4011,13 +4016,13 @@ def getSiteInfoHomoActive(FILMDICT, **kwargs):
             htmlcountries.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('Countries', '{0:>2} - {1}'.format(len(htmlcountries), htmlcountries)))
             for idx, item in enumerate(htmlcountries, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if not newItem or newItem is None:        # Don't process
+                if not tidyItem or tidyItem is None:        # Don't process
                     continue
 
-                countriesSet.add(newItem)
+                countriesSet.add(tidyItem)
 
             showSetData(countriesSet, 'Countries (set*)')
 
@@ -4166,14 +4171,14 @@ def getSiteInfoIAFD(FILMDICT, **kwargs):
                 rolesSet = set(' '.join(rolesSet).split())
                 log('UTILS :: {0:<29} {1}'.format('Roles Word Count', '{0:>2} - {1}'.format(len(rolesSet), rolesSet)))
                 for idx, item in enumerate(rolesSet, start=1):
-                    newItem = findTidy(item)
-                    if not newItem or newItem is None:        # Don't process
+                    tidyItem = findTidy(item)
+                    if not tidyItem or tidyItem is None:        # Don't process
                         continue
-                    if newItem in COUNTRYSET:
+                    if tidyItem in COUNTRYSET:
                         continue
 
-                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                    genresSet.add(newItem)
+                    log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
+                    genresSet.add(tidyItem)
             else:
                 log('UTILS :: No Cast Recorded: %s', e)
 
@@ -4366,56 +4371,49 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
         try:
             htmltags = html.xpath('//div[@class="taxonomy"]/a/@title|//article[@id and @class]/p/a/text()[normalize-space()]')
             htmltags = [x.strip() for x in htmltags if x.strip()]
+            htmltags = [x for x in htmltags if not 'compilation' in x.lower()]
+            htmltags = [x for x in htmltags if not 'movie' in x.lower()]
+            htmltags = [x for x in htmltags if not 'series' in x.lower()]
             htmltags = [x for x in htmltags if not '.tv' in x.lower()]
             htmltags = [x for x in htmltags if not '.com' in x.lower()]
             htmltags = [x for x in htmltags if not '.net' in x.lower()]
-            htmltags = [x.replace(u'\u2019s', '') for x in htmltags]
+            htmltags = [x for x in htmltags if not x.lower().replace(' ', '') in testStudio]
 
             # remove all tags with non name characters such as colons
-            htmltags = [x.replace("’", "'") for x in htmltags]                             # standardise apostrophes
+            htmltags = [setDashesQuotes(x) for x in htmltags]
             htmltags = [x for x in htmltags if not ':' in x]
             htmltags = [x for x in htmltags if not x + ':' in FILMDICT['Title']]
             htmltags = list(set(htmltags))
             htmltags.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('Tags', '{0:>2} - {1}'.format(len(htmltags), htmltags)))
-            compilation = 'Yes' if 'Compilation' in htmltags else 'No'
             for idx, item in enumerate(htmltags, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                if newItem is None:                                                         # Don't process
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
+                if tidyItem is None:                                      # If none skip
                     continue
-
-                if newItem in GENRESDICT:                                                   # check if genre
-                    genresSet.add(newItem)
-                    continue
-
-                if newItem in COUNTRYSET:                                                   # check if country
-                    countriesSet.add(newItem)
-                    continue
-
-                if 'Movie' in item or 'Series' in item:                                     # skip if tag is a movie or series
-                    continue
-
-                tempItem = item.lower().replace(' ', '')
-                if tempItem in testStudio:                                                  # skip if tag is studio and studio does not have a genre applied to it
-                    continue
-
-                if tempItem not in castSet:                                                 # Check in cast list
+                elif tidyItem:                                            # gayTidy returned an item
+                    if tidyItem.lower() in GENRESDICT:                    # check if genre
+                        genresSet.add(tidyItem)
+                    elif tidyItem in COUNTRYSET:                          # check if country
+                        countriesSet.add(tidyItem)
+                    else:
+                        log('UTILS :: {0:<29} {1}'.format('Warning', 'Tidied Item is neither Country nor Genre'))
+                else:                                                     # tag is most probably cast
                     castSet.add(item)
 
             showSetData(genresSet, 'Genres (set*)')
             showSetData(countriesSet, 'Countries (set*)')
-            log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
             showSetData(castSet, 'Cast (set*)')
+            log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
 
         except Exception as e:
-            log('UTILS :: Error getting Tags: Genres/Countries/Cast: %s', e)
+            log('UTILS :: Error getting Tags: Genres/Countries/Cast/Compilation: %s', e)
 
         finally:
             siteInfoDict['Genres'] = genresSet
             siteInfoDict['Countries'] = countriesSet
-            siteInfoDict['Compilation'] = compilation
             siteInfoDict['Cast'] = sorted(castSet)
+            siteInfoDict['Compilation'] = compilation
 
         #   6.  Release Date: Format dd mm YY
         log(LOG_SUBLINE)
@@ -4661,55 +4659,49 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
         try:
             htmltags = html.xpath('//a[contains(@href,"https://www.waybig.com/blog/tag/")]/text()')
             htmltags = [x.strip() for x in htmltags if x.strip()]
+            htmltags = [x for x in htmltags if not 'compilation' in x.lower()]
+            htmltags = [x for x in htmltags if not 'movie' in x.lower()]
+            htmltags = [x for x in htmltags if not 'series' in x.lower()]
             htmltags = [x for x in htmltags if not '.tv' in x.lower()]
             htmltags = [x for x in htmltags if not '.com' in x.lower()]
             htmltags = [x for x in htmltags if not '.net' in x.lower()]
+            htmltags = [x for x in htmltags if not x.lower().replace(' ', '') in testStudio]
 
             # remove all tags with non name characters such as colons
-            htmltags = [x.replace(u'\u2019s', '') for x in htmltags]
+            htmltags = [setDashesQuotes(x) for x in htmltags]
             htmltags = [x for x in htmltags if not ':' in x]
             htmltags = [x for x in htmltags if not x + ':' in FILMDICT['Title']]
             htmltags = list(set(htmltags))
             htmltags.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('Tags', '{0:>2} - {1}'.format(len(htmltags), htmltags)))
-            compilation = 'Yes' if 'Compilation' in htmltags else 'No'
             for idx, item in enumerate(htmltags, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
-                if newItem is None:                                                         # Don't process
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
+                if tidyItem is None:                                      # If none skip
                     continue
-
-                if newItem in GENRESDICT:                                                   # check if genre
-                    genresSet.add(newItem)
-                    continue
-
-                if newItem in COUNTRYSET:                                                   # check if country
-                    countriesSet.add(newItem)
-                    continue
-
-                if 'Movie' in item or 'Series' in item:                                     # skip if tag is a movie or series
-                    continue
-
-                tempItem = item.lower().replace(' ', '')
-                if tempItem in testStudio:                                                  # skip if tag is studio and studio does not have a genre applied to it
-                    continue
-
-                if tempItem not in castSet:                                                 # Check in cast list
+                elif tidyItem:                                            # gayTidy returned an item
+                    if tidyItem.lower() in GENRESDICT:                    # check if genre
+                        genresSet.add(tidyItem)
+                    elif tidyItem in COUNTRYSET:                          # check if country
+                        countriesSet.add(tidyItem)
+                    else:
+                        log('UTILS :: {0:<29} {1}'.format('Warning', 'Tidied Item is neither Country nor Genre'))
+                else:                                                     # tag is most probably cast
                     castSet.add(item)
 
             showSetData(genresSet, 'Genres (set*)')
             showSetData(countriesSet, 'Countries (set*)')
-            log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
             showSetData(castSet, 'Cast (set*)')
+            log('UTILS :: {0:<29} {1}'.format('Compilation?', compilation))
 
         except Exception as e:
-            log('UTILS :: Error getting Tags: Genres/Countries/Cast: %s', e)
+            log('UTILS :: Error getting Tags: Genres/Countries/Cast/Compilation: %s', e)
 
         finally:
             siteInfoDict['Genres'] = genresSet
             siteInfoDict['Countries'] = countriesSet
-            siteInfoDict['Compilation'] = compilation
             siteInfoDict['Cast'] = sorted(castSet)
+            siteInfoDict['Compilation'] = compilation
 
         #   6.  Release Date
         log(LOG_SUBLINE)
@@ -4845,17 +4837,17 @@ def getSiteInfoWolffVideo(FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(htmlgenres), htmlgenres)))
             compilation = 'Yes' if 'Compilation' in htmlgenres else 'No'
             for idx, item in enumerate(htmlgenres, start=1):
-                newItem = findTidy(item)
-                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, newItem)))
+                tidyItem = findTidy(item)
+                log('UTILS :: {0:<29} {1}'.format('Item: Old :: New', '{0:>2} - {1:<25} :: {2}'.format(idx, item, tidyItem)))
 
-                if newItem is None:        # Don't process
+                if tidyItem is None:        # Don't process
                     continue
 
-                if newItem in COUNTRYSET:
-                    countriesSet.add(newItem)
+                if tidyItem in COUNTRYSET:
+                    countriesSet.add(tidyItem)
                     continue
 
-                genresSet.add(newItem if newItem else item)
+                genresSet.add(tidyItem if tidyItem else item)
 
             showSetData(countriesSet, 'Countries (set*)')
             showSetData(genresSet, 'Genres (set*)')
@@ -5733,7 +5725,7 @@ def matchFilename(media):
     filmVars['CompareTitle'] = set()
     filmVars['Title'] = groups['fnTITLE']
     filmVars['Title'] = filmVars['Title'].replace('~', '/')                             # ~ invalid character marker in filename
-    filmVars['Title'] = standardQuotes(filmVars['Title'])
+    filmVars['Title'] = setDashesQuotes(filmVars['Title'])
     filmVars['NormaliseTitle'] = Normalise(filmVars['Title'])
     filmVars['CompareTitle'].add(sortAlphaChars(filmVars['NormaliseTitle']))
 
@@ -6856,7 +6848,6 @@ def setupStartVariables():
                 POSTERSOURCEDOWNLOAD = Prefs['postersourcedownload']  # Down film poster to disk, (renamed as film title + image extension)
                 PREFIXLEGEND = Prefs['prefixlegend']                  # place cast legend at start of summary or end
                 RESETMETA = Prefs['resetmeta']                        # clear previously set metadata
-                THUMBOR = Prefs['thumbor']                            # Thumbor Image manipulation URL
                 USEBACKGROUNDART = Prefs['usebackgroundart']          # Use background art
 
             except Exception as e:
@@ -7088,10 +7079,26 @@ def setupStartVariables():
 
         continueSetup = True if PLEXTOKEN else False
 
-    #   9. Get paths to Default Posters for Agent, Compilations Genre, IAFD, Stacks
+    #   9. Retrieve Thumbor Address
     if continueSetup is True:
         log(LOG_SUBLINE)
-        log('START :: 9.\tRetrieve Agent and Default Posters')
+        log('START :: 9.\tRetrieve Thumbor Address')
+        try:
+            # Main Tidy has to be first in list as user can make changes
+            thumbor_txt = os.path.join(PGMA_FOLDER, 'Thumbor.txt')
+            log('START :: {0:<29} {1}'.format('\tThumbor File', thumbor_txt))
+            THUMBOR = PlexLoadFile(thumbor_txt).strip()
+            log('START :: {0:<29} {1}'.format('\tThumbor Address', THUMBOR))
+            continueSetup = True if THUMBOR else False
+
+        except Exception as e:
+            log('START :: Error: Thumbor File missing or Empty: %s', thumbor_txt)   
+            continueSetup = False
+
+    #   10. Get paths to Default Posters for Agent, Compilations Genre, IAFD, Stacks
+    if continueSetup is True:
+        log(LOG_SUBLINE)
+        log('START :: 10.\tRetrieve Agent and Default Posters')
         global AGENT_POSTER, COMPILATIONS_POSTER, IAFDFOUND_POSTER, IAFDNOTFOUND_POSTER, STACKED_POSTER, NOTSTACKED_POSTER, NOCAST_POSTER, NODIRECTOR_POSTER, WATERMARK
         AGENT_POSTER = os.path.join(PGMA_SYSTEMFOLDER, '{0}.png'.format(AGENT))
         AGENT_POSTER = AGENT_POSTER if os.path.exists(AGENT_POSTER) else ''
@@ -7130,19 +7137,22 @@ def setupStartVariables():
         log('START :: {0:<29} {1}'.format('\tWatermark', WATERMARK if WATERMARK else '** FAIL **'))
 
         # if any of the posters do not resolve we have to stop the Search Process: set GLOBAL variable and use later
-        START_SCRAPE = 'Yes' if PLEXTOKEN and not tidiedErrorSet and AGENT_POSTER != '' and COMPILATIONS_POSTER != '' and IAFDFOUND_POSTER != '' and IAFDNOTFOUND_POSTER != '' and STACKED_POSTER != '' and NOTSTACKED_POSTER != '' and NOCAST_POSTER != '' and NODIRECTOR_POSTER != '' and PLEXTOKEN != '' and WATERMARK != '' else 'No'
+        continueSetup = True if not tidiedErrorSet and AGENT_POSTER != '' and COMPILATIONS_POSTER != '' and IAFDFOUND_POSTER != '' and IAFDNOTFOUND_POSTER != '' and STACKED_POSTER != '' and NOTSTACKED_POSTER != '' and NOCAST_POSTER != '' and NODIRECTOR_POSTER != '' and PLEXTOKEN != '' and WATERMARK != '' else False
 
-        log('START :: {0:<29} {1}'.format('\tStart Scrape Process', START_SCRAPE))
+    #   Finish: Tidy Up - free up memory
+    tidiedCountriesSet = None
+    tidiedGenresSet = None
+    tidiedNullSet = None
+    tidiedErrorSet = None
+    del(tidiedCountriesSet)
+    del(tidiedGenresSet)
+    del(tidiedNullSet)
+    del(tidiedErrorSet)
 
-        # not needed anymore - free up memory
-        tidiedCountriesSet = None
-        tidiedGenresSet = None
-        tidiedNullSet = None
-        tidiedErrorSet = None
-        del(tidiedCountriesSet)
-        del(tidiedGenresSet)
-        del(tidiedNullSet)
-        del(tidiedErrorSet)
+    log(LOG_SUBLINE)
+    log(LOG_SUBLINE)
+    START_SCRAPE = 'Yes' if continueSetup is True else 'No'
+    log('START :: {0:<29} {1}'.format('\tStart Scrape Process', START_SCRAPE))
 
     log(LOG_ASTLINE)
     log(LOG_ASTLINE)
@@ -7191,24 +7201,31 @@ def soundex(name, len=5):
     return (sndx + (len * '0'))[:len]
 
 # ----------------------------------------------------------------------------------------------------------------------------------
-def standardQuotes(myString):
-    ''' replace all curly quotes and accent marks with their straight versions '''
+def setDashesQuotes(myString):
+    ''' replace all curly quotes and accent marks with their straight versions - replace all hyphes with a simple dash (minus) '''
     # replace single curly quotes and accent marks with straight quotes
     singleQuoteChars = [ur'\u2018', ur'\u2019', ur'\u0060', ur'\u00B4']
     pattern = u'({0})'.format('|'.join(singleQuoteChars))
-    matched = re.search(pattern, myString)                 # match against whole string
+    matched = re.search(pattern, myString)                  # match against whole string
     if matched:
         myString = re.sub(pattern, "'", myString)
-        myString = ' '.join(myString.split())     # remove continous white space
+        myString = ' '.join(myString.split())               # remove continous white space
 
     # replace double curly quotes with straight ones
     doubleQuoteChars = [ur'\u201C', ur'\u201D']
     pattern = u'({0})'.format('|'.join(doubleQuoteChars))
-    matched = re.search(pattern, myString)                 # match against whole string
+    matched = re.search(pattern, myString)                  # match against whole string
     if matched:
         myString = re.sub(pattern, '"', myString)
-        myString = ' '.join(myString.split())     # remove continous white space
-    
+        myString = ' '.join(myString.split())               # remove continous white space
+
+    dashChars = [ur'\u002D', ur'\u00AD', ur'\u207B', ur'\u208B', ur'\u2212', ur'\u02D7', ur'\u058A', ur'\u05BE', ur'\u1400', ur'\u1806', ur'\u2010', ur'\u2015', ur'\u2E17', ur'\u2E1A', ur'\u2E3A', ur'\u2E3B', ur'\u2E40', ur'\u301C', ur'\u3030', ur'\u30A0', ur'\uFE31', ur'\uFE32', ur'\uFE58', ur'\uFE63', ur'\uFF0D']
+    pattern = u'({0})'.format('|'.join(dashChars))
+    matched = re.search(pattern, myString)                  # match against whole string
+    if matched:
+        myString = re.sub(pattern, '-', myString)
+        myString = ' '.join(myString.split())               # remove continous white space
+
     return myString
 
 # ----------------------------------------------------------------------------------------------------------------------------------
