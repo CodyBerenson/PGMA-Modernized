@@ -70,8 +70,9 @@
     {
         "id": "genrecollection",
         "label": "Create Film Genre Collections",
-        "type": "bool",
-        "default": "true"
+        "type": "enum",
+        "values": ["No", "Black", "Blue", "Green", "Purple", "Red"],
+        "default": "Purple"
     },
     {
         "id": "countrycollection",

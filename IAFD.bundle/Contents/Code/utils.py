@@ -71,6 +71,7 @@ General Functions found in all agents
     03 May 2023     Correction to tag processing in WayBig, Fagalicious and QueerClick
                     Standardise Quotes and Hyphens for matching between filenames and web entries
                     Remove Thumbor from preferences and put in Thumbor.txt file in _PGMA
+    07 May 2023     Colour sets for Genre icons introduced
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, plistlib, random, re, requests, subprocess, time, unicodedata
@@ -6830,7 +6831,7 @@ def setupStartVariables():
                     log('START :: {0:<29} {1}'.format('\t{0:>2}. {1}'.format(idx, prefName), 'Default = {0:<10} Set As = {1}'.format(defSet, setAs)))
 
                 COLSYSTEM = '|1|' if Prefs['systemcollection'] else ''
-                COLGENRE = '|2|' if Prefs['genrecollection'] else ''
+                COLGENRE = '|2|' if Prefs['genrecollection'] != 'No' else ''        # if a colour set is chose - genre collection is on
                 COLCOUNTRY = '|3|' if Prefs['countrycollection'] else ''
                 COLSTUDIO = '|4|' if Prefs['studiocollection'] else ''
                 COLSERIES = '|5|' if Prefs['seriescollection'] else ''
@@ -6869,7 +6870,7 @@ def setupStartVariables():
         PGMA_COUNTRYART = os.path.join(PGMA_FOLDER, 'Country', 'Art')
         PGMA_COUNTRYPOSTERFLAGS = os.path.join(PGMA_FOLDER, 'Country', 'Poster', 'Flags')
         PGMA_COUNTRYPOSTERMAPS = os.path.join(PGMA_FOLDER, 'Country', 'Poster', 'Maps')
-        PGMA_GENREFOLDER = os.path.join(PGMA_FOLDER, 'Genre')
+        PGMA_GENREFOLDER = os.path.join(PGMA_FOLDER, 'Genre', Prefs['genrecollection']) if Prefs['genrecollection'] != 'No' else os.path.join(PGMA_FOLDER, 'Genre')
 
         PGMA_FOLDER = PGMA_FOLDER if os.path.isdir(PGMA_FOLDER) else ''
         PGMA_SYSTEMFOLDER = PGMA_SYSTEMFOLDER if os.path.isdir(PGMA_SYSTEMFOLDER) else ''
