@@ -303,6 +303,7 @@ Chubs::Bears
 Circle Jerk::Masturbation
 Circle-Jerk::Masturbation
 Classic Plot::Role Play
+Classic Star Showcase::Showcase
 Classic::x
 Classics -> 70'S::x
 Classics -> 80'S::x
@@ -310,6 +311,7 @@ Classics -> 90'S::x
 Classics -> Remastered In Hd::x
 Classics -> Vintage 8mm 16mm::x
 Classics::x
+Classroom::Intergenerational
 Clip Artists -> Fetish::Fetish
 Clip Artists -> Gay::x
 Clothespins::BDSM

@@ -72,6 +72,8 @@ General Functions found in all agents
                     Standardise Quotes and Hyphens for matching between filenames and web entries
                     Remove Thumbor from preferences and put in Thumbor.txt file in _PGMA
     07 May 2023     Colour sets for Genre icons introduced
+    14 May 2023     PGMA Discussion #241 - Cast Tags retrieval improved: Fagalicious, QueerClick and WayBig
+                    Cast Tags - should be forename and surname unless actor has initials, strip trailing apostrophe from tags: Johns' becomes Johns
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, plistlib, random, re, requests, subprocess, time, unicodedata
@@ -2147,6 +2149,8 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
             htmltags = [setDashesQuotes(x) for x in htmltags]
             htmltags = [x for x in htmltags if not ':' in x]
             htmltags = [x for x in htmltags if not x + ':' in FILMDICT['Title']]
+            htmltags = [x for x in htmltags if not (len(x.split()) > 2 and not '.' in x)]       # most actors have forename/surname ignore if more than this and no initials in name
+            htmltags = [(x[:-1]) if x[-1] == "'" else x for x in htmltags]                      # remove trailing apostrophes
             htmltags = list(set(htmltags))
             htmltags.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('Tags', '{0:>2} - {1}'.format(len(htmltags), htmltags)))
@@ -4384,6 +4388,8 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
             htmltags = [setDashesQuotes(x) for x in htmltags]
             htmltags = [x for x in htmltags if not ':' in x]
             htmltags = [x for x in htmltags if not x + ':' in FILMDICT['Title']]
+            htmltags = [x for x in htmltags if not (len(x.split()) > 2 and not '.' in x)]       # most actors have forename/surname ignore if more than this and no initials in name
+            htmltags = [(x[:-1]) if x[-1] == "'" else x for x in htmltags]                      # remove trailing apostrophes
             htmltags = list(set(htmltags))
             htmltags.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('Tags', '{0:>2} - {1}'.format(len(htmltags), htmltags)))
@@ -4672,6 +4678,8 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
             htmltags = [setDashesQuotes(x) for x in htmltags]
             htmltags = [x for x in htmltags if not ':' in x]
             htmltags = [x for x in htmltags if not x + ':' in FILMDICT['Title']]
+            htmltags = [x for x in htmltags if not (len(x.split()) > 2 and not '.' in x)]       # most actors have forename/surname ignore if more than this and no initials in name
+            htmltags = [(x[:-1]) if x[-1] == "'" else x for x in htmltags]                      # remove trailing apostrophes
             htmltags = list(set(htmltags))
             htmltags.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('Tags', '{0:>2} - {1}'.format(len(htmltags), htmltags)))
