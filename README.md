@@ -1,4 +1,3 @@
-Forked version of PGMA Modernized with some tweaks.
 # Installation and Usage
 
 [Click Here](/images/PlexGayMetadataAgents-InstallationandUsageGuide.pdf)
