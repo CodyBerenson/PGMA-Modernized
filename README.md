@@ -12,8 +12,6 @@ Note:  Changes are frequently made to Preferences.  When you download and instal
 for our new Installation and Usage Guide.  
 # Announcements
 
-PLEASE READ DISCUSSION TOPIC #232.  Do not upgrade PMS.
-
 See all of our exciting announcements in the [Discussions tab](../../discussions).    
 
 ## Disclaimer
