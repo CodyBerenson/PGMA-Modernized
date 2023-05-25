@@ -203,7 +203,7 @@ class Fagalicious(Agent.Movies):
                 # Site Entry : Composed of Studio, then Scene Title separated by a Colon
                 try:
                     filmEntry = film.xpath('./h1[@class="entry-title"]/a/text()')[0].strip()
-                    filmEntry = utils.setDashesQuotes(filmEntry)
+                    filmEntry = utils.makeASCII(filmEntry)
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', filmEntry))
                     filmStudio, filmTitle = filmEntry.split(': ', 1)
                 except Exception as e:

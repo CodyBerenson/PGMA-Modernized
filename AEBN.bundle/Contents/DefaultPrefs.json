@@ -69,10 +69,10 @@
     },
     {
         "id": "genrecollection",
-        "label": "Create Film Genre Collections",
+        "label": "Create Film Genre Collections; Colour = Yes, No = Disabled",
         "type": "enum",
-        "values": ["No", "Black", "Blue", "Green", "Purple", "Red"],
-        "default": "Purple"
+        "values": ["No", "Black", "Blue", "Green", "Indigo", "Red"],
+        "default": "Indigo"
     },
     {
         "id": "countrycollection",

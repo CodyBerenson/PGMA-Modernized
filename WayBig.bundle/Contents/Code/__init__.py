@@ -210,7 +210,7 @@ class WayBig(Agent.Movies):
                 # Site Entry
                 try:
                     filmEntry = film.xpath('./a/*[@class="entry-title"]/text()')[0].strip()
-                    filmEntry = utils.setDashesQuotes(filmEntry)
+                    filmEntry = utils.makeASCII(filmEntry)
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', filmEntry))
                     filmEntry = r'{0}'.format(filmEntry)
                     # the filmEntry usual has the format Studio: Title

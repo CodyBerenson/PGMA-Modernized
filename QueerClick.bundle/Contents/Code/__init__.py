@@ -209,7 +209,7 @@ class QueerClick(Agent.Movies):
                 # Site Entry
                 try:
                     filmEntry = film.xpath('./h2[@class="entry-title"]/a/text()')[0]
-                    filmEntry = utils.setDashesQuotes(filmEntry)
+                    filmEntry = utils.makeASCII(filmEntry)
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', filmEntry))
                 except Exception as e:
                     utils.log('SEARCH:: Error getting Site Entry: %s', e)

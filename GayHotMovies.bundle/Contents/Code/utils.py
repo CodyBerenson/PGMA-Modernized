@@ -74,10 +74,15 @@ General Functions found in all agents
     07 May 2023     Colour sets for Genre icons introduced
     14 May 2023     PGMA Discussion #241 - Cast Tags retrieval improved: Fagalicious, QueerClick and WayBig
                     Cast Tags - should be forename and surname unless actor has initials, strip trailing apostrophe from tags: Johns' becomes Johns
+    19 May 2023     Cast Tags - assume Tags with special characters bar single apostrophe are not people
+                    Included utils.py latest modification date in Log Header
+                    03 May 2023 update duplicated code in MakeASCII - duplicated code removed and replaced by enhanced MakeASCII
+    23 May 2023     Correction to BEP to gather synopsis...
+                    Correction to BEP to correctly capitalize collection titles
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, fake_useragent, os, platform, plistlib, random, re, requests, subprocess, time, unicodedata
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from collections import OrderedDict
 from unidecode import unidecode
 from urlparse import urlparse
@@ -86,11 +91,12 @@ from io import BytesIO
 from PIL import Image
 
 # IAFD Related variables
+UTILS_UPDATE = '23 May 2023'
 IAFD_BASE = 'https://www.iafd.com'
 IAFD_SEARCH_URL = IAFD_BASE + '/ramesearch.asp?searchtype=comprehensive&searchstring={0}'
 IAFD_FILTER = '&FirstYear={0}&LastYear={1}&Submit=Filter'
-IAFD_ABSENT = u'\U0000274C'        # red cross mark - not on IAFD
-IAFD_FOUND = u'\U00002705'         # heavy white tick on green - on IAFD
+WRONG_TICK = u'\U0000274C'         # red cross mark - not on IAFD
+RIGHT_TICK = u'\U00002705'         # heavy white tick on green - on IAFD
 BISEXUAL = u'\U000026A5'           # ⚥ - bisexual films
 HOMOSEXUAL =  u'\U000026A5'        # ⚣ - gay films
 HETEROSEXUAL = u'\U000026A4'       # ⚤ - straight films
@@ -203,9 +209,10 @@ def getDirectors(agntDirectorList, FILMDICT):
     return directorDict
 
 # -------------------------------------------------------------------------------------------------------------------------------
-def getFilmImages(imageType, imageLocation, whRatio):
+def getFilmImages(imageType, imageLocation, whRatio, sceneAgent):
     ''' Only for Scene Agents: get Film images - posters/background art and crop if necessary '''
     Thumbor = THUMBOR + "/0x0:{0}x{1}/{2}"
+
     vbScript = os.path.join(PlexSupportPath, 'Plug-ins', '{0}.bundle'.format(AGENT), 'Contents', 'Code', 'ImageCropper.vbs')
     Cropper = r'CScript.exe "{0}" "{1}" "{2}" "{3}"'
 
@@ -217,47 +224,51 @@ def getFilmImages(imageType, imageLocation, whRatio):
 
     log('UTILS :: {0} Found: Width ({1}) x Height ({2}); URL: {3}'.format(imageType, dispWidth, dispHeight, imageLocation))
 
-    maxHeight = float(width * whRatio)      # Maximum allowable height
+    # Cropping only done on Scene Agents
+    if sceneAgent is True:
+        maxHeight = float(width * whRatio)      # Maximum allowable height
 
-    cropHeight = float(maxHeight if maxHeight <= height else height)
-    cropWidth = float(cropHeight / whRatio)
+        cropHeight = float(maxHeight if maxHeight <= height else height)
+        cropWidth = float(cropHeight / whRatio)
 
-    DxHeight = 0.0 if cropHeight == height else (abs(cropHeight - height) / height) * 100.0
-    DxWidth = 0.0 if cropWidth == width else (abs(cropWidth - width) / width) * 100.0
+        DxHeight = 0.0 if cropHeight == height else (abs(cropHeight - height) / height) * 100.0
+        DxWidth = 0.0 if cropWidth == width else (abs(cropWidth - width) / width) * 100.0
 
-    cropRequired = True if DxWidth >= 15 or DxHeight >=15 else False
-    cropWidth = int(cropWidth)
-    cropHeight = int(cropHeight)
-    desiredWidth = '{0:,d}'.format(cropWidth)     # thousands separator
-    desiredHeight = '{0:,d}'.format(cropHeight)   # thousands separator
-    DxWidth = '{0:>2}'.format(DxWidth)    # percent format
-    DxHeight = '{0:>2}'.format(DxHeight)  # percent format
-    log('UTILS :: Crop {0} {1}: Actual (w{2} x h{3}), Desired (w{4} x h{5}), % Dx = w[{6}%] x h[{7}%]'.format("Required:" if cropRequired else "Not Required:", imageType, dispWidth, dispHeight, desiredWidth, desiredHeight, DxWidth, DxHeight))
-    if cropRequired:
-        try:
-            imageLocation = Thumbor.format(cropWidth, cropHeight, imageLocation)
-            log('UTILS :: Thumbor - Crop Image: {0}'.format(imageLocation))
-            log('UTILS ::   Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
-            imageContent = HTTP.Request(imageLocation).content
+        cropRequired = True if DxWidth >= 15 or DxHeight >=15 else False
+        cropWidth = int(cropWidth)
+        cropHeight = int(cropHeight)
+        desiredWidth = '{0:,d}'.format(cropWidth)     # thousands separator
+        desiredHeight = '{0:,d}'.format(cropHeight)   # thousands separator
+        DxWidth = '{0:>2}'.format(DxWidth)    # percent format
+        DxHeight = '{0:>2}'.format(DxHeight)  # percent format
+        log('UTILS :: Crop {0} {1}: Actual (w{2} x h{3}), Desired (w{4} x h{5}), % Dx = w[{6}%] x h[{7}%]'.format("Required:" if cropRequired else "Not Required:", imageType, dispWidth, dispHeight, desiredWidth, desiredHeight, DxWidth, DxHeight))
+        if cropRequired:
+            try:
+                width = cropWidth
+                height = cropHeight
+                imageLocation = Thumbor.format(width, height, imageLocation)
+                log('UTILS :: Thumbor - Crop Image: {0}'.format(imageLocation))
+                log('UTILS ::   Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
+                imageContent = HTTP.Request(imageLocation).content
 
-        except Exception as e:
-            log('UTILS :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, imageLocation, e))
-            if os.name == 'nt':
-                try:
-                    envVar = os.environ
-                    TempFolder = envVar['TEMP']
-                    imageLocation = os.path.join(TempFolder, imageLocation.split("/")[-1])
-                    PlexSaveFile(imageLocation, imageContent)
-                    cmd = Cropper.format(vbScript, imageLocation, cropWidth, cropHeight)
-                    log('UTILS ::')
-                    log('UTILS :: Script - Crop Image: {0}'.format(imageLocation))
-                    log('UTILS ::  Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
-                    log('UTILS ::        Command Line: {0}'.format(cmd))
-                    subprocess.call(cmd)
-                    time.sleep(2)
-                    imageContent = PlexLoadFile(imageLocation)
-                except Exception as e:
-                    log('UTILS :: Error Script Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, imageLocation, e))
+            except Exception as e:
+                log('UTILS :: Error Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, imageLocation, e))
+                if os.name == 'nt':
+                    try:
+                        envVar = os.environ
+                        TempFolder = envVar['TEMP']
+                        imageLocation = os.path.join(TempFolder, imageLocation.split("/")[-1])
+                        PlexSaveFile(imageLocation, imageContent)
+                        cmd = Cropper.format(vbScript, imageLocation, cropWidth, cropHeight)
+                        log('UTILS ::')
+                        log('UTILS :: Script - Crop Image: {0}'.format(imageLocation))
+                        log('UTILS ::  Desired Dimensions: {0} x {1}'.format(desiredWidth, desiredHeight))
+                        log('UTILS ::        Command Line: {0}'.format(cmd))
+                        subprocess.call(cmd)
+                        time.sleep(2)
+                        imageContent = PlexLoadFile(imageLocation)
+                    except Exception as e:
+                        log('UTILS :: Error Script Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, imageLocation, e))
 
     return imageLocation, imageContent
 
@@ -532,7 +543,7 @@ def getFilmOnIAFD(FILMDICT):
     IAFD_Legend = u'::\u2003Film on IAFD {2}\u2003::\u2003{1} / {0} Actor on Cast List?\u2003::{3}{4}'
     presentOnIAFD = IAFD_ThumbsUp if FILMDICT['FoundOnIAFD'] == 'Yes' else IAFD_ThumbsDown
     stackedStatus = IAFD_Stacked if FILMDICT['Stacked'] == 'Yes' else ''
-    FILMDICT['Legend'] = IAFD_Legend.format(IAFD_ABSENT, IAFD_FOUND, presentOnIAFD, stackedStatus, agentName)
+    FILMDICT['Legend'] = IAFD_Legend.format(WRONG_TICK, RIGHT_TICK, presentOnIAFD, stackedStatus, agentName)
 
     return FILMDICT
 
@@ -615,6 +626,7 @@ def getIAFDArtist(artistURL):
                 log('UTILS :: Error getting Director Photo from "As Performer" Details Page: %s', e)
 
     except Exception as e:
+        ahtmlBio = []
         log('UTILS :: Error getting Artist Details Page: %s', e)
 
     try:
@@ -837,7 +849,7 @@ def getRecordedCast(html):
 
             castCompareName = re.sub(r'[\W\d_]', '', castName).strip().lower()
             castCompareAlias = re.sub(r'[\W\d_]', '', castAlias).strip().lower()
-            castRole = castRole if castRole else 'AKA: {0}'.format(castAlias) if castAlias else IAFD_FOUND
+            castRole = castRole if castRole else 'AKA: {0}'.format(castAlias) if castAlias else RIGHT_TICK
 
             # log cast details
             log('UTILS :: {0:<29} {1}'.format('Recorded Cast Details:', ''))
@@ -1665,8 +1677,18 @@ def getSiteInfoBestExclusivePorn(FILMDICT, **kwargs):
         #   1.  Synopsis
         log(LOG_SUBLINE)
         try:
-            htmlsynopsis = html.xpath('.//div[@class="entry"]/p/text()[contains(.,"Description: ")]')[0].strip()
-            synopsis = htmlsynopsis.replace('Description: ', '')
+            htmlsynopsis = html.xpath('.//div[@class="entry"]/p/text()')
+            log('UTILS :: {0:<29} {1}'.format('Synopsis xx', htmlsynopsis))
+            ignoreStrings = ['Country:', 'Duration:', 'Genre:', 'Production year:', 'Studio:']
+            pattern = u'({0})'.format('|'.join(ignoreStrings))
+            synopsis = ''
+            for item in htmlsynopsis:
+                item = item.replace('Description: ', '').strip()
+                log('UTILS :: {0:<29} {1}'.format('item', item))
+                matched = re.search(pattern, item, re.IGNORECASE)  # match against whole string
+                if not item or matched:
+                    continue
+                synopsis = '{0}\n{1}'.format(synopsis, item)
             siteInfoDict['Synopsis'] = synopsis
             log('UTILS :: {0:<29} {1}'.format('Synopsis', synopsis))
         except Exception as e:
@@ -2146,8 +2168,10 @@ def getSiteInfoFagalicious(FILMDICT, **kwargs):
             htmltags = [x for x in htmltags if not x.lower().replace(' ', '') in testStudio]
 
             # remove all tags with non name characters such as colons
-            htmltags = [setDashesQuotes(x) for x in htmltags]
-            htmltags = [x for x in htmltags if not ':' in x]
+            htmltags = [makeASCII(x) for x in htmltags]
+            punctuation = ['!', ';', ':', '"', ',', '#', '$', '%', '^', '&', '*', '_', '~', '+', '?']
+            pattern = re.escape(u'({0})'.format('|'.join(punctuation)))
+            htmltags = [x for x in htmltags if not re.search(pattern, x)]
             htmltags = [x for x in htmltags if not x + ':' in FILMDICT['Title']]
             htmltags = [x for x in htmltags if not (len(x.split()) > 2 and not '.' in x)]       # most actors have forename/surname ignore if more than this and no initials in name
             htmltags = [(x[:-1]) if x[-1] == "'" else x for x in htmltags]                      # remove trailing apostrophes
@@ -4172,7 +4196,7 @@ def getSiteInfoIAFD(FILMDICT, **kwargs):
             #   IAFD lists the sexual activities of the cast members under their pictures at times
             if siteInfoDict['Cast']:
                 rolesSet = {cast[x]['Role'] for x in siteInfoDict['Cast'].keys()}
-                rolesSet = {x for x in rolesSet if 'AKA' not in x and x != IAFD_FOUND}
+                rolesSet = {x for x in rolesSet if 'AKA' not in x and x != RIGHT_TICK}
                 rolesSet = set(' '.join(rolesSet).split())
                 log('UTILS :: {0:<29} {1}'.format('Roles Word Count', '{0:>2} - {1}'.format(len(rolesSet), rolesSet)))
                 for idx, item in enumerate(rolesSet, start=1):
@@ -4385,7 +4409,10 @@ def getSiteInfoQueerClick(FILMDICT, **kwargs):
             htmltags = [x for x in htmltags if not x.lower().replace(' ', '') in testStudio]
 
             # remove all tags with non name characters such as colons
-            htmltags = [setDashesQuotes(x) for x in htmltags]
+            htmltags = [makeASCII(x) for x in htmltags]
+            punctuation = ['!', ';', ':', '"', ',', '#', '$', '%', '^', '&', '*', '_', '~', '+', '?']
+            pattern = re.escape(u'({0})'.format('|'.join(punctuation)))
+            htmltags = [x for x in htmltags if not re.search(pattern, x)]
             htmltags = [x for x in htmltags if not ':' in x]
             htmltags = [x for x in htmltags if not x + ':' in FILMDICT['Title']]
             htmltags = [x for x in htmltags if not (len(x.split()) > 2 and not '.' in x)]       # most actors have forename/surname ignore if more than this and no initials in name
@@ -4675,8 +4702,10 @@ def getSiteInfoWayBig(FILMDICT, **kwargs):
             htmltags = [x for x in htmltags if not x.lower().replace(' ', '') in testStudio]
 
             # remove all tags with non name characters such as colons
-            htmltags = [setDashesQuotes(x) for x in htmltags]
-            htmltags = [x for x in htmltags if not ':' in x]
+            htmltags = [makeASCII(x) for x in htmltags]
+            punctuation = ['!', ';', ':', '"', ',', '#', '$', '%', '^', '&', '*', '_', '~', '+', '?']
+            pattern = re.escape(u'({0})'.format('|'.join(punctuation)))
+            htmltags = [x for x in htmltags if not re.search(pattern, x)]
             htmltags = [x for x in htmltags if not x + ':' in FILMDICT['Title']]
             htmltags = [x for x in htmltags if not (len(x.split()) > 2 and not '.' in x)]       # most actors have forename/surname ignore if more than this and no initials in name
             htmltags = [(x[:-1]) if x[-1] == "'" else x for x in htmltags]                      # remove trailing apostrophes
@@ -5086,6 +5115,7 @@ def logHeader(myFunc, media, lang):
     log(LOG_ASTLINE)
     log(LOG_ASTLINE)
     log('%s:: Version:                              v.%s', myFunc, VERSION_NO)
+    log('%s:: Utility Update Date                   %s', myFunc, UTILS_UPDATE)
     log('%s:: Python:                               %s (%s): %s', myFunc, platform.python_version(), platform.architecture()[0], platform.python_build())
     log('%s:: Platform:', myFunc)
     log('%s::   > Operating System:                 %s', myFunc, platform.system())
@@ -5127,39 +5157,32 @@ def logFooter(myFunc, FILMDICT):
 def makeASCII(myString):
     ''' standardise single quotes, double quotes and accented characters '''
 
-    # standardise single quotes
-    singleQuotes = ['`', '‘', '’']
-    pattern = ur'[{0}]'.format(''.join(singleQuotes))
-    myString = re.sub(pattern, "'", myString)
+    # replace single curly quotes and accent marks with straight quotes
+    singleQuoteChars = [ur'\u2018', ur'\u2019', ur'\u0060', ur'\u00B4']
+    pattern = u'({0})'.format('|'.join(singleQuoteChars))
+    matched = re.search(pattern, myString)                  # match against whole string
+    if matched:
+        myString = re.sub(pattern, "'", myString)
+        myString = ' '.join(myString.split())               # remove continous white space
 
-    # standardise double quotes
-    doubleQuotes = ['“', '”']
-    pattern = ur'[{0}]'.format(''.join(doubleQuotes))
-    myString = re.sub(pattern, '"', myString)
+    # replace double curly quotes with straight ones
+    doubleQuoteChars = [ur'\u201C', ur'\u201D']
+    pattern = u'({0})'.format('|'.join(doubleQuoteChars))
+    matched = re.search(pattern, myString)                  # match against whole string
+    if matched:
+        myString = re.sub(pattern, '"', myString)
+        myString = ' '.join(myString.split())               # remove continous white space
 
-    '''
-    # convert to unicode
-    myString = u'{0}'.format(myString)
-    asciiString = ''
-    for i, char in enumerate(myString):
-        description = unicodedata.name(char)
-        cutoff = description.find(' WITH ')
-        if cutoff != -1:
-            description = description[:cutoff]
-            try:
-                char = unicodedata.lookup(description)
-                asciiString += char
-            except KeyError:
-                pass  # removing "WITH ..." produced an invalid name
-        else:
-            asciiString += char
+    dashChars = [ur'\u002D', ur'\u00AD', ur'\u207B', ur'\u208B', ur'\u2212', ur'\u02D7', ur'\u058A', ur'\u05BE', ur'\u1400', ur'\u1806', ur'\u2010', ur'\u2015', ur'\u2E17', ur'\u2E1A', ur'\u2E3A', ur'\u2E3B', ur'\u2E40', ur'\u301C', ur'\u3030', ur'\u30A0', ur'\uFE31', ur'\uFE32', ur'\uFE58', ur'\uFE63', ur'\uFF0D']
+    pattern = u'({0})'.format('|'.join(dashChars))
+    matched = re.search(pattern, myString)                  # match against whole string
+    if matched:
+        myString = re.sub(pattern, '-', myString)
+        myString = ' '.join(myString.split())               # remove continous white space
 
-    asciiString = unidecode(asciiString)
-    '''
+    myString = unidecode(myString)                          # strip all accents, umlauts etc and rplace with ASCII equivalent
 
-    asciiString = unidecode(myString)
-
-    return asciiString
+    return myString
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def matchCast(unmatchedCastList, FILMDICT):
@@ -5174,7 +5197,7 @@ def matchCast(unmatchedCastList, FILMDICT):
 
         # the cast on the website has not matched to those listed against the film in IAFD. So search for the cast's entry on IAFD
         matchedCastDict[unmatchedCast] = {'Awards': [], 'Bio': {}, 'CompareName': '', 'CompareAlias': [], 'Films': [],
-                                          'Nationality': '', 'Photo': '', 'RealName': '', 'Role': IAFD_ABSENT, 'URL': ''}   # initialise cast member's dictionary
+                                          'Nationality': '', 'Photo': '', 'RealName': '', 'Role': WRONG_TICK, 'URL': ''}   # initialise cast member's dictionary
 
         # compare against IAFD Cast List - retrieved from the film's url page
         matchedName = False
@@ -5415,7 +5438,7 @@ def matchCast(unmatchedCastList, FILMDICT):
                     castNationality = castDetails['Nationality']
                     castPhoto = castDetails['Photo']
                     castRealName = castDetails['RealName']
-                    castRole = IAFD_FOUND  # default to found
+                    castRole = RIGHT_TICK  # default to found
 
                     # log cast details
                     log('UTILS :: {0:<29} {1}'.format('Matched Cast Details:', ''))
@@ -5734,7 +5757,7 @@ def matchFilename(media):
     filmVars['CompareTitle'] = set()
     filmVars['Title'] = groups['fnTITLE']
     filmVars['Title'] = filmVars['Title'].replace('~', '/')                             # ~ invalid character marker in filename
-    filmVars['Title'] = setDashesQuotes(filmVars['Title'])
+    filmVars['Title'] = makeASCII(filmVars['Title'])
     filmVars['NormaliseTitle'] = Normalise(filmVars['Title'])
     filmVars['CompareTitle'].add(sortAlphaChars(filmVars['NormaliseTitle']))
 
@@ -5772,6 +5795,7 @@ def matchFilename(media):
                 series.insert(0, partTitle)
 
     filmVars['Series'] = series
+
     filmVars['Episodes'] = episodes
     for item in episodes:
         filmVars['CompareTitle'].add(sortAlphaChars(Normalise(item)))
@@ -5787,7 +5811,7 @@ def matchFilename(media):
     filmVars['NormaliseShortTitle'] = Normalise(filmVars['ShortTitle'])
     filmVars['CompareTitle'].add(sortAlphaChars(filmVars['NormaliseShortTitle']))
 
-    # add series inividually and wholly + short Title in case episode number left out
+    # add series individually and wholly + short Title in case episode number left out
     for item in filmVars['Series']:
         filmVars['CompareTitle'].add(sortAlphaChars(Normalise('{0}{1}'.format(item, filmVars['ShortTitle']))))
 
@@ -6424,12 +6448,7 @@ def setMetadata(metadata, media, FILMDICT):
             poster = myAgentDict['Poster']
             log('UTILS :: {0:<29} {1}'.format('2h. Poster Images', poster if poster else 'None Found'))
             for idx, item in enumerate(poster, start=1):
-                if FILMDICT['SceneAgent'] is True:
-                    image, imageContent = getFilmImages(imageType='Poster', imageLocation=item, whRatio=1.5) 
-                else:
-                    image = item
-                    imageContent = HTTP.Request(image).content
-
+                image, imageContent = getFilmImages(imageType='Poster', imageLocation=item, whRatio=1.5, sceneAgent=FILMDICT['SceneAgent']) 
                 log('UTILS :: {0:<29} {1}'.format('Poster' if idx == 1 else '', '{0:>2} - {1}'.format(idx, image)))
                 metadata.posters[image] = Proxy.Media(imageContent, sort_order=idx)
 
@@ -6458,12 +6477,7 @@ def setMetadata(metadata, media, FILMDICT):
                 art = myAgentDict['Art']
                 log('UTILS :: {0:<29} {1}'.format('2i. Art Images', art if art else 'None Found'))
                 for idx, item in enumerate(art, start=1):
-                    if FILMDICT['SceneAgent'] is True:
-                        image, imageContent = getFilmImages(imageType='Art', imageLocation=item, whRatio=1.5) 
-                    else:
-                        image = item
-                        imageContent = HTTP.Request(image).content
-
+                    image, imageContent = getFilmImages(imageType='Art', imageLocation=item, whRatio=1.5, sceneAgent=FILMDICT['SceneAgent']) 
                     log('UTILS :: {0:<29} {1}'.format('Art' if idx == 1 else '', '{0:>2} - {1}'.format(idx, image)))
                     metadata.art[image] = Proxy.Media(imageContent, sort_order=idx)
             else:
@@ -6587,6 +6601,7 @@ def setMetadata(metadata, media, FILMDICT):
                 try:
                     seriesList = FILMDICT['Series']
                     for idx, item in enumerate(seriesList, start=1):
+                        item = item if AGENT != 'BestExclusivePorn' else " ".join(word.capitalize() if "'s" in word or "’s" in word or "'t" in word or "’t" in word else word.title() for word in item.split())
                         entry = '{0} {1}: {2}'.format(COLSTUDIO if COLSTUDIO else COLSERIES, studio, item)
                         collectionsDict[entry] = {'Poster': '', 'Art': countryArt, 'Summary': ''}
 
@@ -6771,8 +6786,8 @@ def setMetadata(metadata, media, FILMDICT):
         log(LOG_BIGLINE)
         try:
             log('UTILS :: {0:<29} {1}'.format('2n. Originally Available Date', ''))
-            releaseDate = myAgentDict['ReleaseDate'].date()
-            log('UTILS :: {0:<29} {1}'.format('Agent Date', releaseDate))
+            releaseDate = myAgentDict['ReleaseDate']
+            log('UTILS :: {0:<29} {1}'.format('Agent Date', releaseDate.date()))
 
             metadata.originally_available_at = releaseDate
             metadata.year = metadata.originally_available_at.year
@@ -6806,9 +6821,10 @@ def setupStartVariables():
 
     log(LOG_ASTLINE)
     log(LOG_ASTLINE)
-    #   1.    Plex Support Path and preferences
+    #   1.    Plex Support Path and Preferences
     log('START :: 1.\tPlex System')
     log('START :: {0:<29} {1}'.format('\tAgent', '{0} v.{1}'.format(AGENT, VERSION_NO)))
+    log('START :: {0:<29} {1}'.format('\tUtility Update Date', '{0}'.format(UTILS_UPDATE)))
     log('START :: {0:<29} {1}'.format('\tPython', '{0} - {1} - {2}'.format(platform.python_version(), platform.architecture()[0], platform.python_build())))
     log('START :: {0:<29} {1}'.format('\tOperating System', platform.system()))
     log('START :: {0:<29} {1}'.format('\tRelease:', platform.release()))
@@ -6835,8 +6851,14 @@ def setupStartVariables():
                     idx += 1
                     prefName =  entry['id']
                     defSet =  entry['default']
-                    setAs = Prefs[prefName] if prefName != 'plextoken' else '********'              # hide token in logs
-                    log('START :: {0:<29} {1}'.format('\t{0:>2}. {1}'.format(idx, prefName), 'Default = {0:<10} Set As = {1}'.format(defSet, setAs)))
+                    if prefName == 'plextoken':              # hide token in logs
+                        setAs = '********'
+                    elif defSet in ['true', 'false']:        # Boolean preference
+                        setAs = 'true' if Prefs[prefName] == 1 else 'false'
+                    else:
+                        setAs = Prefs[prefName]
+
+                    log('START :: {0:<29} {1}'.format('\t{0:>2}. {1}'.format(idx, prefName), 'Default = {0:<15} Set As = {1:<15} {2}'.format(defSet, setAs, WRONG_TICK if setAs is None else RIGHT_TICK)))
 
                 COLSYSTEM = '|1|' if Prefs['systemcollection'] else ''
                 COLGENRE = '|2|' if Prefs['genrecollection'] != 'No' else ''        # if a colour set is chose - genre collection is on
@@ -6868,39 +6890,39 @@ def setupStartVariables():
     if continueSetup is True:
         log(LOG_SUBLINE)
         log('START :: 3.\tPGMA Usage Folder Locations')
-        global PGMA_FOLDER, PGMA_CASTFACEFOLDER, PGMA_DIRECTORFACEFOLDER, PGMA_CASTPOSTERFOLDER, PGMA_DIRECTORPOSTERFOLDER, PGMA_COUNTRYART, PGMA_COUNTRYPOSTERFLAGS, PGMA_COUNTRYPOSTERMAPS, PGMA_GENREFOLDER
+        global PGMA_FOLDER, PGMA_CASTFACEFOLDER, PGMA_DIRECTORFACEFOLDER, PGMA_CASTPOSTERFOLDER, PGMA_DIRECTORPOSTERFOLDER, PGMA_COUNTRYART, PGMA_COUNTRYPOSTERFLAGS, PGMA_COUNTRYPOSTERMAPS, PGMA_GENREFOLDER, PGMA_SYSTEMFOLDER
         PGMA_FOLDER = os.path.join(PlexSupportPath, 'Plug-ins', '_PGMA')
-        PGMA_SYSTEMFOLDER = os.path.join(PGMA_FOLDER, 'System')
         PGMA_CASTFACEFOLDER = os.path.join(PGMA_FOLDER, 'Cast', 'Face')
         PGMA_CASTPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Cast', 'Poster')
-        PGMA_DIRECTORFACEFOLDER = os.path.join(PGMA_FOLDER, 'Director', 'Face')
-        PGMA_DIRECTORPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Director', 'Poster')
         PGMA_COUNTRYART = os.path.join(PGMA_FOLDER, 'Country', 'Art')
         PGMA_COUNTRYPOSTERFLAGS = os.path.join(PGMA_FOLDER, 'Country', 'Poster', 'Flags')
         PGMA_COUNTRYPOSTERMAPS = os.path.join(PGMA_FOLDER, 'Country', 'Poster', 'Maps')
+        PGMA_DIRECTORFACEFOLDER = os.path.join(PGMA_FOLDER, 'Director', 'Face')
+        PGMA_DIRECTORPOSTERFOLDER = os.path.join(PGMA_FOLDER, 'Director', 'Poster')
         PGMA_GENREFOLDER = os.path.join(PGMA_FOLDER, 'Genre', Prefs['genrecollection']) if Prefs['genrecollection'] != 'No' else os.path.join(PGMA_FOLDER, 'Genre')
+        PGMA_SYSTEMFOLDER = os.path.join(PGMA_FOLDER, 'System')
 
         PGMA_FOLDER = PGMA_FOLDER if os.path.isdir(PGMA_FOLDER) else ''
-        PGMA_SYSTEMFOLDER = PGMA_SYSTEMFOLDER if os.path.isdir(PGMA_SYSTEMFOLDER) else ''
-        PGMA_GENREFOLDER = PGMA_GENREFOLDER if os.path.isdir(PGMA_GENREFOLDER) else ''
+        PGMA_CASTFACEFOLDER = PGMA_CASTFACEFOLDER if os.path.isdir(PGMA_CASTFACEFOLDER) else ''
+        PGMA_CASTPOSTERFOLDER = PGMA_CASTPOSTERFOLDER if os.path.isdir(PGMA_CASTPOSTERFOLDER) else ''
         PGMA_COUNTRYART = PGMA_COUNTRYART if os.path.isdir(PGMA_COUNTRYART) else ''
         PGMA_COUNTRYPOSTERFLAGS = PGMA_COUNTRYPOSTERFLAGS if os.path.isdir(PGMA_COUNTRYPOSTERFLAGS) else ''
         PGMA_COUNTRYPOSTERMAPS = PGMA_COUNTRYPOSTERMAPS if os.path.isdir(PGMA_COUNTRYPOSTERMAPS) else ''
-        PGMA_CASTFACEFOLDER = PGMA_CASTFACEFOLDER if os.path.isdir(PGMA_CASTFACEFOLDER) else ''
-        PGMA_DIRECTORFACEFOLDER = PGMA_DIRECTORFACEFOLDER if os.path.isdir(PGMA_DIRECTORFACEFOLDER) else ''
-        PGMA_CASTPOSTERFOLDER = PGMA_CASTPOSTERFOLDER if os.path.isdir(PGMA_CASTPOSTERFOLDER) else ''
         PGMA_DIRECTORPOSTERFOLDER = PGMA_DIRECTORPOSTERFOLDER if os.path.isdir(PGMA_DIRECTORPOSTERFOLDER) else ''
+        PGMA_DIRECTORFACEFOLDER = PGMA_DIRECTORFACEFOLDER if os.path.isdir(PGMA_DIRECTORFACEFOLDER) else ''
+        PGMA_GENREFOLDER = PGMA_GENREFOLDER if os.path.isdir(PGMA_GENREFOLDER) else ''
+        PGMA_SYSTEMFOLDER = PGMA_SYSTEMFOLDER if os.path.isdir(PGMA_SYSTEMFOLDER) else ''
 
-        log('START :: {0:<29} {1}'.format('\tPGMA Folder Location', PGMA_FOLDER if PGMA_FOLDER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\t              System', PGMA_SYSTEMFOLDER if PGMA_SYSTEMFOLDER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\t              Genres', PGMA_GENREFOLDER if PGMA_GENREFOLDER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\t         Country Art', PGMA_COUNTRYART if PGMA_COUNTRYART else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\tCountry Poster Flags', PGMA_COUNTRYPOSTERFLAGS if PGMA_COUNTRYPOSTERFLAGS else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\t Country Poster Maps', PGMA_COUNTRYPOSTERMAPS if PGMA_COUNTRYPOSTERMAPS else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\t          Cast Faces', PGMA_CASTFACEFOLDER if PGMA_CASTFACEFOLDER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\t        Cast Posters', PGMA_CASTPOSTERFOLDER if PGMA_CASTPOSTERFOLDER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\t      Director Faces', PGMA_DIRECTORFACEFOLDER if PGMA_DIRECTORFACEFOLDER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\t    Director Posters', PGMA_DIRECTORPOSTERFOLDER if PGMA_DIRECTORPOSTERFOLDER else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('\tPGMA Folder Location', PGMA_FOLDER if PGMA_FOLDER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\t          Cast Faces', PGMA_CASTFACEFOLDER if PGMA_CASTFACEFOLDER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\t        Cast Posters', PGMA_CASTPOSTERFOLDER if PGMA_CASTPOSTERFOLDER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\t         Country Art', PGMA_COUNTRYART if PGMA_COUNTRYART else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\tCountry Poster Flags', PGMA_COUNTRYPOSTERFLAGS if PGMA_COUNTRYPOSTERFLAGS else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\t Country Poster Maps', PGMA_COUNTRYPOSTERMAPS if PGMA_COUNTRYPOSTERMAPS else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\t      Director Faces', PGMA_DIRECTORFACEFOLDER if PGMA_DIRECTORFACEFOLDER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\t    Director Posters', PGMA_DIRECTORPOSTERFOLDER if PGMA_DIRECTORPOSTERFOLDER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\t              Genres', PGMA_GENREFOLDER if PGMA_GENREFOLDER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\t              System', PGMA_SYSTEMFOLDER if PGMA_SYSTEMFOLDER else WRONG_TICK))
 
         # only contunue with setup if all folders are present
         continueSetup = (bool(PGMA_FOLDER) and bool(PGMA_SYSTEMFOLDER) and bool(PGMA_CASTFACEFOLDER) and bool(PGMA_DIRECTORFACEFOLDER) and bool(PGMA_CASTPOSTERFOLDER) and 
@@ -7084,7 +7106,7 @@ def setupStartVariables():
                 except Exception as e:
                     log('START :: Error retrieving Plex Token: Input Manually in Preferences: %s', e)
 
-        log('START :: {0:<29} {1}'.format('\tPlex Token', 'Found' if PLEXTOKEN else 'Not Found'))
+        log('START :: {0:<29} {1}'.format('\tPlex Token', 'Found {0}'.format(RIGHT_TICK) if PLEXTOKEN else 'Not Found {0}'.format(WRONG_TICK)))
 
         continueSetup = True if PLEXTOKEN else False
 
@@ -7135,15 +7157,15 @@ def setupStartVariables():
 
         WATERMARK = String.URLEncode(WATERMARK)
 
-        log('START :: {0:<29} {1}'.format('\tAgent Poster', AGENT_POSTER if AGENT_POSTER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\tCompilations Poster', COMPILATIONS_POSTER if COMPILATIONS_POSTER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\tIAFD Poster', IAFDFOUND_POSTER if IAFDFOUND_POSTER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\tNot IAFD Poster', IAFDNOTFOUND_POSTER if IAFDNOTFOUND_POSTER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\tStacked Poster', STACKED_POSTER if STACKED_POSTER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\tNot Stacked Poster', NOTSTACKED_POSTER if NOTSTACKED_POSTER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\tNo Cast Poster', NOCAST_POSTER if NOCAST_POSTER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\tNo Director Poster', NODIRECTOR_POSTER if NODIRECTOR_POSTER else '** FAIL **'))
-        log('START :: {0:<29} {1}'.format('\tWatermark', WATERMARK if WATERMARK else '** FAIL **'))
+        log('START :: {0:<29} {1}'.format('\tAgent Poster', AGENT_POSTER if AGENT_POSTER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\tCompilations Poster', COMPILATIONS_POSTER if COMPILATIONS_POSTER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\tIAFD Poster', IAFDFOUND_POSTER if IAFDFOUND_POSTER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\tNot IAFD Poster', IAFDNOTFOUND_POSTER if IAFDNOTFOUND_POSTER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\tStacked Poster', STACKED_POSTER if STACKED_POSTER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\tNot Stacked Poster', NOTSTACKED_POSTER if NOTSTACKED_POSTER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\tNo Cast Poster', NOCAST_POSTER if NOCAST_POSTER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\tNo Director Poster', NODIRECTOR_POSTER if NODIRECTOR_POSTER else WRONG_TICK))
+        log('START :: {0:<29} {1}'.format('\tWatermark', WATERMARK if WATERMARK else WRONG_TICK))
 
         # if any of the posters do not resolve we have to stop the Search Process: set GLOBAL variable and use later
         continueSetup = True if not tidiedErrorSet and AGENT_POSTER != '' and COMPILATIONS_POSTER != '' and IAFDFOUND_POSTER != '' and IAFDNOTFOUND_POSTER != '' and STACKED_POSTER != '' and NOTSTACKED_POSTER != '' and NOCAST_POSTER != '' and NODIRECTOR_POSTER != '' and PLEXTOKEN != '' and WATERMARK != '' else False
@@ -7208,34 +7230,6 @@ def soundex(name, len=5):
 
     # Return soundex code truncated or 0-padded to len characters
     return (sndx + (len * '0'))[:len]
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-def setDashesQuotes(myString):
-    ''' replace all curly quotes and accent marks with their straight versions - replace all hyphes with a simple dash (minus) '''
-    # replace single curly quotes and accent marks with straight quotes
-    singleQuoteChars = [ur'\u2018', ur'\u2019', ur'\u0060', ur'\u00B4']
-    pattern = u'({0})'.format('|'.join(singleQuoteChars))
-    matched = re.search(pattern, myString)                  # match against whole string
-    if matched:
-        myString = re.sub(pattern, "'", myString)
-        myString = ' '.join(myString.split())               # remove continous white space
-
-    # replace double curly quotes with straight ones
-    doubleQuoteChars = [ur'\u201C', ur'\u201D']
-    pattern = u'({0})'.format('|'.join(doubleQuoteChars))
-    matched = re.search(pattern, myString)                  # match against whole string
-    if matched:
-        myString = re.sub(pattern, '"', myString)
-        myString = ' '.join(myString.split())               # remove continous white space
-
-    dashChars = [ur'\u002D', ur'\u00AD', ur'\u207B', ur'\u208B', ur'\u2212', ur'\u02D7', ur'\u058A', ur'\u05BE', ur'\u1400', ur'\u1806', ur'\u2010', ur'\u2015', ur'\u2E17', ur'\u2E1A', ur'\u2E3A', ur'\u2E3B', ur'\u2E40', ur'\u301C', ur'\u3030', ur'\u30A0', ur'\uFE31', ur'\uFE32', ur'\uFE58', ur'\uFE63', ur'\uFF0D']
-    pattern = u'({0})'.format('|'.join(dashChars))
-    matched = re.search(pattern, myString)                  # match against whole string
-    if matched:
-        myString = re.sub(pattern, '-', myString)
-        myString = ' '.join(myString.split())               # remove continous white space
-
-    return myString
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def synopsisCountriesGenres(myString):
