@@ -20,13 +20,14 @@
     08 Mar 2023     2019.01.18.35   Added detection and removal of brackets from search string
     27 Apr 2023     2019.01.18.36   Corrections to Matching Film entries with apostrophes, cast retrieval from tags
     03 May 2023     2019.01.18.37   Corrections to Matching Film entries added typs of hyphens
+    12 Jun 2023     2019.01.18.38   Corrections to Matching Film entries with 's in title
 ---------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.37'
+VERSION_NO = '2020.01.18.38'
 AGENT = 'Fagalicious'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -59,7 +60,7 @@ import utils
 def Start():
     ''' initialise process '''
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
+    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.41'
     utils.setupStartVariables()
     ValidatePrefs()
 
@@ -106,14 +107,20 @@ class Fagalicious(Agent.Movies):
             myString = re.sub(pattern, ' ', myString)
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Removed Pattern', pattern, myString)))
 
+        # remove possesives - 's
+        pattern = r"'s"
+        matched = re.search(pattern, myString)  # match against whole string
+        if matched:
+            myString = re.sub(pattern, ' ', myString)
+            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Removed Pattern', pattern, myString)))
+
         # string can not be longer than 20 characters
         myString = ' '.join(myString.split())   # remove continous white space
         utils.log('AGENT :: {0:<29} {1}'.format('Search Query', myString))
-        if len(myString) > 19:
-            lastSpace = myString[:20].rfind(' ')
+        if len(myString) > 29:
+            lastSpace = myString[:30].rfind(' ')
             myString = myString[:lastSpace]
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: "{1} <= 20"'.format('Search Query Length', lastSpace)))
-            utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: "{1}"'.format('Shorten Search Query', myString[:lastSpace])))
+            utils.log('AGENT :: {0:<29} {1}'.format('Shortened Search Query [Length]', '{0}: "{1} <= 30"'.format(myString[:lastSpace], lastSpace)))
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())

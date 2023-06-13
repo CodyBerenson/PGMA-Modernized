@@ -574,7 +574,7 @@ def getHTTPRequest(url, **kwargs):
 
     HTTPRequest = None
     try:
-        log('UTILS :: CloudScraper Request:         %s', url)
+        log('UTILS :: {0:<29} {1}'.format('CloudScraper Request', url))
         if scraper is None:
             scraper = cloudscraper.CloudScraper()
             scraper.headers.update(headers)
@@ -583,14 +583,14 @@ def getHTTPRequest(url, **kwargs):
         time.sleep(random.randint(1, 7))
         HTTPRequest = scraper.request('GET', url, timeout=timeout, proxies=proxies)
         if not HTTPRequest.ok:
-            msg = ('< CloudScraper Failed Request Status Code: %s >', HTTPRequest.status_code)
+            msg = '< CloudScraper Failed Request Status Code: {0} >'.format(HTTPRequest.status_code)
             raise Exception(msg)
 
         if HTTPRequest:
             HTTPRequest.encoding = 'UTF-8'
 
     except Exception as e:
-        msg = ('< CloudScraper Failed: %s >', e)
+        msg = '<< CloudScraper Failed: {0} >>'.format(e)
         raise Exception(msg)
 
     return HTTPRequest
@@ -6662,7 +6662,12 @@ def setMetadata(metadata, media, FILMDICT):
             ssn = requests.Session()
             ssn.headers.update({'Accept': 'application/json'})
             ssn.params.update({'X-Plex-Token': PLEXTOKEN})
-            machineID = ssn.get('{0}/'.format(plexBaseURL)).json()['MediaContainer']['machineIdentifier']
+            try:
+                machineID = ssn.get('{0}/'.format(plexBaseURL)).json()['MediaContainer']['machineIdentifier']
+            except Exception as e:
+                log('UTILS :: Error getting Machine ID: %s', e)
+            finally:
+                log('UTILS :: {0:<29} {1}'.format('Machine ID{0}', machineID))
 
             for idx, entry in enumerate(sorted(collectionsDict.keys()), start=1):
                 myDictionary = collectionsDict.get(entry)
@@ -7149,10 +7154,10 @@ def setupStartVariables():
         NOTSTACKED_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'Stacked-No.png')
         NOTSTACKED_POSTER = NOTSTACKED_POSTER if os.path.exists(NOTSTACKED_POSTER) else ''
 
-        NOCAST_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'NoCast.png')
+        NOCAST_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'NoCastPhoto.png')
         NOCAST_POSTER = NOCAST_POSTER if os.path.exists(NOCAST_POSTER) else ''
 
-        NODIRECTOR_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'NoDirector.png')
+        NODIRECTOR_POSTER = os.path.join(PGMA_SYSTEMFOLDER, 'NoDirectorPhoto.png')
         NODIRECTOR_POSTER = NODIRECTOR_POSTER if os.path.exists(NODIRECTOR_POSTER) else ''
 
         WATERMARK = String.URLEncode(WATERMARK)

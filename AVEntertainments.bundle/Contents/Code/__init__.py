@@ -51,7 +51,7 @@ import utils
 def Start():
     ''' initialise process '''
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36'
+    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.41'
 
     utils.setupStartVariables()
     ValidatePrefs()
@@ -204,7 +204,7 @@ class AVEntertainments(Agent.Movies):
                     utils.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
                     vReleaseDate = FILMDICT['CompareDate']
 
-                # Access Site URL for Studio and Release Date information
+                # Access Site URL for Studio
                 utils.log(LOG_BIGLINE)
                 try:
                     utils.log('SEARCH:: {0:<29} {1}'.format('Reading Site URL page', filmURL))
