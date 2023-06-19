@@ -1107,6 +1107,20 @@ def get_related_files(video_file, file_extension):
 
 MOVIE_NAME_REGEX = re.compile(r' \(.*\)')
 
+def path_split_all(path):
+    allparts = []
+    while 1:
+        parts = os.path.split(path)
+        if parts[0] == path:  # sentinel for absolute paths
+            allparts.insert(0, parts[0])
+            break
+        elif parts[1] == path: # sentinel for relative paths
+            allparts.insert(0, parts[1])
+            break
+        else:
+            path = parts[0]
+            allparts.insert(0, parts[1])
+    return allparts
 
 def get_movie_name_from_folder(folder_path, with_year):
     """
@@ -1117,7 +1131,7 @@ def get_movie_name_from_folder(folder_path, with_year):
     :return:
     """
     # Split the folder into a list of paths
-    folder_split = os.path.normpath(folder_path).split(os.sep)
+    folder_split = path_split_all(os.path.normpath(folder_path))
 
     if folder_split[-1] == 'VIDEO_TS':  # If the folder is from a DVD
         # Strip the VIDEO_TS folder
