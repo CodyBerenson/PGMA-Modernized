@@ -1,0 +1,11 @@
+README.md
+setup.cfg
+setup.py
+random_user_agent/__init__.py
+random_user_agent/params.py
+random_user_agent/user_agent.py
+random_user_agent.egg-info/PKG-INFO
+random_user_agent.egg-info/SOURCES.txt
+random_user_agent.egg-info/dependency_links.txt
+random_user_agent.egg-info/top_level.txt
+random_user_agent/data/user_agents.zip

@@ -21,20 +21,23 @@
     27 Apr 2023     2019.01.18.36   Corrections to Matching Film entries with apostrophes, cast retrieval from tags
     03 May 2023     2019.01.18.37   Corrections to Matching Film entries added typs of hyphens
     12 Jun 2023     2019.01.18.38   Corrections to Matching Film entries with 's in title
+    20 Jun 2023     2019.01.18.39   Formatting for error messages updated
+    25 Jun 2023     2019.01.18.40   Updated to use new utils.py - AGENTDICT
+    01 Jul 2023     2019.01.18.41   Updated to use new utils.py
+
 ---------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.38'
+VERSION_NO = '2020.01.18.41'
 AGENT = 'Fagalicious'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
 # URLS
 BASE_URL = 'https://fagalicious.com'
 BASE_SEARCH_URL = BASE_URL + '/search/{0}'
-WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Date Format used by website
 DATEFORMAT = '%B %d, %Y'
@@ -42,16 +45,11 @@ DATEFORMAT = '%B %d, %Y'
 # Website Language
 SITE_LANGUAGE = 'en'
 
-# Preferences
-MATCHSITEDURATION = ''
-
-# dictionaries & Set for holding film variables, genres and countries
-FILMDICT = {}
-
 # utils.log section separators
 LOG_BIGLINE = '-' * 140
 LOG_SUBLINE = '      ' + '-' * 100
 LOG_ASTLINE = '*' * 140
+
 # ----------------------------------------------------------------------------------------------------------------------------------
 # imports placed here to use previously declared variables
 import utils
@@ -60,14 +58,7 @@ import utils
 def Start():
     ''' initialise process '''
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.41'
-    utils.setupStartVariables()
-    ValidatePrefs()
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-def ValidatePrefs():
-    ''' Validate Changed Preferences '''
-    pass
+    HTTP.Headers['User-Agent'] = utils.getUserAgent()
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 class Fagalicious(Agent.Movies):
@@ -117,16 +108,16 @@ class Fagalicious(Agent.Movies):
         # string can not be longer than 20 characters
         myString = ' '.join(myString.split())   # remove continous white space
         utils.log('AGENT :: {0:<29} {1}'.format('Search Query', myString))
-        if len(myString) > 29:
-            lastSpace = myString[:30].rfind(' ')
+        if len(myString) > 19:
+            lastSpace = myString[:20].rfind(' ')
             myString = myString[:lastSpace]
-            utils.log('AGENT :: {0:<29} {1}'.format('Shortened Search Query [Length]', '{0}: "{1} <= 30"'.format(myString[:lastSpace], lastSpace)))
+            utils.log('AGENT :: {0:<29} {1}'.format('Shortened Search Query [Length]', '{0}: "{1} <= 20"'.format(myString[:lastSpace], lastSpace)))
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())
 
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string
-        myString = myString.replace('%25', '%').replace('*', '')
+        myString = myString.replace('%25', '%').replace('*', '').replace('%2A', '+')
 
         utils.log('AGENT :: {0:<29} {1}'.format('Returned Search Query', myString))
         utils.log(LOG_BIGLINE)
@@ -151,17 +142,24 @@ class Fagalicious(Agent.Movies):
             utils.log(LOG_ASTLINE)
             return
 
-        utils.logHeader('SEARCH', media, lang)
+        AGENTDICT = copy.deepcopy(utils.setupAgentVariables(media))
+        if not AGENTDICT:
+            utils.log(LOG_ASTLINE)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Erro: Could Not Set Agent Parameters', 'QUIT'))
+            utils.log(LOG_ASTLINE)
+            return
+
+        utils.logHeader('SEARCH', AGENTDICT, media, lang)
 
         # Check filename format
         try:
-            FILMDICT = copy.deepcopy(utils.matchFilename(media))
+            FILMDICT = copy.deepcopy(utils.matchFilename(AGENTDICT, media))
             FILMDICT['lang'] = lang
             FILMDICT['Agent'] = AGENT
             FILMDICT['Status'] = False
         except Exception as e:
             utils.log(LOG_ASTLINE)
-            utils.log('SEARCH:: Error: %s', e)
+            utils.log('SEARCH:: Error: {0}'.format(e))
             utils.log(LOG_ASTLINE)
             return
 
@@ -196,7 +194,7 @@ class Fagalicious(Agent.Movies):
                     morePages = False
 
             except Exception as e:
-                utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+                utils.log('SEARCH:: Error: Search Query did not pull any results: {0}'.format(e))
                 break
 
             filmsFound = len(filmsList)
@@ -214,7 +212,7 @@ class Fagalicious(Agent.Movies):
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Entry', filmEntry))
                     filmStudio, filmTitle = filmEntry.split(': ', 1)
                 except Exception as e:
-                    utils.log('SEARCH:: Error getting Site Entry: %s', e)
+                    utils.log('SEARCH:: Error getting Site Entry: {0}'.format(e))
                     utils.log(LOG_SUBLINE)
                     continue
 
@@ -223,17 +221,7 @@ class Fagalicious(Agent.Movies):
                 try:
                     utils.matchTitle(filmTitle, FILMDICT)
                 except Exception as e:
-                    utils.log('SEARCH:: Error getting Site Title: %s', e)
-                    utils.log(LOG_SUBLINE)
-                    continue
-
-                # Studio Name
-                utils.log(LOG_BIGLINE)
-                try:
-                    filmStudio = filmStudio.strip()
-                    utils.matchStudio(filmStudio, FILMDICT)
-                except Exception as e:
-                    utils.log('SEARCH:: Error getting Site Studio: %s', e)
+                    utils.log('SEARCH:: Error getting Site Title: {0}'.format(e))
                     utils.log(LOG_SUBLINE)
                     continue
 
@@ -245,7 +233,17 @@ class Fagalicious(Agent.Movies):
                     FILMDICT['FilmURL'] = filmURL
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Title URL', filmURL))
                 except Exception as e:
-                    utils.log('SEARCH:: Error getting Site Title Url: %s', e)
+                    utils.log('SEARCH:: Error getting Site Title URL: {0}'.format(e))
+                    utils.log(LOG_SUBLINE)
+                    continue
+
+                # Studio Name
+                utils.log(LOG_BIGLINE)
+                try:
+                    filmStudio = filmStudio.strip()
+                    utils.matchStudio(filmStudio, FILMDICT)
+                except Exception as e:
+                    utils.log('SEARCH:: Error getting Site Studio: {0}'.format(e))
                     utils.log(LOG_SUBLINE)
                     continue
 
@@ -260,7 +258,7 @@ class Fagalicious(Agent.Movies):
                         utils.matchReleaseDate(releaseDate, FILMDICT)
                         vReleaseDate = releaseDate
                     except Exception as e:
-                        utils.log('SEARCH:: Error getting Site URL Release Date: %s', e)
+                        utils.log('SEARCH:: Error getting Site URL Release Date: {0}'.format(e))
                         if FILMDICT['Year']:
                             utils.log(LOG_SUBLINE)
                             continue
@@ -288,73 +286,4 @@ class Fagalicious(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
-        utils.logHeader('UPDATE', media, lang)
-
-        utils.log('UPDATE:: Convert Date Time & Set Objects:')
-        FILMDICT = json.loads(metadata.id, object_hook=utils.jsonLoader)
-        utils.log(LOG_BIGLINE)
-
-        utils.printFilmInformation(FILMDICT)
-
-        FILMDICT['Status'] = True
-
-        # use general routine to get Metadata
-        utils.log(LOG_BIGLINE)
-        try:
-            utils.log('SEARCH:: Access Site URL Link:')
-            fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=utils.delay())
-            FILMDICT['FilmHTML'] = fhtml
-            FILMDICT[AGENT] = utils.getSiteInfo(AGENT, FILMDICT, kwCompilation=FILMDICT['vCompilation'], kwReleaseDate=FILMDICT['vReleaseDate'], kwDuration=FILMDICT['vDuration'])
-
-        except Exception as e:
-            utils.log('SEARCH:: Error Accessing Site URL page: %s', e)
-            FILMDICT['Status'] = False
-
-        # we should have a match on studio, title and year now. Find corresponding film on IAFD
-        utils.log(LOG_BIGLINE)
-        try:
-            utils.log(LOG_BIGLINE)
-            utils.log('SEARCH:: Check for Film on IAFD:')
-            utils.getFilmOnIAFD(FILMDICT)
-
-        except:
-            pass
-
-        # update the metadata
-        utils.log(LOG_BIGLINE)
-        if FILMDICT['Status'] is True:
-            utils.log(LOG_BIGLINE)
-            '''
-            The following bits of metadata need to be established and used to update the movie on plex
-            1.  Metadata that is set by Agent as default
-                a. id.                 : Plex media id setting
-                b. Studio              : From studio group of filename - no need to process this as above
-                c. Title               : From title group of filename - no need to process this as is used to find it on website
-                d. Tag line            : Corresponds to the url of film
-                e. Originally Available: set from metadata.id (search result)
-                f. Content Rating      : Always X
-                g. Content Rating Age  : Always 18
-
-            2.  Metadata retrieved from website
-                a. Originally Availiable Date
-                b. Ratings
-                c. Genres                           : List of Genres (alphabetic order)
-                d. Countries
-                e. Cast                             : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
-                f. Directors                        : List of Directors (alphabetic order)
-                g. Collections                      : retrieved from FILMDICT, Genres, Countries, Cast Directors
-                h. Posters
-                i. Art (Background)
-                j. Reviews
-                k. Chapters
-                l. Summary
-            '''
-            utils.setMetadata(metadata, media, FILMDICT)
-
-        # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
-        if FILMDICT['Status'] is False:
-            metadata.originally_available_at = None
-            metadata.year = 0
-
-        utils.logFooter('UPDATE', FILMDICT)
-        return FILMDICT['Status']
+        return utils.updateMetadata(metadata, media, lang, force=True)

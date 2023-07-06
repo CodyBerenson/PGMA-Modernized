@@ -19,13 +19,15 @@
                                     changed search url string so that alternate studio names (lines) are retrieved
     23 Feb 2023     2019.12.25.43   Cater for titles that did not have a year provided and no external websites year of production
     15 Apr 2023     2019.12.25.44   Dealt with ² in titles as can not be included in search strings   
+    02 Jul 2023     2019.12.25.45   Dealt with 's, 't to improve on search strings
+                                    Updated to use new utils.py
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.44'
+VERSION_NO = '2019.12.25.45'
 AGENT = 'GEVI'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -59,7 +61,7 @@ import utils
 def Start():
     ''' initialise process '''
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.5112.102 Safari/537.36 Edg/104.0.1293.63'
+    HTTP.Headers['User-Agent'] = utils.getUserAgent()
     HTTP.Headers['Referer'] = 'https://gayeroticvideoindex.com/search'
 
     utils.setupStartVariables()
@@ -89,7 +91,7 @@ class GEVI(Agent.Movies):
         myString = myString.lower().strip()
 
         # replace &, and with space, ~ with /
-        myString = myString.replace(' & ', ' ').replace(' and ', ' ')
+        myString = myString.replace(' & ', ' ').replace(' and ', ' ').replace("'s ", ' ').replace("'t ", ' ')
         utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Replaced ampersands & " and " with ', 'Space')))
 
         # replace following with null
@@ -117,7 +119,7 @@ class GEVI(Agent.Movies):
         myString = String.URLEncode(myString.strip())
 
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string
-        myString = myString.replace('%25', '%').replace('*', '')
+        myString = myString.replace('%25', '%').replace('*', '').replace('%2A', '+')
 
         utils.log('AGENT :: {0:<29} {1}'.format('Returned Search Query', myString))
         utils.log(LOG_BIGLINE)
@@ -142,17 +144,24 @@ class GEVI(Agent.Movies):
             utils.log(LOG_ASTLINE)
             return
 
-        utils.logHeader('SEARCH', media, lang)
+        AGENTDICT = copy.deepcopy(utils.setupAgentVariables(media))
+        if not AGENTDICT:
+            utils.log(LOG_ASTLINE)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Erro: Could Not Set Agent Parameters', 'QUIT'))
+            utils.log(LOG_ASTLINE)
+            return
+
+        utils.logHeader('SEARCH', AGENTDICT, media, lang)
 
         # Check filename format
         try:
-            FILMDICT = copy.deepcopy(utils.matchFilename(media))
+            FILMDICT = copy.deepcopy(utils.matchFilename(AGENTDICT, media))
             FILMDICT['lang'] = lang
             FILMDICT['Agent'] = AGENT
             FILMDICT['Status'] = False
         except Exception as e:
             utils.log(LOG_ASTLINE)
-            utils.log('SEARCH:: Error: %s', e)
+            utils.log('SEARCH:: Error: {0}'.format(e))
             utils.log(LOG_ASTLINE)
             return
 
@@ -180,12 +189,12 @@ class GEVI(Agent.Movies):
 
                 searchQuery = BASE_SEARCH_URL.format(startRecord, searchTitle, searchType)
                 startRecord = pageNumber * 100       # JSon retrieves 100 records at a time
-                utils.log('SEARCH:: Search Query: %s', searchQuery)
+                utils.log('SEARCH:: Search Query: {0}'.format(searchQuery))
                 try:
                     JSon = JSON.ObjectFromURL(searchQuery, timeout=20, sleep=utils.delay())
-                    utils.log('SEARCH:: JSON: %s', JSon)
+                    utils.log('SEARCH:: JSON: {0}'.format(JSon))
                     filmsList = JSon.get('data', '')
-                    utils.log('SEARCH:: Film List: %s', filmsList)
+                    utils.log('SEARCH:: Film List: {0}'.format(filmsList))
                     if not filmsList:
                         raise Exception('< No Film Titles! >')   # out of WHILE loop
 
@@ -194,7 +203,7 @@ class GEVI(Agent.Movies):
                     if morePages is False:
                         utils.log('SEARCH:: No More Pages Found')
                 except Exception as e:
-                    utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+                    utils.log('SEARCH:: Error: Search Query did not pull any results: {0}'.format(e))
                     break
 
                 utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2} - Search String: {2}'.format(filmsFound, pageNumber, searchTitle)))
@@ -223,7 +232,7 @@ class GEVI(Agent.Movies):
                             raise Exception("< Film Entry [{0}] not in the expected format: <a href='url'>Film Title<a/>! >".format(film[0]))
                         groups = matched.groupdict()
                     except Exception as e:
-                        utils.log('SEARCH:: Error getting Site Entry: %s', e)
+                        utils.log('SEARCH:: Error getting Site Entry: {0}'.format(e))
                         utils.log(LOG_SUBLINE)
                         continue
 
@@ -238,7 +247,7 @@ class GEVI(Agent.Movies):
 
                         utils.matchTitle(filmTitle, FILMDICT)
                     except Exception as e:
-                        utils.log('SEARCH:: Error getting Site Title: %s', e)
+                        utils.log('SEARCH:: Error getting Site Title: {0}'.format(e))
                         utils.log(LOG_SUBLINE)
                         continue
 
@@ -250,7 +259,7 @@ class GEVI(Agent.Movies):
                         FILMDICT['FilmURL'] = filmURL
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site Title URL', filmURL))
                     except Exception as e:
-                        utils.log('SEARCH:: Error getting Site Title Url: %s', e)
+                        utils.log('SEARCH:: Error getting Site Title Url: {0}'.format(e))
                         utils.log(LOG_SUBLINE)
                         continue
 
@@ -273,7 +282,7 @@ class GEVI(Agent.Movies):
                         fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=utils.delay())
                         FILMDICT['FilmHTML'] = fhtml
                     except Exception as e:
-                        utils.log('SEARCH:: Error reading Site URL page: %s', e)
+                        utils.log('SEARCH:: Error reading Site URL page: {0}'.format(e))
                         utils.log(LOG_SUBLINE)
                         continue
 
@@ -295,7 +304,7 @@ class GEVI(Agent.Movies):
                                 utils.matchStudio(siteStudio, FILMDICT)
                                 foundStudio = True
                             except Exception as e:
-                                utils.log('SEARCH:: Error: %s', e)
+                                utils.log('SEARCH:: Warning: {0}'.format(e))
                                 utils.log(LOG_SUBLINE)
                                 continue
                             if foundStudio:
@@ -307,7 +316,7 @@ class GEVI(Agent.Movies):
                             continue
 
                     except Exception as e:
-                        utils.log('SEARCH:: Error getting Site Studio: %s', e)
+                        utils.log('SEARCH:: Error getting Site Studio: {0}'.format(e))
                         utils.log(LOG_SUBLINE)
                         continue
 
@@ -355,10 +364,10 @@ class GEVI(Agent.Movies):
                                 vReleaseDate = releaseDate
                                 break
                             except Exception as e:
-                                utils.log('SEARCH:: Error matching Site URL Release Date: %s', e)
+                                utils.log('SEARCH:: Error matching Site URL Release Date: {0}'.format(e))
 
                     except Exception as e:
-                        utils.log('SEARCH:: Error getting Site URL Release Date: %s - Default to Filename Date: %s', e, vReleaseDate)
+                        utils.log('SEARCH:: Error getting Site URL Release Date: {0} - Default to Filename Date: {1}'.format(e, vReleaseDate))
 
                     else:
                         if FILMDICT['Year'] and not releaseDateMatch:
@@ -382,16 +391,16 @@ class GEVI(Agent.Movies):
                             try:
                                 duration = datetime.fromtimestamp(item)
                                 utils.log('SEARCH:: {0:<29} {1}'.format('Selected Duration', duration))
-                                utils.matchDuration(duration, FILMDICT)
+                                utils.matchDuration(duration, AGENTDICT, FILMDICT)
                                 durationMatch = True
                                 vDuration = duration
                                 break
 
                             except Exception as e:
-                                utils.log('SEARCH:: Error Matching Duration: %s', e)
+                                utils.log('SEARCH:: Error Matching Duration: {0}'.format(e))
 
                     except Exception as e:
-                        utils.log('SEARCH:: Error getting Site Film Duration: %s', e)
+                        utils.log('SEARCH:: Error getting Site Film Duration: {0}'.format(e))
 
                     if not durationMatch and MATCHSITEDURATION:
                         utils.log(LOG_SUBLINE)
@@ -430,7 +439,7 @@ class GEVI(Agent.Movies):
                                 break       # external info retrieved
 
                     except Exception as e:
-                        utils.log('SEARCH:: No External Links Recorded: %s', e)
+                        utils.log('SEARCH:: No External Links Recorded: {0}'.format(e))
 
                     FILMDICT['vCompilation'] = vCompilation
                     FILMDICT['vDuration'] = vDuration
@@ -454,73 +463,4 @@ class GEVI(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
-        utils.logHeader('UPDATE', media, lang)
-
-        utils.log('UPDATE:: Convert Date Time & Set Objects:')
-        FILMDICT = json.loads(metadata.id, object_hook=utils.jsonLoader)
-        utils.log(LOG_BIGLINE)
-
-        utils.printFilmInformation(FILMDICT)
-
-        FILMDICT['Status'] = True
-
-        # use general routine to get Metadata
-        utils.log(LOG_BIGLINE)
-        try:
-            utils.log('SEARCH:: Access Site URL Link:')
-            fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=utils.delay())
-            FILMDICT['FilmHTML'] = fhtml
-            FILMDICT[AGENT] = utils.getSiteInfo(AGENT, FILMDICT, kwCompilation=FILMDICT['vCompilation'], kwReleaseDate=FILMDICT['vReleaseDate'], kwDuration=FILMDICT['vDuration'])
-
-        except Exception as e:
-            utils.log('SEARCH:: Error Accessing Site URL page: %s', e)
-            FILMDICT['Status'] = False
-
-        # we should have a match on studio, title and year now. Find corresponding film on IAFD
-        utils.log(LOG_BIGLINE)
-        try:
-            utils.log(LOG_BIGLINE)
-            utils.log('SEARCH:: Check for Film on IAFD:')
-            utils.getFilmOnIAFD(FILMDICT)
-
-        except:
-            pass
-
-        # update the metadata
-        utils.log(LOG_BIGLINE)
-        if FILMDICT['Status'] is True:
-            utils.log(LOG_BIGLINE)
-            '''
-            The following bits of metadata need to be established and used to update the movie on plex
-            1.  Metadata that is set by Agent as default
-                a. id.                 : Plex media id setting
-                b. Studio              : From studio group of filename - no need to process this as above
-                c. Title               : From title group of filename - no need to process this as is used to find it on website
-                d. Tag line            : Corresponds to the url of film
-                e. Originally Available: set from metadata.id (search result)
-                f. Content Rating      : Always X
-                g. Content Rating Age  : Always 18
-
-            2.  Metadata retrieved from website
-                a. Originally Availiable Date
-                b. Ratings
-                c. Genres                           : List of Genres (alphabetic order)
-                d. Countries
-                e. Cast                             : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
-                f. Directors                        : List of Directors (alphabetic order)
-                g. Collections                      : retrieved from FILMDICT, Genres, Countries, Cast Directors
-                h. Posters
-                i. Art (Background)
-                j. Reviews
-                k. Chapters
-                l. Summary
-            '''
-            utils.setMetadata(metadata, media, FILMDICT)
-
-        # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
-        if FILMDICT['Status'] is False:
-            metadata.originally_available_at = None
-            metadata.year = 0
-
-        utils.logFooter('UPDATE', FILMDICT)
-        return FILMDICT['Status']
+        return utils.updateMetadata(metadata, media, lang, force=True)
