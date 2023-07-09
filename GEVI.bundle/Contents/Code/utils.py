@@ -83,6 +83,8 @@ General Functions found in all agents
                     Detection of Gevi Scene No. in filename will stop processing in all other scrapers.
     25 Jun 2023     Correction to setting Cast
     01 Jul 2023     Waybig - change to xpath for retrieving images
+    07 Jul 2023     GEVI/GEVIScenes - website design change - new xpath strings needed
+                    Upgraded Warning Logs - to show file, function and line info
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, copy, inspect, json, os, platform, plistlib, random, re, requests, subprocess, sys, time
@@ -93,14 +95,14 @@ from PIL import Image
 from textwrap import wrap
 from unidecode import unidecode
 
-
-# IAFD Related variables
-UTILS_UPDATE = '23 May 2023'
+# Variables
+UTILS_UPDATE = '07 Jul 2023'
 IAFD_BASE = 'https://www.iafd.com'
 IAFD_SEARCH_URL = IAFD_BASE + '/ramesearch.asp?searchtype=comprehensive&searchstring={0}'
 IAFD_FILTER = '&FirstYear={0}&LastYear={1}&Submit=Filter'
 DEGREE = u'\U000000B0'             # Degree Symbol
 WRONG_TICK = u'\U0000274C'         # red cross mark - not on IAFD
+WARNING_TICK = u'\U000026A0'       # Exclamation in Triangle
 RIGHT_TICK = u'\U00002705'         # heavy white tick on green - on IAFD
 ERR403_TICK = u'\U00002754'        # White question mark - for IAFD 403 error
 BISEXUAL = u'\U000026A5'           # ⚥ - bisexual films
@@ -111,7 +113,6 @@ NOBREAK_SPACE = u'\U000000A0'      # Non Breaking Space
 EN_SPACE = u'\U00002002'           # Non Breaking Space
 THIN_SPACE = u'\U00002009'         # Thin Space (Non-Breaking)
 MONTHS = {1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May', 6: 'June', 7: 'July', 8: 'August', 9: 'September', 10: 'October', 11: 'November', 12: 'December'}
-
 START_SCRAPE = 'Yes'
 
 # Plex System Variables/Methods
@@ -296,7 +297,8 @@ def getFilmImages(imageType, imageLocation, whRatio, sceneAgent, thumborAddress,
                             log('UTILS :: {0:<29} {1}'.format('Script - Crop Image', imageLocation))
                             log('UTILS :: {0:<29} {1}'.format('Command Line', cmd))
                             log('UTILS :: {0:<29} {1}'.format('Desired Dimensions', '{0} x {1}'.format(desiredWidth, desiredHeight)))
-                            subprocess.call(cmd)
+                            myProcess = subprocess.call(cmd)
+                            del myProcess
                             time.sleep(2)
                             imageContent = PlexLoadFile(imageLocation)
                         except Exception as e:
@@ -341,7 +343,7 @@ def getFilmOnIAFD(AGENTDICT, FILMDICT):
 
             except Exception as e:
                 matchedTitle = False
-                log('UTILS :: Error getting IAFD Site Title, Try AKA Title: {0}'.format(e))
+                log('UTILS :: Warning: Getting IAFD Site Title, Try AKA Title: {0}'.format(e))
 
             try:
                 filmAKA = film.xpath('./td[4]/text()')[0].strip()
@@ -352,7 +354,7 @@ def getFilmOnIAFD(AGENTDICT, FILMDICT):
                     matchTitle(filmAKA, FILMDICT)
                 FILMDICT['FilmAKA'] = filmAKA
             except Exception as e:
-                log('UTILS :: Error getting IAFD Site AKA Title: {0}'.format(e))
+                log('UTILS :: Warning: Getting IAFD Site AKA Title: {0}'.format(e))
                 if not matchedTitle:
                     log(LOG_SUBLINE)
                     continue
@@ -511,7 +513,7 @@ def getFilmOnIAFD(AGENTDICT, FILMDICT):
                     continue
 
             except Exception as e:
-                log('UTILS :: Error getting Site URL Release Dates: {0}'.format(e))
+                log('UTILS :: Warning: Getting Site URL Release Dates: {0}'.format(e))
                 if FILMDICT['Year']:                     # year in filename title so use release date as filter
                     log(LOG_SUBLINE)
                     continue
@@ -525,9 +527,11 @@ def getFilmOnIAFD(AGENTDICT, FILMDICT):
                 matchDuration(duration, AGENTDICT, FILMDICT)
                 vDuration = duration
                 FILMDICT['IAFDDuration'] = duration
+
             except ValueError as e:
-                log('UTILS :: Error: IAFD Duration Not Numeric: Set Duration to File Length and Continue: {0}'.format(e))
+                log('UTILS :: Warning: IAFD Duration Not Numeric: Set Duration to File Length and Continue: {0}'.format(e))
                 FILMDICT['IAFDDuration'] = FILMDICT['Duration']
+
             except Exception as e:
                 if AGENTDICT['prefMATCHIAFDDURATION']:           # if preference selected go to next
                     log('UTILS :: Error: getting IAFD Duration: {0}'.format(e))
@@ -573,7 +577,7 @@ def getFilmOnIAFD(AGENTDICT, FILMDICT):
         agentName = u'\u2003{0}\u2003::'.format(FILMDICT['Agent'])
         presentOnIAFD = IAFD_ThumbsUp if FILMDICT['FoundOnIAFD'] == 'Yes' else IAFD_ThumbsDown
         stackedStatus = IAFD_Stacked if FILMDICT['Stacked'] == 'Yes' else ''
-        FILMDICT['Legend'] = u'::\u2003Film on IAFD {0}\u2003::\u2003Actor on IAFD Cast List? {1} Yes / {2} No / {3} ERR 403\u2003::{4}{5}'.format(presentOnIAFD, WRONG_TICK, RIGHT_TICK, ERR403_TICK, stackedStatus, agentName)
+        FILMDICT['Legend'] = u'::\u2003Film on IAFD {0}\u2003::\u2003Actor on IAFD? {1} Yes / {2} No / {3} Err403\u2003::{4}{5}'.format(presentOnIAFD, RIGHT_TICK, WRONG_TICK, ERR403_TICK, stackedStatus, agentName)
 
     return FILMDICT
 
@@ -871,7 +875,7 @@ def getRecordedCast(AGENTDICT, html):
     filmCast = {}
     try:
         castList = html.xpath('//div[@class[contains(.,"castbox")]]/p')
-        log('UTILS :: {0:<29} {1:>2}'.format('Cast on IAFD', '{0} - {1}'.format(len(castList), castList)))
+        log('UTILS :: {0:<29} {1:>2}'.format('Cast on IAFD', len(castList)))
         log(LOG_SUBLINE)
         for cast in castList:
             castName = cast.xpath('./a/text()[normalize-space()]')[0].strip()
@@ -901,7 +905,7 @@ def getRecordedCast(AGENTDICT, html):
             # get cast biography and filmography etc
             castURL = IAFD_BASE + cast.xpath('./a/@href')[0].strip()
             try:
-                castDetails = copy.deepcopy(getIAFDArtist(AGENTDICT, castURL))
+                castDetails = getIAFDArtist(AGENTDICT, castURL)
             except:
                 castDetails = {}
                 castRole = ERR403_TICK          # indicate error accessing iafd
@@ -945,14 +949,14 @@ def getRecordedDirectors(AGENTDICT, html):
     filmDirectors = {}
     try:
         directorList = html.xpath('//p[@class="bioheading" and text()="Directors"]//following-sibling::p[1]/a')
-        log('UTILS :: {0:<29} {1:>2}'.format('Directors on IAFD', '{0} - {1}'.format(len(directorList), directorList)))
+        log('UTILS :: {0:<29} {1:>2}'.format('Directors on IAFD', len(directorList)))
         log(LOG_SUBLINE)
         for director in directorList:
             directorName = director.xpath('./text()')[0]
             directorURL = director.xpath('./@href')[0]
 
             # get director biography and filmography etc
-            directorDetails = copy.deepcopy(getIAFDArtist(AGENTDICT, directorURL))
+            directorDetails = getIAFDArtist(AGENTDICT, directorURL)
             directorAwards = directorDetails['Awards']
             directorBio = directorDetails['Bio']
             directorFilms = directorDetails['Films']
@@ -1192,7 +1196,7 @@ def getSiteInfoAdultFilmDatabase(AGENTDICT, FILMDICT, **kwargs):
                 siteInfoDict['Duration'] = datetime.fromtimestamp(0)
                 log('UTILS :: Error getting Site Film Duration: {0}'.format(e))
         else:
-            siteInfoDict['Duration'] = siteInfoDict['Duration'] = kwDuration
+            siteInfoDict['Duration'] = kwDuration
 
         #   8.  Poster and Art URLs
         kwBaseURL = kwargs.get('kwBaseURL')
@@ -1389,7 +1393,7 @@ def getSiteInfoAEBN(AGENTDICT, FILMDICT, **kwargs):
                 siteInfoDict['Duration'] = datetime.fromtimestamp(0)
                 log('UTILS :: Error getting Site Film Duration: {0}'.format(e))
         else:
-            siteInfoDict['Duration'] = siteInfoDict['Duration'] = kwDuration
+            siteInfoDict['Duration'] = kwDuration
 
         #   8.  Poster and Art URLs
         log(LOG_SUBLINE)
@@ -2496,7 +2500,7 @@ def getSiteInfoGayEmpire(AGENTDICT, FILMDICT, **kwargs):
                 siteInfoDict['Duration'] = datetime.fromtimestamp(0)
                 log('UTILS :: Error getting Site Film Duration: {0}'.format(e))
         else:
-            siteInfoDict['Duration'] = siteInfoDict['Duration'] = kwDuration
+            siteInfoDict['Duration'] = kwDuration
 
         #   8.  Poster and Art URLs
         log(LOG_SUBLINE)
@@ -2788,7 +2792,7 @@ def getSiteInfoGayHotMovies(AGENTDICT, FILMDICT, **kwargs):
                 siteInfoDict['Duration'] = datetime.fromtimestamp(0)
                 log('UTILS :: Error getting Site Film Duration: {0}'.format(e))
         else:
-            siteInfoDict['Duration'] = siteInfoDict['Duration'] = kwDuration
+            siteInfoDict['Duration'] = kwDuration
 
         #   8.  Poster and Art URLs
         #       there are 3 ways front/art images are stored on gay hot movies - end with h.jpg for front and bh.jpg for art
@@ -3265,7 +3269,7 @@ def getSiteInfoGayRado(AGENTDICT, FILMDICT, **kwargs):
                 log('UTILS :: Error getting Site Film Duration: Reset to File Name Duration {0}'.format(e))
 
         else:
-            siteInfoDict['Duration'] = siteInfoDict['Duration'] = kwDuration
+            siteInfoDict['Duration'] = kwDuration
 
         #   8.  Poster and Art URLs
         log(LOG_SUBLINE)
@@ -3434,7 +3438,7 @@ def getSiteInfoGEVI(AGENTDICT, FILMDICT, **kwargs):
         siteInfoDict['Synopsis'] = ' '
         synopsis = ' '
         try:
-            htmlsynopsis = html.xpath('//td[contains(text(),"promo/")]//following-sibling::td//span[@style]/text()[following::br]')
+            htmlsynopsis = html.xpath('//div[@class="text-justify wideCols-1"]/p[@class="mb-2"]/span[@style]/text()')
             synopsis = '\n'.join(htmlsynopsis).strip()
             if synopsis:
                 regex = r'View this scene at.*|found in compilation.*|see also.*|^\d+\.$'
@@ -3461,7 +3465,7 @@ def getSiteInfoGEVI(AGENTDICT, FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         try:
             # GEVI has access to external websites: AEBN, GayHotMovies, then GayEmpire
-            htmldirectors = html.xpath('//a[contains(@href, "/director/")]/text()')
+            htmldirectors = html.xpath('//a[contains(@href, "director/")]/text()')
             htmldirectors = [x.split('(')[0].strip() for x in htmldirectors if x.strip()]
             directors = list(set(htmldirectors))
             directorsLength = len(directors)
@@ -3499,7 +3503,7 @@ def getSiteInfoGEVI(AGENTDICT, FILMDICT, **kwargs):
         else:
             try:
                 # GEVI has access to external websites: AEBN, GayHotMovies, then GayEmpire
-                htmlcast = html.xpath('//a[contains(@href, "/performer/")]//text()')
+                htmlcast = html.xpath('//a[contains(@href, "performer/")]//text()')
                 htmlcast = [x.split('(')[0].strip() for x in htmlcast if x.strip()]
                 cast = list(set(htmlcast))
                 castLength = len(cast)
@@ -3538,33 +3542,33 @@ def getSiteInfoGEVI(AGENTDICT, FILMDICT, **kwargs):
         countriesSet, genresSet = synopsisCountriesGenres(AGENTDICT, siteInfoDict['Synopsis'])         # extract possible genres and countries from the synopsis
         try:
             try:
-                htmlbodytypes = html.xpath('//td[contains(text(),"body types")]//following-sibling::td[1]/text()')[0].strip()           # add GEVI body type to genres
+                htmlbodytypes = html.xpath('//div[.="Body Type:"]/following-sibling::div/div/text()')[0].strip()           # add GEVI body type to genres
                 htmlbodytypes = htmlbodytypes.replace(';', ',')
                 htmlbodytypes = [x.strip() for x in htmlbodytypes.split(',') if x.strip()]
                 log('UTILS :: {0:<29} {1}'.format('Body Types', '{0:>2} - {1}'.format(len(htmlbodytypes), htmlbodytypes)))
 
             except Exception as e:
                 htmlbodytypes = []
-                log('UTILS :: Error getting Body Types: {0}'.format(e))
+                log('UTILS :: Warning: No Body Types: {0}'.format(e))
 
             try:
-                htmlcategories = html.xpath('//td[contains(text(),"category")]//following-sibling::td[1]/text()')[0].strip()            # add GEVI categories to genres
+                htmlcategories = html.xpath('//div[.="Category:"]/following-sibling::div/div/text()')[0].strip()            # add GEVI categories to genres
                 htmlcategories = [x.strip() for x in htmlcategories.split(',') if x.strip()]
                 log('UTILS :: {0:<29} {1}'.format('Categories', '{0:>2} - {1}'.format(len(htmlcategories), htmlcategories)))
 
             except Exception as e:
                 htmlcategories = []
-                log('UTILS :: Error getting Categories: {0}'.format(e))
+                log('UTILS :: Warning: No Categories: {0}'.format(e))
 
             try:
-                htmltypes = html.xpath('//td[contains(text(),"type")]//following-sibling::td[1]/text()')[0].strip()                     # add GEVI types
+                htmltypes = html.xpath('//div[.="Type:"]/following-sibling::div/div/text()')[0].strip()                     # add GEVI types
                 htmltypes = htmltypes.replace(';', ',')
                 htmltypes = [x.strip() for x in htmltypes.split(',') if x.strip()]
                 log('UTILS :: {0:<29} {1}'.format('Types', '{0:>2} - {1}'.format(len(htmltypes), htmltypes)))
 
             except Exception as e:
                 htmltypes = []
-                log('UTILS :: Error getting Types: {0}'.format(e))
+                log('UTILS :: Warning: No Types: {0}'.format(e))
 
             # GEVI has access to external websites: AEBN, GayHotMovies, GayEmpire
             for key in ['AEBN', 'GayHotMovies', 'GayEmpire']:
@@ -3604,7 +3608,7 @@ def getSiteInfoGEVI(AGENTDICT, FILMDICT, **kwargs):
 
             log('UTILS :: {0:<29} {1}'.format('External Countries', '{0:>2} - {1}'.format(len(countriesSet), sorted(countriesSet))))
 
-            htmlcountries = html.xpath('//td[text()="stats/info"]//following-sibling::td//td[text()="location"]//following-sibling::td[1]/text()')[0].strip()
+            htmlcountries = html.xpath('//div[.="Location:"]/following-sibling::div/text()')[0].strip()
             htmlcountries = [x.strip() for x in htmlcountries.split(',')]
             log('UTILS :: {0:<29} {1}'.format('GEVI Countries', '{0:>2} - {1}'.format(len(htmlcountries), htmlcountries)))
             for idx, item in enumerate(htmlcountries, start=1):
@@ -3638,9 +3642,23 @@ def getSiteInfoGEVI(AGENTDICT, FILMDICT, **kwargs):
             log(LOG_SUBLINE)
             try:
                 compareYear = datetime.now().year + 2
-                htmldate = html.xpath('//td[.="released" or .="produced"]/following-sibling::td[1]/text()[normalize-space()]')
+
+                htmlTD = html.xpath('//td/text()[normalize-space()]')         # get all table data ** dirty coing as xpath is not working
+                if 'Gay Erotic Video Index' in fhtmlTD:         # format 1 like Bring me a boy 68
+                    htmlTD = html.xpath('//td/text()[normalize-space()]')         # get all table data ** dirty coing as xpath is not working
+                    htmlIdx = [x for x in range(len(htmlTD)) if htmlTD[x] == 'released' or htmlTD[x] == 'produced']
+                    htmldate = set()
+                    [htmldate.add(htmlTD[x+1]) for x in htmlIdx]
+                else:                                           # format 2 - normal
+                    htmldate = html.xpath('//td[a[contains(@href,"company/")]]/following-sibling::td[1]/text()[normalize-space()]')
+                    try:
+                        htmldate.append(html.xpath('//div[contains(.,"Produced")]/following-sibling::div[1]/text()[normalize-space()]')[0])
+                    except Exception as e:
+                        pass
+
                 productionDates = set()
                 for item in htmldate:
+                    item = item.strip()
                     if not item or item == '?':                                                                     # format 5 & 6 - ignore if date is unknown
                         continue
                     if 'c' in item:                                                                                 # format 4
@@ -3677,22 +3695,29 @@ def getSiteInfoGEVI(AGENTDICT, FILMDICT, **kwargs):
         if kwDuration is None:
             log(LOG_SUBLINE)
             try:
-                htmlduration = html.xpath('//td[.="length"]/following-sibling::td[1]/text()[normalize-space()]')
-                durations = {datetime.fromtimestamp(int(x) * 60) for x in htmlduration if x.strip()}
+                htmlTD = html.xpath('//td/text()[normalize-space()]')                           # get all table data ** dirty coing as xpath is not working
+                durations = set()
+                if 'Gay Erotic Video Index' in htmlTD:                                          # format 1 like Bring me a boy 68
+                    htmlIdx = [x for x in range(len(htmlTD)) if htmlTD[x] == 'length']          # fhtmlTD determined in release date code above
+                    [durations.add(htmlTD[x+1]) for x in htmlIdx]
+                else:
+                    durations.add(html.xpath('//td[a[contains(@href,"company/")]]/following-sibling::td[2]/text()[normalize-space()]')[0])
+
+                durations = {datetime.fromtimestamp(int(htmlTD[x+1]) * 60) for x in durations if x.strip()}
                 siteInfoDict['Duration'] = sorted(durations)[-1] if durations else datetime.fromtimestamp(0)  # longest length or 0 time
 
             except Exception as e:
                 siteInfoDict['Duration'] = datetime.fromtimestamp(0)
                 log('UTILS :: Error getting Site Film Duration: {0}'.format(e))
         else:
-            siteInfoDict['Duration'] = siteInfoDict['Duration'] = kwDuration
+            siteInfoDict['Duration'] = kwDuration
 
         #   8.  Poster and Art URLs
         log(LOG_SUBLINE)
         try:
             # for posters - GayHotMovies comes last in priority as the other 2 have better qualty
             htmlimages = html.xpath('//img/@src[contains(.,"Covers")]')
-            htmlimages = [(BASE_URL if BASE_URL not in image else '') + image.replace('/Icons/','/') for image in htmlimages]
+            htmlimages = [(BASE_URL + '/' if BASE_URL not in image else '') + image.replace('/Icons/','/') for image in htmlimages]
             log('UTILS :: {0:<29} {1}'.format('Images', '{0:>} - {1}'.format(len(htmlimages), htmlimages)))
             images = []
             [images.append(x) for x in htmlimages if x not in images]
@@ -3808,19 +3833,12 @@ def getSiteInfoGEVI(AGENTDICT, FILMDICT, **kwargs):
         #   10.  Rating
         log(LOG_SUBLINE)
         try:
-            htmlrating = html.xpath('//td[contains(text(),"rating out of 4")]//following-sibling::td[1]/text()')
-            htmlrating = [x.strip() for x in htmlrating if '*' in x]
-            maxStars = len(htmlrating) * 4                          # maximum of 4 stars per rating type where len is number of types
-            if maxStars:
-                log('UTILS :: {0:<29} {1}'.format('Maximum Possible Stars', '{0} Stars'.format(maxStars)))
-                htmlrating = ''.join(htmlrating)
-                starCount = htmlrating.count('*') 
-                log('UTILS :: {0:<29} {1}'.format('Star Count', '{0} Stars'.format(starCount)))
-                rating = (10.0 * starCount) / maxStars                # must be a float value
-                log('UTILS :: {0:<29} {1}'.format('Film Rating', rating))
-                siteInfoDict['Rating'] = rating
-            else:
-                raise Exception('< Not Rated! >')
+            htmlrating = html.xpath('//div[.="Rating Out of 4:"]/following-sibling::div/text()')[0]
+            starCount = htmlrating.count('*') 
+            log('UTILS :: {0:<29} {1}'.format('Star Count', '{0} Stars'.format(starCount)))
+            rating = (10.0 * starCount) / 4 if starCount > 0 else 0.0   # must be a float value
+            log('UTILS :: {0:<29} {1}'.format('Film Rating', rating))
+            siteInfoDict['Rating'] = rating
         except Exception as e:
             siteInfoDict['Rating'] = 0.0
             log('UTILS :: Error getting Rating: {0}'.format(e))
@@ -3867,7 +3885,7 @@ def getSiteInfoGEVIScenes(AGENTDICT, FILMDICT, **kwargs):
             log('UTILS :: {0:<29} {1}'.format('Cast', '{0:>2} - {1}'.format(len(siteInfoDict['Cast']), siteInfoDict['Cast'])))
         else:
             try:
-                htmlcast = html.xpath('//a[contains(@href, "/performer/")]//text()')
+                htmlcast = html.xpath('//a[contains(@href, "performer/")]//text()')
                 cast = list(set(htmlcast))
                 cast.sort(key = lambda x: x.lower())
                 siteInfoDict['Cast'] = cast[:]
@@ -3888,7 +3906,7 @@ def getSiteInfoGEVIScenes(AGENTDICT, FILMDICT, **kwargs):
         compilation = 'No'
         try:
             myDict = {'A': 'Anal Sex', 'O': 'Oral Sex', 'R': 'Rimming'}
-            htmlgenres = html.xpath('//td/a[contains(@href, "/performer/")]/parent::td/following-sibling::td[@class="pd"]/text()')
+            htmlgenres = html.xpath('//td/a[contains(@href, "performer/")]/parent::td/following-sibling::td[@class="pd"]/text()')
             htmlgenres = [x.strip() for x in htmlgenres if x.strip()]
             htmlgenres.sort(key = lambda x: x.lower())
             log('UTILS :: {0:<29} {1}'.format('Genres', '{0:>2} - {1}'.format(len(htmlgenres), htmlgenres)))
@@ -3929,8 +3947,8 @@ def getSiteInfoGEVIScenes(AGENTDICT, FILMDICT, **kwargs):
         #   8.  Poster and Art URLs
         log(LOG_SUBLINE)
         try:
-            htmlimage = html.xpath('//td[@class="gc"]/img[contains(@src, ".jpg")]/@src')[0].strip()
-            htmlimage = (BASE_URL if BASE_URL not in htmlimage else '') + htmlimage
+            htmlimage = html.xpath('//img[contains(@src, "Episodes/")]/@src')[0].strip()
+            htmlimage = (BASE_URL + '/' if BASE_URL not in htmlimage else '') + htmlimage
             log('UTILS :: {0:<29} {1}'.format('Image:', htmlimage))
             poster = [htmlimage]
             art = [htmlimage]
@@ -5358,9 +5376,8 @@ def jsonLoader(dict):
 # ----------------------------------------------------------------------------------------------------------------------------------
 def log(message, *args):
     ''' log messages '''
-    if re.search('ERROR', message, re.IGNORECASE):
+    if re.search('ERROR|WARNING', message, re.IGNORECASE):
         exceptionTraceback = sys.exc_info()[2]
-        lineNo = ''
         try:
             fileName = os.path.basename(exceptionTraceback.tb_frame.f_code.co_filename)
         except:
@@ -5371,11 +5388,9 @@ def log(message, *args):
         except:
             lineNo = ''
 
-        Log.Error(AGENT + ' - {0} {1} File: {2}, Line: {3}, Function: {4} -> {5} -> {6}'.format(message[0:8], WRONG_TICK, fileName, lineNo, inspect.stack()[3][3], inspect.stack()[2][3], inspect.stack()[1][3]))
+        myTick = WRONG_TICK if re.search('ERROR', message, re.IGNORECASE) else WARNING_TICK
+        Log.Error(AGENT + ' - {0} {1} File: {2}, Line: {3}, Function: {4} -> {5} -> {6}'.format(message[0:8], myTick, fileName, lineNo, inspect.stack()[3][3], inspect.stack()[2][3], inspect.stack()[1][3]))
         Log.Error(AGENT + ' - {0}    {1}'.format(message[0:8], message[9:]))
-        
-    elif re.search('WARNING', message, re.IGNORECASE):
-        Log.Warn(AGENT + ' - ' + message, *args)
 
     else:
         Log.Info(AGENT + '  - ' + message, *args)
@@ -6065,16 +6080,16 @@ def matchFilename(AGENTDICT, media):
         filmVars['Duration'] = fileDuration
 
     # File name matching
-    REGEX = '^\((?P<fnSTUDIO>[^()]*)\) - (?P<fnTITLE>.+?)?(?: - \{(?P<fnSCENENO>\d{5,6}[LNR])\})?(?: \((?P<fnYEAR>\d{4})\))?( - \[(?P<fnCAST>[^\]]*)\])?(?: - (?i)(?P<fnSTACK>(cd|disc|disk|dvd|part|pt|scene) [1-8]))?$'
+    REGEX = '^\((?P<fnSTUDIO>[^()]*)\) - (?P<fnTITLE>.+?)?(?: - \{(?P<fnGEVISCENE>\d{5,6}[LNR])\})?(?: \((?P<fnYEAR>\d{4})\))?( - \[(?P<fnCAST>[^\]]*)\])?(?: - (?i)(?P<fnSTACK>(cd|disc|disk|dvd|part|pt|scene) [1-8]))?$'
     pattern = re.compile(REGEX)
     matched = pattern.search(filmVars['FileName'])
     if not matched:
         raise Exception('< File Name [{0}] not in the expected format: (Studio) - Title [(Year)] [- cd|disc|disk|dvd|part|pt|scene 1..8]! >'.format(filmVars['FileName']))
 
     groups = matched.groupdict()
-    if (groups['fnSCENENO'] and AGENT not in ['GEVIScenes', 'IAFD']):         # if fnSCENENO only process if GEVIScenes or IAFD
-        raise Exception('< File Name [{0}] - GEVI Scene {1} detected: Abort processing! >'.format(filmVars['FileName'], groups['fnSCENENO']))
-    elif (not groups['fnSCENENO'] and AGENT == 'GEVIScenes'):                   # if no fnSCENENO abort if GEVIScenes
+    if (groups['fnGEVISCENE'] and AGENT not in ['GEVIScenes', 'IAFD']):         # if fnGEVISCENE only process if GEVIScenes or IAFD
+        raise Exception('< File Name [{0}] - GEVI Scene {1} detected: Abort processing! >'.format(filmVars['FileName'], groups['fnGEVISCENE']))
+    elif (not groups['fnGEVISCENE'] and AGENT == 'GEVIScenes'):                   # if no fnGEVISCENE abort if GEVIScenes
         raise Exception('< File Name [{0}] - GEVI Scene undetected: Abort processing! >'.format(filmVars['FileName']))
 
     log('UTILS :: File Name REGEX Matched Variables:')
@@ -6083,8 +6098,8 @@ def matchFilename(AGENTDICT, media):
     log('UTILS :: {0:<29} {1}'.format('    Year', groups['fnYEAR']))
     log('UTILS :: {0:<29} {1}'.format('    Cast', groups['fnCAST']))
     log('UTILS :: {0:<29} {1}'.format('    Stack', groups['fnSTACK']))
-    if groups['fnSCENENO']:
-        log('UTILS :: {0:<29} {1}'.format('    Scene No.', groups['fnSCENENO']))
+    if groups['fnGEVISCENE']:
+        log('UTILS :: {0:<29} {1}'.format('    Scene No.', groups['fnGEVISCENE']))
 
     log(LOG_SUBLINE)
 
@@ -6141,9 +6156,9 @@ def matchFilename(AGENTDICT, media):
 
     # Only used by GEVIScenes Agent    
     # this will always be zero for non-gevscenes
-    filmVars['Rotation'] = 0 if not groups['fnSCENENO'] else 90 if groups['fnSCENENO'][-1] == 'R' else 270 if groups['fnSCENENO'][-1] == 'L' else 0
+    filmVars['Rotation'] = 0 if not groups['fnGEVISCENE'] else 90 if groups['fnGEVISCENE'][-1] == 'R' else 270 if groups['fnGEVISCENE'][-1] == 'L' else 0
     # remove trailing L, N or R - i.e. rotational instruction
-    filmVars['SceneNo'] = '' if not groups['fnSCENENO'] else re.sub(r'[LNR]$', '', groups['fnSCENENO'])
+    filmVars['GEVIScene'] = '' if not groups['fnGEVISCENE'] else re.sub(r'[LNR]$', '', groups['fnGEVISCENE'])
 
     # process Title
     # replace hyphens with colon-space
@@ -7207,7 +7222,9 @@ def updateMetadata(metadata, media, lang, force=True):
 
     logFooter('UPDATE', FILMDICT)
 
-    return FILMDICT['Status']
+    # free up memomory
+    AGENTDICT = None
+    FILMDICT = None
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def setupAgentVariables(media):

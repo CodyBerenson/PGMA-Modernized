@@ -21,32 +21,26 @@
     15 Apr 2023     2019.12.25.44   Dealt with ² in titles as can not be included in search strings   
     02 Jul 2023     2019.12.25.45   Dealt with 's, 't to improve on search strings
                                     Updated to use new utils.py
+    07 Jul 2023     2019.12.25.46   GEVI Website Design Change - implement new xpath
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.45'
+VERSION_NO = '2019.12.25.46'
 AGENT = 'GEVI'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
 # URLS
 BASE_URL = 'https://www.gayeroticvideoindex.com'
 BASE_SEARCH_URL = BASE_URL + '/shtt.php?draw=4&columns[0][data]=0&columns[0][name]=title&columns[0][searchable]=true&columns[0][orderable]=true&columns[0][search][value]=&columns[0][search][regex]=false&columns[1][data]=1&columns[1][name]=release&columns[1][searchable]=true&columns[1][orderable]=true&columns[1][search][value]={2}&columns[1][search][regex]=false&columns[2][data]=2&columns[2][name]=company&columns[2][searchable]=true&columns[2][orderable]=true&columns[2][search][value]=&columns[2][search][regex]=false&columns[3][data]=3&columns[3][name]=line&columns[3][searchable]=true&columns[3][orderable]=true&columns[3][search][value]=&columns[3][search][regex]=false&columns[4][data]=4&columns[4][name]=type&columns[4][searchable]=true&columns[4][orderable]=true&columns[4][search][value]=show+compilation&columns[4][search][regex]=false&columns[5][data]=5&columns[5][name]=rating&columns[5][searchable]=true&columns[5][orderable]=true&columns[5][search][value]=&columns[5][search][regex]=false&columns[6][data]=6&columns[6][name]=category&columns[6][searchable]=true&columns[6][orderable]=true&columns[6][search][value]=&columns[6][search][regex]=false&order[0][column]=0&order[0][dir]=asc&start={0}&length=100&search[value]={1}&search[regex]=false&_=1676140164112'
-WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Date Formats used by website
 DATEFORMAT = '%Y%m%d'
 
 # Website Language
 SITE_LANGUAGE = 'en'
-
-# Preferences
-MATCHSITEDURATION = ''
-
-# dictionaries & Set for holding film variables, genres and countries
-FILMDICT = {}
 
 # utils.log section separators
 LOG_BIGLINE = '-' * 140
@@ -63,8 +57,6 @@ def Start():
     HTTP.CacheTime = CACHE_1WEEK
     HTTP.Headers['User-Agent'] = utils.getUserAgent()
     HTTP.Headers['Referer'] = 'https://gayeroticvideoindex.com/search'
-
-    utils.setupStartVariables()
 
     ValidatePrefs()
 
@@ -131,7 +123,7 @@ class GEVI(Agent.Movies):
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
             utils.log(LOG_ASTLINE)
-            utils.log('SEARCH:: {0:<29} {1}'.format('Error: Missing Media Item File', 'QUIT'))
+            utils.log('SEARCH:: {0:<29} {1}'.format('Warning: Missing Media Item File', 'QUIT'))
             utils.log(LOG_ASTLINE)
             return
 
@@ -147,7 +139,7 @@ class GEVI(Agent.Movies):
         AGENTDICT = copy.deepcopy(utils.setupAgentVariables(media))
         if not AGENTDICT:
             utils.log(LOG_ASTLINE)
-            utils.log('SEARCH:: {0:<29} {1}'.format('Erro: Could Not Set Agent Parameters', 'QUIT'))
+            utils.log('SEARCH:: {0:<29} {1}'.format('Error: Could Not Set Agent Parameters', 'QUIT'))
             utils.log(LOG_ASTLINE)
             return
 
@@ -290,23 +282,27 @@ class GEVI(Agent.Movies):
                     utils.log(LOG_BIGLINE)
                     try:
                         foundStudio = False
-                        fhtmlStudio = fhtml.xpath('//a[contains(@href, "/company/")]/parent::td//text()[normalize-space()]')
+                        fhtmlStudio = fhtml.xpath('//a[contains(@href, "company/")]/text()[normalize-space()]')
                         fhtmlStudio = {x.strip() for x in fhtmlStudio if x.strip()}
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Distributor/Studio', fhtmlStudio))
                         if film[2] and film[2] is not None:             # Company Name i.e. distributor in GEVI at this possition in json retrieval
                             fhtmlStudio.add(film[2])
-                            utils.log('SEARCH:: {0:<29} {1}'.format('JSon Company', fhtmlStudio))
+                            utils.log('SEARCH:: {0:<29} {1}'.format('Add: JSon Company', fhtmlStudio))
+
                         if film[3] and film[3] is not None:             # Studios Lines in GEVI at this possition in json retrieval
                             fhtmlStudio.add(film[3])
-                            utils.log('SEARCH:: {0:<29} {1}'.format('JSon Line', fhtmlStudio))
-                        utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Distributor/Studio', fhtmlStudio))
+                            utils.log('SEARCH:: {0:<29} {1}'.format('Add: JSon Line', fhtmlStudio))
+
                         for siteStudio in fhtmlStudio:
                             try:
                                 utils.matchStudio(siteStudio, FILMDICT)
                                 foundStudio = True
+
                             except Exception as e:
                                 utils.log('SEARCH:: Warning: {0}'.format(e))
                                 utils.log(LOG_SUBLINE)
                                 continue
+
                             if foundStudio:
                                 break
 
@@ -325,16 +321,23 @@ class GEVI(Agent.Movies):
                     releaseDateMatch = False
                     vReleaseDate = FILMDICT['CompareDate']
                     try:
-                        fhtmlReleaseDate = fhtml.xpath('//td[.="released" or .="produced"]/following-sibling::td[1]/text()[normalize-space()]')
-                        fhtmlReleaseDate = {x.replace('?', '') for x in fhtmlReleaseDate if x.strip()}
-                        fhtmlReleaseDate = {x.strip() for x in fhtmlReleaseDate if x.strip()}
-                        if len(fhtmlReleaseDate) == 0:
-                            raise Exception('< No Valid Dates Found! >')
+                        fhtmlTD = fhtml.xpath('//td//text()[normalize-space()]')         # get all table data ** dirty coing as xpath is not working
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Table Cell Data', '{0:>2} - {1}'.format(len(fhtmlTD), fhtmlTD)))
+                        if 'Gay Erotic Video Index' in fhtmlTD:         # format 1 like Bring me a boy 68
+                            fhtmlIdx = [x for x in range(len(fhtmlTD)) if fhtmlTD[x] == 'released' or fhtmlTD[x] == 'produced']
+                            fhtmlReleaseDate = set()
+                            [fhtmlReleaseDate.add(fhtmlTD[x+1]) for x in fhtmlIdx]
+                        else:                                           # format 2 - normal
+                            fhtmlReleaseDate = fhtml.xpath('//td[a[contains(@href,"company/")]]/following-sibling::td[1]/text()[normalize-space()]')
+                            try:
+                                fhtmlReleaseDate.append(fhtml.xpath('//div[contains(.,"Produced")]/following-sibling::div[1]/text()[normalize-space()]')[0])
+                            except Exception as e:
+                                utils.log('SEARCH:: Warning: No Production Date Found: {0}'.format(e))
 
-                        utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Release Date(s)', '{0:>2} - {1}'.format(len(fhtmlReleaseDate), fhtmlReleaseDate)))
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Released Date', '{0:>2} - {1}'.format(len(fhtmlReleaseDate), fhtmlReleaseDate)))
                         for item in fhtmlReleaseDate:
                             item = item.strip()
-                            if not item:
+                            if '?' in item:
                                 continue
                             elif 'b' in item or 'c' in item:                                                                # format 4
                                 item = item.replace('b', '').replace('c', '')
@@ -367,7 +370,7 @@ class GEVI(Agent.Movies):
                                 utils.log('SEARCH:: Error matching Site URL Release Date: {0}'.format(e))
 
                     except Exception as e:
-                        utils.log('SEARCH:: Error getting Site URL Release Date: {0} - Default to Filename Date: {1}'.format(e, vReleaseDate))
+                        utils.log('SEARCH:: Warning: Getting Site URL Release Date: {0} - Default to Filename Date: {1}'.format(e, vReleaseDate))
 
                     else:
                         if FILMDICT['Year'] and not releaseDateMatch:
@@ -379,8 +382,13 @@ class GEVI(Agent.Movies):
                     vDuration = FILMDICT['Duration']
                     durationMatch = False
                     try:
-                        fhtmlDuration = fhtml.xpath('//td[.="length"]/following-sibling::td[1]/text()[normalize-space()]')
-                        fhtmlDuration = {x.strip() for x in fhtmlDuration if x.strip()}
+                        if 'Gay Erotic Video Index' in fhtmlTD:         # format 1 like Bring me a boy 68
+                            fhtmlIdx = [x for x in range(len(fhtmlTD)) if fhtmlTD[x] == 'length']       # fhtmlTD determined in release date code above
+                            fhtmlDuration = set()
+                            [fhtmlDuration.add(fhtmlTD[x+1]) for x in fhtmlIdx]
+                        else:
+                            fhtmlDuration = fhtml.xpath('//td[a[contains(@href,"company/")]]/following-sibling::td[2]/text()[normalize-space()]')
+
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Duration(s)', '{0:>2} - {1}'.format(len(fhtmlDuration), fhtmlDuration)))
                         for item in fhtmlDuration:
                             item = item.strip()
@@ -402,7 +410,7 @@ class GEVI(Agent.Movies):
                     except Exception as e:
                         utils.log('SEARCH:: Error getting Site Film Duration: {0}'.format(e))
 
-                    if not durationMatch and MATCHSITEDURATION:
+                    if durationMatch is False and AGENTDICT['prefMATCHSITEDURATION'] is True:
                         utils.log(LOG_SUBLINE)
                         continue
 
@@ -414,18 +422,22 @@ class GEVI(Agent.Movies):
                     utils.log('SEARCH:: Access External Links:')
                     webLinks = {}
                     try:
-                        fhtmlURLs = fhtml.xpath('//td[@class="gsr"]/a/@href')
-                        for idx, fhtmlURL in enumerate(fhtmlURLs, start=1):
-                            key = 'AEBN' if 'aebn' in fhtmlURL else 'GayHotMovies' if 'gayhotmovies' in fhtmlURL else 'GayEmpire' if 'empire' in fhtmlURL else ''
-                            utils.log('SEARCH:: {0:<29} {1}'.format('External Sites Found' if idx ==1 else '', '{0:>2} - {1:<15} - {2}'.format(idx, key, fhtmlURL)))
+                        fhtmlExternalLinks = fhtml.xpath('//a/@href')
+                        fhtmlExternalLinks = [x.strip() for x in fhtmlExternalLinks if '.com' in x]
+                        utils.log('SEARCH:: {0:<29} {1}'.format('External Links', '{0:>2} - {1}'.format(len(fhtmlExternalLinks), fhtmlExternalLinks)))
+                        for idx, fhtmlExternalLink in enumerate(fhtmlExternalLinks, start=1):
+                            key = 'AEBN' if 'aebn' in fhtmlExternalLink else 'GayHotMovies' if 'gayhotmovies' in fhtmlExternalLink else 'GayEmpire' if 'empire' in fhtmlExternalLink else ''
+                            if not key:
+                                continue
+                            utils.log('SEARCH:: {0:<29} {1}'.format('External Sites Found' if idx ==1 else '', '{0:>2} - {1:<15} - {2}'.format(idx, key, fhtmlExternalLink)))
                             if key and key not in webLinks:
-                                webLinks[key] = fhtmlURL
+                                webLinks[key] = fhtmlExternalLink
 
                         for key in ['AEBN', 'GayHotMovies', 'GayEmpire']:                  # access links in this order: break after processing first external link
                             if key in webLinks:
                                 vFilmURL = webLinks[key]
                                 vFilmHTML = HTML.ElementFromURL(vFilmURL, timeout=60, errors='ignore', sleep=utils.delay())
-                                FILMDICT[key] = utils.getSiteInfo(key, FILMDICT, kwFilmURL=vFilmURL, kwFilmHTML=vFilmHTML)
+                                FILMDICT[key] = utils.getSiteInfo(key, AGENTDICT, FILMDICT, kwFilmURL=vFilmURL, kwFilmHTML=vFilmHTML)
 
                                 # change Compilation to 'Yes' if the result is not the default 'No'
                                 extCompilation = FILMDICT[key]['Compilation']
@@ -463,4 +475,4 @@ class GEVI(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
-        return utils.updateMetadata(metadata, media, lang, force=True)
+        utils.updateMetadata(metadata, media, lang, force=True)
