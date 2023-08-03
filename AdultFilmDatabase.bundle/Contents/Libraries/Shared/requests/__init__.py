@@ -41,20 +41,12 @@ is at <https://requests.readthedocs.io>.
 """
 
 import urllib3
+import chardet
 import warnings
 from .exceptions import RequestsDependencyWarning
 
-try:
-    from charset_normalizer import __version__ as charset_normalizer_version
-except ImportError:
-    charset_normalizer_version = None
 
-try:
-    from chardet import __version__ as chardet_version
-except ImportError:
-    chardet_version = None
-
-def check_compatibility(urllib3_version, chardet_version, charset_normalizer_version):
+def check_compatibility(urllib3_version, chardet_version):
     urllib3_version = urllib3_version.split('.')
     assert urllib3_version != ['dev']  # Verify urllib3 isn't installed from git.
 
@@ -65,24 +57,19 @@ def check_compatibility(urllib3_version, chardet_version, charset_normalizer_ver
     # Check urllib3 for compatibility.
     major, minor, patch = urllib3_version  # noqa: F811
     major, minor, patch = int(major), int(minor), int(patch)
-    # urllib3 >= 1.21.1, <= 1.26
+    # urllib3 >= 1.21.1, <= 1.25
     assert major == 1
     assert minor >= 21
-    assert minor <= 26
+    assert minor <= 25
 
-    # Check charset_normalizer for compatibility.
-    if chardet_version:
-        major, minor, patch = chardet_version.split('.')[:3]
-        major, minor, patch = int(major), int(minor), int(patch)
-        # chardet_version >= 3.0.2, < 5.0.0
-        assert (3, 0, 2) <= (major, minor, patch) < (5, 0, 0)
-    elif charset_normalizer_version:
-        major, minor, patch = charset_normalizer_version.split('.')[:3]
-        major, minor, patch = int(major), int(minor), int(patch)
-        # charset_normalizer >= 2.0.0 < 3.0.0
-        assert (2, 0, 0) <= (major, minor, patch) < (3, 0, 0)
-    else:
-        raise Exception("You need either charset_normalizer or chardet installed")
+    # Check chardet for compatibility.
+    major, minor, patch = chardet_version.split('.')[:3]
+    major, minor, patch = int(major), int(minor), int(patch)
+    # chardet >= 3.0.2, < 3.1.0
+    assert major == 3
+    assert minor < 1
+    assert patch >= 2
+
 
 def _check_cryptography(cryptography_version):
     # cryptography < 1.3.4
@@ -97,28 +84,20 @@ def _check_cryptography(cryptography_version):
 
 # Check imported dependencies for compatibility.
 try:
-    check_compatibility(urllib3.__version__, chardet_version, charset_normalizer_version)
+    check_compatibility(urllib3.__version__, chardet.__version__)
 except (AssertionError, ValueError):
-    warnings.warn("urllib3 ({}) or chardet ({})/charset_normalizer ({}) doesn't match a supported "
-                  "version!".format(urllib3.__version__, chardet_version, charset_normalizer_version),
+    warnings.warn("urllib3 ({}) or chardet ({}) doesn't match a supported "
+                  "version!".format(urllib3.__version__, chardet.__version__),
                   RequestsDependencyWarning)
 
-# Attempt to enable urllib3's fallback for SNI support
-# if the standard library doesn't support SNI or the
-# 'ssl' library isn't available.
+# Attempt to enable urllib3's SNI support, if possible
 try:
-    try:
-        import ssl
-    except ImportError:
-        ssl = None
+    from urllib3.contrib import pyopenssl
+    pyopenssl.inject_into_urllib3()
 
-    if not getattr(ssl, "HAS_SNI", False):
-        from urllib3.contrib import pyopenssl
-        pyopenssl.inject_into_urllib3()
-
-        # Check cryptography version
-        from cryptography import __version__ as cryptography_version
-        _check_cryptography(cryptography_version)
+    # Check cryptography version
+    from cryptography import __version__ as cryptography_version
+    _check_cryptography(cryptography_version)
 except ImportError:
     pass
 
@@ -139,7 +118,7 @@ from .status_codes import codes
 from .exceptions import (
     RequestException, Timeout, URLRequired,
     TooManyRedirects, HTTPError, ConnectionError,
-    FileModeWarning, ConnectTimeout, ReadTimeout, JSONDecodeError
+    FileModeWarning, ConnectTimeout, ReadTimeout
 )
 
 # Set default logging handler to avoid "No handler found" warnings.

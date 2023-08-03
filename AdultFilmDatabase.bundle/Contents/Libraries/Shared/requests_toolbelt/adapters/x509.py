@@ -18,6 +18,7 @@ from datetime import datetime
 from requests.adapters import HTTPAdapter
 import requests
 
+from .._compat import PyOpenSSLContext
 from .. import exceptions as exc
 
 """
@@ -29,9 +30,6 @@ try:
     from _ssl import PROTOCOL_TLS as PROTOCOL
 except ImportError:
     from _ssl import PROTOCOL_SSLv23 as PROTOCOL
-
-
-PyOpenSSLContext = None
 
 
 class X509Adapter(HTTPAdapter):
@@ -83,7 +81,6 @@ class X509Adapter(HTTPAdapter):
     """
 
     def __init__(self, *args, **kwargs):
-        self._import_pyopensslcontext()
         self._check_version()
         cert_bytes = kwargs.pop('cert_bytes', None)
         pk_bytes = kwargs.pop('pk_bytes', None)
@@ -121,26 +118,11 @@ class X509Adapter(HTTPAdapter):
             kwargs['ssl_context'] = self.ssl_context
         return super(X509Adapter, self).proxy_manager_for(*args, **kwargs)
 
-    def _import_pyopensslcontext(self):
-        global PyOpenSSLContext
-
-        if requests.__build__ < 0x021200:
-            PyOpenSSLContext = None
-        else:
-            try:
-                from requests.packages.urllib3.contrib.pyopenssl \
-                        import PyOpenSSLContext
-            except ImportError:
-                try:
-                    from urllib3.contrib.pyopenssl import PyOpenSSLContext
-                except ImportError:
-                    PyOpenSSLContext = None
-
     def _check_version(self):
         if PyOpenSSLContext is None:
             raise exc.VersionMismatchError(
                 "The X509Adapter requires at least Requests 2.12.0 to be "
-                "installed. Version {} was found instead.".format(
+                "installed. Version {0} was found instead.".format(
                     requests.__version__
                 )
             )
@@ -152,8 +134,8 @@ def check_cert_dates(cert):
     now = datetime.utcnow()
     if cert.not_valid_after < now or cert.not_valid_before > now:
         raise ValueError('Client certificate expired: Not After: '
-                         '{:%Y-%m-%d %H:%M:%SZ} '
-                         'Not Before: {:%Y-%m-%d %H:%M:%SZ}'
+                         '{0:%Y-%m-%d %H:%M:%SZ} '
+                         'Not Before: {1:%Y-%m-%d %H:%M:%SZ}'
                          .format(cert.not_valid_after, cert.not_valid_before))
 
 

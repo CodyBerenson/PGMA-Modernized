@@ -22,13 +22,15 @@
     02 Jul 2023     2019.12.25.45   Dealt with 's, 't to improve on search strings
                                     Updated to use new utils.py
     07 Jul 2023     2019.12.25.46   GEVI Website Design Change - implement new xpath
+    14 Jul 2023     2019.12.25.47   films to failing to match release dates wer not been assigned the default filename date
+    01 Aug 2023     2019.12.25.48   Improved matching with IAFD
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.46'
+VERSION_NO = '2019.12.25.48'
 AGENT = 'GEVI'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -57,13 +59,6 @@ def Start():
     HTTP.CacheTime = CACHE_1WEEK
     HTTP.Headers['User-Agent'] = utils.getUserAgent()
     HTTP.Headers['Referer'] = 'https://gayeroticvideoindex.com/search'
-
-    ValidatePrefs()
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-def ValidatePrefs():
-    ''' Validate Changed Preferences '''
-    pass
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 class GEVI(Agent.Movies):
@@ -282,18 +277,19 @@ class GEVI(Agent.Movies):
                     utils.log(LOG_BIGLINE)
                     try:
                         foundStudio = False
-                        fhtmlStudio = fhtml.xpath('//a[contains(@href, "company/")]/text()[normalize-space()]')
-                        fhtmlStudio = {x.strip() for x in fhtmlStudio if x.strip()}
-                        utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Distributor/Studio', fhtmlStudio))
-                        if film[2] and film[2] is not None:             # Company Name i.e. distributor in GEVI at this possition in json retrieval
-                            fhtmlStudio.add(film[2])
-                            utils.log('SEARCH:: {0:<29} {1}'.format('Add: JSon Company', fhtmlStudio))
+                        fhtmlStudios = fhtml.xpath('//a[contains(@href, "company/")]/text()[normalize-space()]')
+                        fhtmlStudios = {x.strip() for x in fhtmlStudios if x.strip()}
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Distributor/Studio', fhtmlStudios))
+                        if film[2] and film[2] is not None:             # Company Name i.e. distributor in GEVI at this position in json retrieval
+                            fhtmlStudios.add(film[2])
+                            utils.log('SEARCH:: {0:<29} {1}'.format('Add: JSon Company', fhtmlStudios))
 
                         if film[3] and film[3] is not None:             # Studios Lines in GEVI at this possition in json retrieval
-                            fhtmlStudio.add(film[3])
-                            utils.log('SEARCH:: {0:<29} {1}'.format('Add: JSon Line', fhtmlStudio))
+                            fhtmlStudios.add(film[3])
+                            utils.log('SEARCH:: {0:<29} {1}'.format('Add: JSon Line', fhtmlStudios))
 
-                        for siteStudio in fhtmlStudio:
+                        FILMDICT['RecordedStudios'] = list(set(fhtmlStudios))
+                        for siteStudio in FILMDICT['RecordedStudios']:
                             try:
                                 utils.matchStudio(siteStudio, FILMDICT)
                                 foundStudio = True
@@ -319,6 +315,7 @@ class GEVI(Agent.Movies):
                     # Release Date - GEVI format YYYY or cYYYY or yyyy-yyyy
                     utils.log(LOG_BIGLINE)
                     releaseDateMatch = False
+                    attemptMatch = False
                     vReleaseDate = FILMDICT['CompareDate']
                     try:
                         fhtmlTD = fhtml.xpath('//td//text()[normalize-space()]')         # get all table data ** dirty coing as xpath is not working
@@ -337,50 +334,53 @@ class GEVI(Agent.Movies):
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site URL Released Date', '{0:>2} - {1}'.format(len(fhtmlReleaseDate), fhtmlReleaseDate)))
                         for item in fhtmlReleaseDate:
                             item = item.strip()
-                            if '?' in item:
+                            if item == '?':
                                 continue
                             elif 'b' in item or 'c' in item:                                                                # format 4
                                 item = item.replace('b', '').replace('c', '')
                             elif ',' in item:                                                                               # format 3 - take year after the comma
                                 item = item.split(',')[1]
                             elif '-' in item:                                                                               # format 2 - take year after dash:
-                                items = item.split('-')
-                                century = item[0:2]
-                                decade = item[2]
-                                items = [x.strip() for x in items]
-                                if len(items[1]) == 1:                                                                      # format 2a e.g. 1995-7
-                                    item = '{0}{1}{2}'.format(century, decade, items[1])
-                                elif len(items[1]) == 2:                                                                    # format 2b e.g. 1995-97
-                                    item = '{0}{1}'.format(century, items[1])
+                                century = item[0:2]                                                                         # 1995-year.... century = 19
+                                decade = item[2]                                                                            # 1995-year.....decade = 9
+                                years = item.split('-')
+                                years = [x.strip() for x in years]
+                                if len(years[-1]) == 1:                                                                      # format 2a e.g. 1995-7
+                                    item = '{0}{1}{2}'.format(century, decade, years[-1])
+                                elif len(years[-1]) == 2:                                                                    # format 2b e.g. 1995-97
+                                    item = '{0}{1}'.format(century, years[-1])
                                 else:
-                                    item = items[1]                                                                         # format 2c eg 1995-1997
+                                    item = years[-1]                                                                         # format 2c e.g. 1995-1997
 
                             # item should now be in YYYY format, if year format YY is less than the comparison date it's 1999, convert to date and add to set
                             item = '{0}1231'.format(item)
                             utils.log('SEARCH:: {0:<29} {1}'.format('Release Date', item))
 
                             try:
+                                attemptMatch = True
                                 releaseDate = datetime.strptime(item, DATEFORMAT)
                                 utils.log('SEARCH:: {0:<29} {1}'.format('Selected Release Date', releaseDate))
                                 utils.matchReleaseDate(releaseDate, FILMDICT)
                                 releaseDateMatch = True
                                 vReleaseDate = releaseDate
                                 break
+
                             except Exception as e:
                                 utils.log('SEARCH:: Error matching Site URL Release Date: {0}'.format(e))
 
-                    except Exception as e:
-                        utils.log('SEARCH:: Warning: Getting Site URL Release Date: {0} - Default to Filename Date: {1}'.format(e, vReleaseDate))
-
-                    else:
-                        if FILMDICT['Year'] and not releaseDateMatch:
+                        if attemptMatch is True and FILMDICT['Year'] and releaseDateMatch is False:
                             utils.log(LOG_SUBLINE)
                             continue
+                        else: 
+                            utils.log('SEARCH:: Warning: Getting Site URL Release Date: Default to Filename Date: {0}'.format(vReleaseDate))
+
+                    except Exception as e:
+                        utils.log('SEARCH:: Error: Getting Site URL Release Date: {0}'.format(e))
 
                     # Duration: GEVI format = mins
                     utils.log(LOG_BIGLINE)
                     vDuration = FILMDICT['Duration']
-                    durationMatch = False
+                    matchedDuration = False
                     try:
                         if 'Gay Erotic Video Index' in fhtmlTD:         # format 1 like Bring me a boy 68
                             fhtmlIdx = [x for x in range(len(fhtmlTD)) if fhtmlTD[x] == 'length']       # fhtmlTD determined in release date code above
@@ -400,7 +400,7 @@ class GEVI(Agent.Movies):
                                 duration = datetime.fromtimestamp(item)
                                 utils.log('SEARCH:: {0:<29} {1}'.format('Selected Duration', duration))
                                 utils.matchDuration(duration, AGENTDICT, FILMDICT)
-                                durationMatch = True
+                                matchedDuration = True
                                 vDuration = duration
                                 break
 
@@ -410,7 +410,7 @@ class GEVI(Agent.Movies):
                     except Exception as e:
                         utils.log('SEARCH:: Error getting Site Film Duration: {0}'.format(e))
 
-                    if durationMatch is False and AGENTDICT['prefMATCHSITEDURATION'] is True:
+                    if matchedDuration is False and AGENTDICT['prefMATCHSITEDURATION'] is True:
                         utils.log(LOG_SUBLINE)
                         continue
 

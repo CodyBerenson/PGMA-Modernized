@@ -11,7 +11,8 @@
                                     - tidy up of genres as they have different names across various websites.
                                     - tidy up of countries and locations
                                     - introduced Grouped Collections and Default to keep track of films
-    05 Dec 2022     2020.05.16.14   Updated to use latest version of utils.py
+    05 Dec 2022     2020.18.03.11   Updated to use latest version of utils.py
+    13 Jul 2023     2020.18.03.12   Updated to use latest version of utils.py
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -19,26 +20,19 @@ import copy, json, re
 from datetime import datetime
 
 # Version / utils.log Title
-VERSION_NO = '2020.08.03.10'
+VERSION_NO = '2020.18.03.12'
 AGENT = 'GayRado'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
 # URLS
 BASE_URL = 'https://www.gayrado.com/shop/en'
 BASE_SEARCH_URL = BASE_URL + '/search?controller=search&s={0}'
-WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Date Formats used by website
 DATEFORMAT = '%Y%m%d'
 
 # Website Language
 SITE_LANGUAGE = 'en'
-
-# Preferences
-MATCHSITEDURATION = ''
-
-# dictionaries & Set for holding film variables, genres and countries
-FILMDICT = {}
 
 # utils.log section separators
 LOG_BIGLINE = '-' * 140
@@ -52,15 +46,7 @@ import utils
 def Start():
     ''' initialise process '''
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.41'
-
-    utils.setupStartVariables()
-    ValidatePrefs()
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-def ValidatePrefs():
-    ''' Validate Changed Preferences '''
-    pass
+    HTTP.Headers['User-Agent'] = utils.getUserAgent()
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 class GayRado(Agent.Movies):
@@ -92,25 +78,39 @@ class GayRado(Agent.Movies):
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
-            utils.log('SEARCH:: {0:<29} {1}'.format('Error: Missing Media Item File', 'QUIT'))
+            utils.log(LOG_ASTLINE)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Warning: Missing Media Item File', 'QUIT'))
+            utils.log(LOG_ASTLINE)
             return
 
         #clear-cache directive
-        if media.name == "clear-cache":  
+        if media.name == "clear-cache":
             HTTP.ClearCache()
             results.Append(MetadataSearchResult(id='clear-cache', name='Plex web cache cleared', year=media.year, lang=lang, score=0))
+            utils.log(LOG_ASTLINE)
             utils.log('SEARCH:: {0:<29} {1}'.format('Warning: Clear Cache Directive Encountered', 'QUIT'))
+            utils.log(LOG_ASTLINE)
             return
 
-        utils.logHeader('SEARCH', media, lang)
+        AGENTDICT = copy.deepcopy(utils.setupAgentVariables(media))
+        if not AGENTDICT:
+            utils.log(LOG_ASTLINE)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Error: Could Not Set Agent Parameters', 'QUIT'))
+            utils.log(LOG_ASTLINE)
+            return
+
+        utils.logHeader('SEARCH', AGENTDICT, media, lang)
 
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media)
+            FILMDICT = copy.deepcopy(utils.matchFilename(AGENTDICT, media))
             FILMDICT['lang'] = lang
             FILMDICT['Agent'] = AGENT
+            FILMDICT['Status'] = False
         except Exception as e:
-            utils.log('SEARCH:: Error: %s', e)
+            utils.log(LOG_ASTLINE)
+            utils.log('SEARCH:: Error: {0}'.format(e))
+            utils.log(LOG_ASTLINE)
             return
 
         utils.log(LOG_BIGLINE)
@@ -122,7 +122,7 @@ class GayRado(Agent.Movies):
 
         morePages = True
         while morePages:
-            utils.log('SEARCH:: Search Query: %s', searchQuery)
+            utils.log('SEARCH:: Search Query: {0}'.format(searchQuery))
             try:
                 html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=utils.delay())
                 # Finds the entire media enclosure
@@ -130,12 +130,12 @@ class GayRado(Agent.Movies):
                 if not filmsList:
                     raise Exception('< No Films! >')
             except Exception as e:
-                utils.log('SEARCH:: Error: Search Query did not pull any results: %s', e)
+                utils.log('SEARCH:: Error: Search Query did not pull any results: {0}'.format(e))
                 break
 
             try:
                 searchQuery = html.xpath('//li[@id="pagination_next"]/a[@rel="nofollow"]/@href')[0]
-                utils.log('SEARCH:: Next Page Search Query: %s', searchQuery)
+                utils.log('SEARCH:: Next Page Search Query: {0}'.format(searchQuery))
                 pageNumber = int(searchQuery.split('=')[-1]) - 1
                 morePages = True if pageNumber <= 10 else False
             except:
@@ -166,7 +166,7 @@ class GayRado(Agent.Movies):
                         utils.log(LOG_SUBLINE)
                         continue
                 except Exception as e:
-                    utils.log('SEARCH:: Error getting Site Entry: %s', e)
+                    utils.log('SEARCH:: Error getting Site Entry: {0}'.format(e))
                     utils.log(LOG_SUBLINE)
                     continue
 
@@ -175,7 +175,7 @@ class GayRado(Agent.Movies):
                 try:
                     utils.matchTitle(filmTitle, FILMDICT)
                 except Exception as e:
-                    utils.log('SEARCH:: Error getting Site Title: %s', e)
+                    utils.log('SEARCH:: Error getting Site Title: {0}'.format(e))
                     utils.log(LOG_SUBLINE)
                     continue
 
@@ -195,7 +195,7 @@ class GayRado(Agent.Movies):
                     utils.matchStudio(filmStudio, FILMDICT)
                     utils.log(LOG_BIGLINE)
                 except Exception as e:
-                    utils.log('SEARCH:: Error getting Site Studio: %s', e)
+                    utils.log('SEARCH:: Error getting Site Studio: {0}'.format(e))
                     utils.log(LOG_SUBLINE)
                     continue
 
@@ -206,7 +206,7 @@ class GayRado(Agent.Movies):
                     fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=utils.delay())
                     FILMDICT['FilmHTML'] = fhtml
                 except Exception as e:
-                    utils.log('SEARCH:: Error reading Site URL page: %s', e)
+                    utils.log('SEARCH:: Error reading Site URL page: {0}'.format(e))
                     utils.log(LOG_SUBLINE)
                     continue
 
@@ -226,11 +226,11 @@ class GayRado(Agent.Movies):
                         matchedDuration = True
                         vDuration = duration
                     except Exception as e:
-                        utils.log('SEARCH:: Error matching Site Film Duration: %s', e)
+                        utils.log('SEARCH:: Error matching Site Film Duration: {0}'.format(e))
                 except Exception as e:
                     utils.log('SEARCH:: Error getting Site Film Duration')
 
-                if MATCHSITEDURATION and not matchedDuration:
+                if matchedDuration is False and AGENTDICT['prefMATCHSITEDURATION'] is True:
                     utils.log(LOG_SUBLINE)
                     continue
 
@@ -261,73 +261,4 @@ class GayRado(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
-        utils.logHeader('UPDATE', media, lang)
-
-        utils.log('UPDATE:: Convert Date Time & Set Objects:')
-        FILMDICT = json.loads(metadata.id, object_hook=utils.jsonLoader)
-        utils.log(LOG_BIGLINE)
-
-        utils.printFilmInformation(FILMDICT)
-
-        FILMDICT['Status'] = True
-
-        # use general routine to get Metadata
-        utils.log(LOG_BIGLINE)
-        try:
-            utils.log('SEARCH:: Access Site URL Link:')
-            fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=utils.delay())
-            FILMDICT['FilmHTML'] = fhtml
-            FILMDICT[AGENT] = utils.getSiteInfo(AGENT, FILMDICT, kwCompilation=FILMDICT['vCompilation'], kwReleaseDate=FILMDICT['vReleaseDate'], kwDuration=FILMDICT['vDuration'])
-
-        except Exception as e:
-            utils.log('SEARCH:: Error Accessing Site URL page: %s', e)
-            FILMDICT['Status'] = False
-
-        # we should have a match on studio, title and year now. Find corresponding film on IAFD
-        utils.log(LOG_BIGLINE)
-        try:
-            utils.log(LOG_BIGLINE)
-            utils.log('SEARCH:: Check for Film on IAFD:')
-            utils.getFilmOnIAFD(FILMDICT)
-
-        except:
-            pass
-
-        # update the metadata
-        utils.log(LOG_BIGLINE)
-        if FILMDICT['Status'] is True:
-            utils.log(LOG_BIGLINE)
-            '''
-            The following bits of metadata need to be established and used to update the movie on plex
-            1.  Metadata that is set by Agent as default
-                a. id.                 : Plex media id setting
-                b. Studio              : From studio group of filename - no need to process this as above
-                c. Title               : From title group of filename - no need to process this as is used to find it on website
-                d. Tag line            : Corresponds to the url of film
-                e. Originally Available: set from metadata.id (search result)
-                f. Content Rating      : Always X
-                g. Content Rating Age  : Always 18
-
-            2.  Metadata retrieved from website
-                a. Originally Availiable Date
-                b. Ratings
-                c. Genres                           : List of Genres (alphabetic order)
-                d. Countries
-                e. Cast                             : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
-                f. Directors                        : List of Directors (alphabetic order)
-                g. Collections                      : retrieved from FILMDICT, Genres, Countries, Cast Directors
-                h. Posters
-                i. Art (Background)
-                j. Reviews
-                k. Chapters
-                l. Summary
-            '''
-            utils.setMetadata(metadata, media, FILMDICT)
-
-        # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
-        if FILMDICT['Status'] is False:
-            metadata.originally_available_at = None
-            metadata.year = 0
-
-        utils.logFooter('UPDATE', FILMDICT)
-        return FILMDICT['Status']
+        utils.updateMetadata(metadata, media, lang, force=True)

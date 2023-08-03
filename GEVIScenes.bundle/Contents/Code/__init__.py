@@ -7,8 +7,7 @@
     Date            Version                         Modification
     27 May 2023     2023.05.27.01   New Scraper for GEVI Episodes (Scenes)
     01 Jul 2023     2023.05.27.02   Updated to use new utils.py
-    06 Jul 2023     2023.05.27.03   GEVIScene Site design change: new xpath needed
-
+    07 Jul 2023     2023.05.27.03   GEVI Website Design Change - implement new xpath
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, os, re
@@ -44,13 +43,6 @@ def Start():
     HTTP.CacheTime = CACHE_1WEEK
     HTTP.Headers['User-Agent'] = utils.getUserAgent()
     HTTP.Headers['Referer'] = 'https://gayeroticvideoindex.com/search'
-
-    ValidatePrefs()
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-def ValidatePrefs():
-    ''' Validate Changed Preferences '''
-    pass
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 class GEVIScenes(Agent.Movies):
@@ -103,8 +95,8 @@ class GEVIScenes(Agent.Movies):
         utils.log(LOG_BIGLINE)
 
         # Search Query
-        if FILMDICT['SceneNo']:
-            searchQuery = BASE_SEARCH_URL.format(FILMDICT['SceneNo'])
+        if FILMDICT['GEVIScene']:
+            searchQuery = BASE_SEARCH_URL.format(FILMDICT['GEVIScene'])
             utils.log('SEARCH:: Search Query: {0}'.format(searchQuery))
             try:
                 html = HTML.ElementFromURL(searchQuery, timeout=20, sleep=utils.delay())
@@ -167,15 +159,16 @@ class GEVIScenes(Agent.Movies):
                 utils.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
                 vReleaseDate = FILMDICT['CompareDate']
 
-        FILMDICT['vCompilation'] = ''
-        FILMDICT['vDuration'] = FILMDICT['Duration']
-        FILMDICT['vReleaseDate'] = vReleaseDate
+        if process is True:
+            FILMDICT['vCompilation'] = ''
+            FILMDICT['vDuration'] = FILMDICT['Duration']
+            FILMDICT['vReleaseDate'] = vReleaseDate
 
-        myID = json.dumps(FILMDICT, default=utils.jsonDumper)
-        results.Append(MetadataSearchResult(id=myID, name=FILMDICT['Title'], score=100, lang=lang))
+            myID = json.dumps(FILMDICT, default=utils.jsonDumper)
+            results.Append(MetadataSearchResult(id=myID, name=FILMDICT['Title'], score=100, lang=lang))
 
         # Film Scraped Sucessfully - update status and break out!
-        FILMDICT['Status'] = True
+        FILMDICT['Status'] = process
 
         # End Search Routine
         utils.logFooter('SEARCH', FILMDICT)

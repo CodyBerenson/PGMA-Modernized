@@ -11,6 +11,7 @@
                                     - introduced Grouped Collections and Default to keep track of films
     05 Dec 2022     2020.04.22.18   Updated to use latest version of utils.py
     26 Feb 2023     2020.04.22.19   Restrict search string to 72 Characters
+    13 Jul 2023     2020.04.22.20   Updated to use latest version of utils.py
 
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
@@ -18,21 +19,14 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.04.22.18'
+VERSION_NO = '2020.04.22.20'
 AGENT = 'IAFD'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent and ⚢ if lesbian
 
 # URLS
-WATERMARK = 'https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png'
 
 # Website Language
 SITE_LANGUAGE = 'en'
-
-# Preferences
-MATCHSITEDURATION = ''
-
-# dictionaries & Set for holding film variables, genres and countries
-FILMDICT = {}
 
 # utils.log section separators
 LOG_BIGLINE = '-' * 140
@@ -46,16 +40,8 @@ import utils
 def Start():
     ''' initialise process '''
     HTTP.CacheTime = CACHE_1WEEK
-    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.41'
-    HTTP.Headers['Referer'] =  'https://www.iafd.com'
-
-    utils.setupStartVariables()
-    ValidatePrefs()
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-def ValidatePrefs():
-    ''' Validate Changed Preferences '''
-    pass
+    HTTP.Headers['User-Agent'] = utils.getUserAgent()
+    HTTP.Headers['Referer'] =  'https://www.iafd.com/title.rme/title=king+bryce+and+nate+grimes/year=2020/king-bryce-and-nate-grimes.htm'
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 class IAFD(Agent.Movies):
@@ -72,30 +58,44 @@ class IAFD(Agent.Movies):
     def search(self, results, media, lang, manual):
         ''' Search For Media Entry '''
         if not media.items[0].parts[0].file:
-            utils.log('SEARCH:: {0:<29} {1}'.format('Error: Missing Media Item File', 'QUIT'))
+            utils.log(LOG_ASTLINE)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Warning: Missing Media Item File', 'QUIT'))
+            utils.log(LOG_ASTLINE)
             return
 
         #clear-cache directive
-        if media.name == "clear-cache":  
+        if media.name == "clear-cache":
             HTTP.ClearCache()
             results.Append(MetadataSearchResult(id='clear-cache', name='Plex web cache cleared', year=media.year, lang=lang, score=0))
+            utils.log(LOG_ASTLINE)
             utils.log('SEARCH:: {0:<29} {1}'.format('Warning: Clear Cache Directive Encountered', 'QUIT'))
+            utils.log(LOG_ASTLINE)
             return
 
-        utils.logHeader('SEARCH', media, lang)
+        AGENTDICT = copy.deepcopy(utils.setupAgentVariables(media))
+        if not AGENTDICT:
+            utils.log(LOG_ASTLINE)
+            utils.log('SEARCH:: {0:<29} {1}'.format('Error: Could Not Set Agent Parameters', 'QUIT'))
+            utils.log(LOG_ASTLINE)
+            return
+
+        utils.logHeader('SEARCH', AGENTDICT, media, lang)
 
         # Check filename format
         try:
-            FILMDICT = utils.matchFilename(media)
+            FILMDICT = copy.deepcopy(utils.matchFilename(AGENTDICT, media))
             FILMDICT['lang'] = lang
             FILMDICT['Agent'] = AGENT
+            FILMDICT['Status'] = False
         except Exception as e:
-            utils.log('SEARCH:: Error: %s', e)
+            utils.log(LOG_ASTLINE)
+            utils.log('SEARCH:: Error: {0}'.format(e))
+            utils.log(LOG_ASTLINE)
             return
 
         utils.log(LOG_BIGLINE)
         utils.log('SEARCH:: Check for Film on IAFD:')
-        utils.getFilmOnIAFD(FILMDICT)
+        utils.getFilmOnIAFD(AGENTDICT, FILMDICT)
         utils.log(LOG_BIGLINE)
 
         if FILMDICT['FoundOnIAFD'] == 'Yes':
@@ -113,51 +113,4 @@ class IAFD(Agent.Movies):
     # -------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang, force=True):
         ''' Update Media Entry '''
-        utils.logHeader('UPDATE', media, lang)
-
-        utils.log('UPDATE:: Convert Date Time & Set Objects:')
-        FILMDICT = json.loads(metadata.id, object_hook=utils.jsonLoader)
-        utils.log(LOG_BIGLINE)
-
-        utils.printFilmInformation(FILMDICT)
-
-        FILMDICT['Status'] = True
-
-        # update the metadata
-        utils.log(LOG_BIGLINE)
-        if FILMDICT['Status'] is True:
-            utils.log(LOG_BIGLINE)
-            '''
-            The following bits of metadata need to be established and used to update the movie on plex
-            1.  Metadata that is set by Agent as default
-                a. id.                 : Plex media id setting
-                b. Studio              : From studio group of filename - no need to process this as above
-                c. Title               : From title group of filename - no need to process this as is used to find it on website
-                d. Tag line            : Corresponds to the url of film
-                e. Originally Available: set from metadata.id (search result)
-                f. Content Rating      : Always X
-                g. Content Rating Age  : Always 18
-
-            2.  Metadata retrieved from website
-                a. Originally Availiable Date
-                b. Ratings
-                c. Genres                           : List of Genres (alphabetic order)
-                d. Countries
-                e. Cast                             : List of Actors and Photos (alphabetic order) - Photos sourced from IAFD
-                f. Directors                        : List of Directors (alphabetic order)
-                g. Collections                      : retrieved from FILMDICT, Genres, Countries, Cast Directors
-                h. Posters
-                i. Art (Background)
-                j. Reviews
-                k. Chapters
-                l. Summary
-            '''
-            utils.setMetadata(metadata, media, FILMDICT)
-
-        # Failure: initialise original availiable date, so that one can find titles sorted by release date which are not scraped
-        if FILMDICT['Status'] is False:
-            metadata.originally_available_at = None
-            metadata.year = 0
-
-        utils.logFooter('UPDATE', FILMDICT)
-        return FILMDICT['Status']
+        utils.updateMetadata(metadata, media, lang, force=True)

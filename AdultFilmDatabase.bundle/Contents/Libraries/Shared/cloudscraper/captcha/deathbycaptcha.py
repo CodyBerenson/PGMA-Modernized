@@ -13,7 +13,6 @@ except ImportError:
     raise ImportError("Please install the python module 'polling2' via pip")
 
 from ..exceptions import (
-    CaptchaException,
     CaptchaServiceUnavailable,
     CaptchaTimeout,
     CaptchaParameter,
@@ -30,10 +29,6 @@ class captchaSolver(Captcha):
         super(captchaSolver, self).__init__('deathbycaptcha')
         self.host = 'http://api.dbcapi.me/api'
         self.session = requests.Session()
-        self.captchaType = {
-            'reCaptcha': '4',
-            'hCaptcha': '7'
-        }
 
     # ------------------------------------------------------------------------------- #
 
@@ -73,7 +68,7 @@ class captchaSolver(Captcha):
 
         response = polling2.poll(
             lambda: self.session.post(
-                f'{self.host}/user',
+                '{}/user'.format(self.host),
                 headers={'Accept': 'application/json'},
                 data={
                     'username': self.username,
@@ -105,7 +100,7 @@ class captchaSolver(Captcha):
 
         response = polling2.poll(
             lambda: self.session.post(
-                f'{self.host}/captcha/{jobID}/report',
+                '{}/captcha/{}/report'.format(self.host, jobID),
                 headers={'Accept': 'application/json'},
                 data={
                     'username': self.username,
@@ -142,7 +137,7 @@ class captchaSolver(Captcha):
 
         response = polling2.poll(
             lambda: self.session.get(
-                f'{self.host}/captcha/{jobID}',
+                '{}/captcha/{}'.format(self.host, jobID),
                 headers={'Accept': 'application/json'}
             ),
             check_success=_checkRequest,
@@ -186,7 +181,7 @@ class captchaSolver(Captcha):
                 })
 
             data.update({
-                'type': self.captchaType[captchaType],
+                'type': '4',
                 'token_params': json.dumps(jPayload)
             })
         else:
@@ -202,13 +197,13 @@ class captchaSolver(Captcha):
                 })
 
             data.update({
-                'type': self.captchaType[captchaType],
+                'type': '7',
                 'hcaptcha_params': json.dumps(jPayload)
             })
 
         response = polling2.poll(
             lambda: self.session.post(
-                f'{self.host}/captcha',
+                '{}/captcha'.format(self.host),
                 headers={'Accept': 'application/json'},
                 data=data,
                 allow_redirects=False
@@ -233,7 +228,7 @@ class captchaSolver(Captcha):
         for param in ['username', 'password']:
             if not captchaParams.get(param):
                 raise CaptchaParameter(
-                    f"DeathByCaptcha: Missing '{param}' parameter."
+                    "DeathByCaptcha: Missing '{}' parameter.".format(param)
                 )
             setattr(self, param, captchaParams.get(param))
 
@@ -251,9 +246,6 @@ class captchaSolver(Captcha):
         else:
             self.proxy = None
 
-        if captchaType not in self.captchaType:
-            raise CaptchaException(f'DeathByCaptcha: {captchaType} is not supported by this provider.')
-
         try:
             jobID = self.requestSolve(captchaType, url, siteKey)
             return self.requestJob(jobID)
@@ -263,14 +255,14 @@ class captchaSolver(Captcha):
                     self.reportJob(jobID)
             except polling2.TimeoutException:
                 raise CaptchaTimeout(
-                    f"DeathByCaptcha: Captcha solve took to long and also failed reporting the job id {jobID}."
+                    "DeathByCaptcha: Captcha solve took to long and also failed reporting the job id {}.".format(jobID)
                 )
 
             raise CaptchaTimeout(
-                f"DeathByCaptcha: Captcha solve took to long to execute job id {jobID}, aborting."
+                "DeathByCaptcha: Captcha solve took to long to execute job id {}, aborting.".format(jobID)
             )
 
-# ------------------------------------------------------------------------------- #
 
+# ------------------------------------------------------------------------------- #
 
 captchaSolver()

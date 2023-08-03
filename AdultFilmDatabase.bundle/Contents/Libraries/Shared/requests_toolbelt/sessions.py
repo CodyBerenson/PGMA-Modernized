@@ -6,35 +6,23 @@ from ._compat import urljoin
 class BaseUrlSession(requests.Session):
     """A Session with a URL that all requests will use as a base.
 
-    Let's start by looking at a few examples:
+    Let's start by looking at an example:
 
     .. code-block:: python
 
         >>> from requests_toolbelt import sessions
         >>> s = sessions.BaseUrlSession(
         ...     base_url='https://example.com/resource/')
-        >>> r = s.get('sub-resource/', params={'foo': 'bar'})
+        >>> r = s.get('sub-resource/' params={'foo': 'bar'})
         >>> print(r.request.url)
         https://example.com/resource/sub-resource/?foo=bar
 
     Our call to the ``get`` method will make a request to the URL passed in
     when we created the Session and the partial resource name we provide.
-    We implement this by overriding the ``request`` method of the Session.
 
-    Likewise, we override the ``prepare_request`` method so you can construct
-    a PreparedRequest in the same way:
-
-    .. code-block:: python
-
-        >>> from requests import Request
-        >>> from requests_toolbelt import sessions
-        >>> s = sessions.BaseUrlSession(
-        ...     base_url='https://example.com/resource/')
-        >>> request = Request(method='GET', url='sub-resource/')
-        >>> prepared_request = s.prepare_request(request)
-        >>> r = s.send(prepared_request)
-        >>> print(r.request.url)
-        https://example.com/resource/sub-resource
+    We implement this by overriding the ``request`` method so most uses of a
+    Session are covered. (This, however, precludes the use of PreparedRequest
+    objects).
 
     .. note::
 
@@ -48,7 +36,7 @@ class BaseUrlSession(requests.Session):
         >>> from requests_toolbelt import sessions
         >>> s = sessions.BaseUrlSession(
         ...     base_url='https://example.com/resource/')
-        >>> r = s.get('/sub-resource/', params={'foo': 'bar'})
+        >>> r = s.get('/sub-resource/' params={'foo': 'bar'})
         >>> print(r.request.url)
         https://example.com/sub-resource/?foo=bar
 
@@ -75,13 +63,6 @@ class BaseUrlSession(requests.Session):
         url = self.create_url(url)
         return super(BaseUrlSession, self).request(
             method, url, *args, **kwargs
-        )
-
-    def prepare_request(self, request, *args, **kwargs):
-        """Prepare the request after generating the complete URL."""
-        request.url = self.create_url(request.url)
-        return super(BaseUrlSession, self).prepare_request(
-            request, *args, **kwargs
         )
 
     def create_url(self, url):

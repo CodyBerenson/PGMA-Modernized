@@ -7,3 +7,4 @@ if ($Args[1] -in (90, 270)){
 	$Image.RotateFlip($Rotation)
 	$Image.Save($FilePath, "jpeg")
 }
+Exit

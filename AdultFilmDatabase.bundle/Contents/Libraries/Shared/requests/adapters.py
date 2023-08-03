@@ -19,7 +19,6 @@ from urllib3.util.retry import Retry
 from urllib3.exceptions import ClosedPoolError
 from urllib3.exceptions import ConnectTimeoutError
 from urllib3.exceptions import HTTPError as _HTTPError
-from urllib3.exceptions import InvalidHeader as _InvalidHeader
 from urllib3.exceptions import MaxRetryError
 from urllib3.exceptions import NewConnectionError
 from urllib3.exceptions import ProxyError as _ProxyError
@@ -38,7 +37,7 @@ from .structures import CaseInsensitiveDict
 from .cookies import extract_cookies_to_jar
 from .exceptions import (ConnectionError, ConnectTimeout, ReadTimeout, SSLError,
                          ProxyError, RetryError, InvalidSchema, InvalidProxyURL,
-                         InvalidURL, InvalidHeader)
+                         InvalidURL)
 from .auth import _basic_auth_str
 
 try:
@@ -458,11 +457,9 @@ class HTTPAdapter(BaseAdapter):
                 low_conn = conn._get_conn(timeout=DEFAULT_POOL_TIMEOUT)
 
                 try:
-                    skip_host = 'Host' in request.headers
                     low_conn.putrequest(request.method,
                                         url,
-                                        skip_accept_encoding=True,
-                                        skip_host=skip_host)
+                                        skip_accept_encoding=True)
 
                     for header, value in request.headers.items():
                         low_conn.putheader(header, value)
@@ -530,8 +527,6 @@ class HTTPAdapter(BaseAdapter):
                 raise SSLError(e, request=request)
             elif isinstance(e, ReadTimeoutError):
                 raise ReadTimeout(e, request=request)
-            elif isinstance(e, _InvalidHeader):
-                raise InvalidHeader(e, request=request)
             else:
                 raise
 

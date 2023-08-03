@@ -8,8 +8,6 @@ This module contains the set of Requests' exceptions.
 """
 from urllib3.exceptions import HTTPError as BaseHTTPError
 
-from .compat import JSONDecodeError as CompatJSONDecodeError
-
 
 class RequestException(IOError):
     """There was an ambiguous exception that occurred while handling your
@@ -25,14 +23,6 @@ class RequestException(IOError):
                 hasattr(response, 'request')):
             self.request = self.response.request
         super(RequestException, self).__init__(*args, **kwargs)
-
-
-class InvalidJSONError(RequestException):
-    """A JSON error occurred."""
-
-
-class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):
-    """Couldn't decode the text into json"""
 
 
 class HTTPError(RequestException):
@@ -80,11 +70,11 @@ class TooManyRedirects(RequestException):
 
 
 class MissingSchema(RequestException, ValueError):
-    """The URL scheme (e.g. http or https) is missing."""
+    """The URL schema (e.g. http or https) is missing."""
 
 
 class InvalidSchema(RequestException, ValueError):
-    """The URL scheme provided is either invalid or unsupported."""
+    """See defaults.py for valid schemas."""
 
 
 class InvalidURL(RequestException, ValueError):
@@ -104,11 +94,11 @@ class ChunkedEncodingError(RequestException):
 
 
 class ContentDecodingError(RequestException, BaseHTTPError):
-    """Failed to decode response content."""
+    """Failed to decode response content"""
 
 
 class StreamConsumedError(RequestException, TypeError):
-    """The content for this response was already consumed."""
+    """The content for this response was already consumed"""
 
 
 class RetryError(RequestException):
@@ -116,18 +106,21 @@ class RetryError(RequestException):
 
 
 class UnrewindableBodyError(RequestException):
-    """Requests encountered an error when trying to rewind a body."""
+    """Requests encountered an error when trying to rewind a body"""
 
 # Warnings
 
 
 class RequestsWarning(Warning):
     """Base warning for Requests."""
+    pass
 
 
 class FileModeWarning(RequestsWarning, DeprecationWarning):
     """A file was opened in text mode, but Requests determined its binary length."""
+    pass
 
 
 class RequestsDependencyWarning(RequestsWarning):
     """An imported dependency doesn't match the expected version range."""
+    pass

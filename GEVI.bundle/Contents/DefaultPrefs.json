@@ -43,12 +43,6 @@
         "default": ""
     },
     {
-        "id": "resetmeta",
-        "label": "Clear previously set metadata",
-        "type": "bool",
-        "default": "false"
-    },
-    {
         "id": "prefixgenre",
         "label": "Prefix Genres with Agent Sexuality Type (Useful for Mixed Content Libraries)",
         "type": "bool",
@@ -76,7 +70,7 @@
     },
     {
         "id": "countrycollection",
-        "label": "Create Film Production Country Collections",
+        "label": "Create Film Country Collections from Country of Origin and Cast/Director Nationality",
         "type": "bool",
         "default": "true"
     },
