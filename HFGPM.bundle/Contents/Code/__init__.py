@@ -214,7 +214,7 @@ class HFGPM(Agent.Movies):
 
                 # Site Film Duration - formatted as 99h 99mn 99sc 999ms 
                 utils.log(LOG_BIGLINE)
-                durationMatch = False
+                matchedDuration = False
                 vDuration = FILMDICT['Duration']
                 try:
                     filmduration = html.xpath('./div[@class="base shortstory"]/div[@class="maincont"]/div/text()[contains(.,"mn ")]')[0].strip()
@@ -226,14 +226,14 @@ class HFGPM(Agent.Movies):
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Film Duration', duration.strftime('%H:%M:%S')))
                     try:
                         utils.matchDuration(duration, FILMDICT)
-                        durationMatch = True
+                        matchedDuration = True
                         vDuration = duration
                     except Exception as e:
                         utils.log('SEARCH:: Error matching Site Film Duration: {0}'.format(e))
                 except Exception as e:
                     utils.log('SEARCH:: Error getting Site Film Duration')
 
-                if not durationMatch and MATCHSITEDURATION:
+                if matchedDuration is False and AGENTDICT['prefMATCHSITEDURATION'] is True:
                     utils.log(LOG_SUBLINE)
                     continue
 

@@ -82,9 +82,9 @@ class GEVI(Agent.Movies):
         utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Replaced ampersands & " and " with ', 'Space')))
 
         # replace following with null
-        nullChars = [',', '!', '#', '+', '=', u'²'] # to be replaced with null
+        nullChars = [',', '!', '#', '+', '=', u'²']     # to be replaced with null
         pattern = u'[{0}]'.format(''.join(nullChars))
-        matched = re.search(pattern, myString)  # match against whole string
+        matched = re.search(pattern, myString)          # match against whole string
         if matched:
             myString = re.sub(pattern, '', myString)
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1}'.format('Removed Pattern', pattern)))

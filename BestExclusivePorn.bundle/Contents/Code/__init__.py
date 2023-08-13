@@ -16,6 +16,7 @@
     20 Jun 2023     2020.08.09.20   Formatting for error messages updated
     25 Jun 2023     2020.08.09.21   Updated to use new utils.py - AGENTDICT
     01 Jul 2023     2020.08.09.22   Updated to use new utils.py
+    12 Aug 2023     2020.08.09.23   Updated utils.matchduration call to use AGENTDICT
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -23,7 +24,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.08.09.22'
+VERSION_NO = '2020.08.09.23'
 AGENT = 'BestExclusivePorn'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -259,7 +260,7 @@ class BestExclusivePorn(Agent.Movies):
                     duration = filmDuration[0] * 3600 + filmDuration[1] * 60 + filmDuration[2]                       # convert to seconds
                     duration = datetime.fromtimestamp(duration)
                     try:
-                        utils.matchDuration(duration, FILMDICT)
+                        utils.matchDuration(duration, AGENTDICT, FILMDICT)
                         matchedDuration = True
                         vDuration = duration
                     except Exception as e:
