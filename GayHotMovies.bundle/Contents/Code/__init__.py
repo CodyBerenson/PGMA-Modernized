@@ -12,14 +12,14 @@
     27 Nov 2022     2019.18.12.17   Updated to use latest version of utils.py
                                     Code inserted to replect changes to website
     10 Jul 2023     2019.18.12.18   Updated to use new utils.py
-
+    15 Aug 2023     2019.18.12.19   Updated utils.matchduration call to use AGENTDICT
 ---------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.18'
+VERSION_NO = '2019.08.12.19'
 AGENT = 'GayHotMovies'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -253,7 +253,7 @@ class GayHotMovies(Agent.Movies):
                     duration = datetime.fromtimestamp(duration)
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Film Duration', duration))
                     try:
-                        utils.matchDuration(duration, FILMDICT)
+                        utils.matchDuration(duration, AGENTDICT, FILMDICT)
                         matchedDuration = True
                         vDuration = duration
                     except Exception as e:

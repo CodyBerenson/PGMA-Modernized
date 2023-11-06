@@ -9,14 +9,14 @@
     05 Dec 2022     2019.08.12.10   Updated to use latest version of utils.py
     04 Feb 2023     2019.08.12.11   added code to retrieve studio from site entry
     13 Jul 2023     2019.08.12.12   Updated to use latest version of utils.py
-    
+    15 Aug 2023     2019.08.12.13   Updated utils.matchduration call to use AGENTDICT
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.12'
+VERSION_NO = '2019.08.12.13'
 AGENT = 'HomoActive'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -227,7 +227,7 @@ class HomoActive(Agent.Movies):
                     duration = datetime.fromtimestamp(duration)
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Film Duration', duration.strftime('%H:%M:%S')))
                     try:
-                        utils.matchDuration(duration, FILMDICT)
+                        utils.matchDuration(duration, AGENTDICT, FILMDICT)
                         matchedDuration = True
                         vDuration = duration
                     except Exception as e:

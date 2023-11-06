@@ -13,14 +13,14 @@
     19 Feb 2023     2021.11.15.06   Corrected multiple errors processing site entries
     26 Feb 2023     2021.11.15.07   Corrected error processing file titles
     13 Jul 2023     2021.11.15.08   Updated to use latest version of utils.py
-
+    15 Aug 2023     2021.11.15.09   Updated utils.matchduration call to use AGENTDICT
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2021.11.15.08'
+VERSION_NO = '2021.11.15.09'
 AGENT = 'HFGPM'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -225,7 +225,7 @@ class HFGPM(Agent.Movies):
                     duration = datetime.fromtimestamp(duration)
                     utils.log('SEARCH:: {0:<29} {1}'.format('Site Film Duration', duration.strftime('%H:%M:%S')))
                     try:
-                        utils.matchDuration(duration, FILMDICT)
+                        utils.matchDuration(duration, AGENTDICT, FILMDICT)
                         matchedDuration = True
                         vDuration = duration
                     except Exception as e:

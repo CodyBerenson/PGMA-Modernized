@@ -181,7 +181,7 @@ class Fagalicious(Agent.Movies):
                 continue
 
             try:
-                html = HTML.ElementFromURL(searchQuery, cacheTime=3, timeout=20, sleep=utils.delay())
+                html = HTML.ElementFromURL(searchQuery, cacheTime=4, timeout=30, sleep=utils.delay())
                 filmsList = html.xpath('//header[@class="entry-header"]')
                 if not filmsList:
                     raise Exception('< No Scene Titles >')

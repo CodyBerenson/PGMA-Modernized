@@ -14,6 +14,7 @@
     03 Jan 2022     2019.08.12.20   Corrected multipage search results processing
     03 Feb 2023     2019.08.12.21   Use both production year and release dates in matching
     10 Jul 2023     2019.08.12.22   Updated to use new utils.py
+    15 Aug 2023     2019.08.12.23   Updated utils.matchduration call to use AGENTDICT
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -21,7 +22,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.22'
+VERSION_NO = '2019.08.12.23'
 AGENT = 'GayEmpire'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -262,7 +263,7 @@ class GayEmpire(Agent.Movies):
                     duration = int(duration) * 60
                     duration = datetime.fromtimestamp(duration)
                     try:
-                        utils.matchDuration(duration, FILMDICT)
+                        utils.matchDuration(duration, AGENTDICT, FILMDICT)
                         matchedDuration = True
                         vDuration = duration
                     except Exception as e:

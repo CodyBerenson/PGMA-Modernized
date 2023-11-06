@@ -12,14 +12,14 @@
                                     - introduced Grouped Collections and Default to keep track of films
     05 Dec 2022     2020.12.22.08   Updated to use latest version of utils.py
     13 Jul 2023     2020.12.22.09   Updated to use latest version of utils.py
-
+    15 Aug 2023     2020.12.22.10   Updated utils.matchduration call to use AGENTDICT
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.12.22.09'
+VERSION_NO = '2020.12.22.10'
 AGENT = 'AVEntertainments'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -233,7 +233,7 @@ class AVEntertainments(Agent.Movies):
                     duration = int(duration) * 60                                                                                         # convert to seconds
                     duration = datetime.fromtimestamp(duration)
                     try:
-                        utils.matchDuration(duration, FILMDICT)
+                        utils.matchDuration(duration, AGENTDICT, FILMDICT)
                         matchedDuration = True
                         vDuration  = duration
                     except Exception as e:

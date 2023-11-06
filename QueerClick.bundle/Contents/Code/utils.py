@@ -105,6 +105,12 @@ General Functions found in all agents
                     corrected updatemetadata routine no variable as FILMDICT['ReleaseDate']
     13 Aug 2023     Skip Release Date Matching if no File Year
                     Code correction in Duration matching
+    15 Aug 2023     Change in GayEmpire Synopsis xPath - error picked up by Joca
+                    Corrections to collection creation code
+    26 Aug 2023     Correct AKA error in cast/director
+                    add collection error to IAFD403 List and stop scrape fail if retrieval of director/cast picture fails
+    27 Aug 2023     Change to code to ease adaptation of agents to straight versions...
+    10 Oct 2023     fixed reintroduced error... u'½' could not be searched for including IAFD
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, copy, inspect, json, os, platform, plistlib, random, re, requests, subprocess, sys, time
@@ -116,7 +122,7 @@ from textwrap import wrap
 from unidecode import unidecode
 
 # Variables
-UTILS_UPDATE = '13 Aug 2023'
+UTILS_UPDATE = '10 Oct 2023'
 IAFD_BASE = 'https://www.iafd.com'
 IAFD_SEARCH_URL = IAFD_BASE + '/ramesearch.asp?searchtype=comprehensive&searchstring={0}'
 IAFD_FILTER = '&FirstYear={0}&LastYear={1}&Submit=Filter'
@@ -194,7 +200,8 @@ def getCast(agntCastList, AGENTDICT, FILMDICT):
     for cast in agntCastList:
         matchedCast = False
         for castKey, castValue in FILMDICT['Cast'].items():
-            if cast in castKey or cast in castValue['Bio']['AKA'] or cast in castValue['RealName'] or cast in castValue['Alias']:
+            castAKA = '' if 'AKA' not in castValue['Bio'] else castValue['Bio']['AKA']
+            if cast in castKey or (castAKA and cast in castAKA) or cast in castValue['RealName'] or cast in castValue['Alias']:
                 matchedCast = True
                 break
 
@@ -239,7 +246,8 @@ def getDirectors(agntDirectorList, AGENTDICT, FILMDICT):
     for director in agntDirectorList:
         matchedDirector = False
         for directorKey, directorValue in FILMDICT['Directors'].items():
-            if director in directorKey or director in directorValue['Bio']['AKA'] or director in directorValue['RealName'] or director in directorValue['Alias']:
+            directorAKA = '' if 'AKA' not in directorValue['Bio'] else directorValue['Bio']['AKA']
+            if director in directorKey or (directorAKA and director in directorAKA) or director in directorValue['RealName'] or director in directorValue['Alias']:
                 matchedDirector = True
                 break
 
@@ -406,7 +414,7 @@ def getFilmOnIAFD(AGENTDICT, FILMDICT):
                     filmURL = '{0}{1}'.format(IAFD_BASE, filmURL) if filmURL[0] == '/' else '{0}/{1}'.format(IAFD_BASE, filmURL)
                 FILMDICT['IAFDFilmURL'] = filmURL
                 vFilmURL = filmURL
-                if FILMDICT['Agent'] == 'IAFD':
+                if AGENT == 'IAFD':
                     FILMDICT['FilmURL'] = filmURL
                 log('UTILS :: {0:<29} {1}'.format('IAFD Site Title Url', filmURL))
 
@@ -2418,7 +2426,7 @@ def getSiteInfoFagalicious(AGENTDICT, FILMDICT, **kwargs):
 # ----------------------------------------------------------------------------------------------------------------------------------
 def getSiteInfoGayEmpire(AGENTDICT, FILMDICT, **kwargs):
     ''' get Release Date, Genres, Countries, IsCompilation, Poster & Art Images, Scene and Chapter information '''
-    mySource = 'Gay DVD Empire'
+    mySource = 'Gay Empire'
     siteInfoDict = {}
     kwFilmHTML = kwargs.get('kwFilmHTML')
     html = FILMDICT['FilmHTML'] if kwFilmHTML is None else kwFilmHTML
@@ -2426,10 +2434,11 @@ def getSiteInfoGayEmpire(AGENTDICT, FILMDICT, **kwargs):
         #   1.  Synopsis
         log(LOG_SUBLINE)
         try:
-            htmlsynopsis = html.xpath('//div[@class="col-xs-12 text-center p-y-2 bg-lightgrey"]/div/p')[0].text_content()
-            htmlsynopsis = re.sub('<[^<]+?>', '', htmlsynopsis).strip()
-            siteInfoDict['Synopsis'] = htmlsynopsis
-            WrapText('Synopsis', htmlsynopsis)
+            htmlsynopsis = html.xpath('//div[@class="col-xs-12 text-center p-y-2 bg-lightgrey"]/div//p/text()')
+            synopsis = '\n'.join(htmlsynopsis)
+            synopsis = re.sub('<[^<]+?>', '', synopsis).strip()
+            WrapText('Synopsis', synopsis)
+            siteInfoDict['Synopsis'] = synopsis
 
         except Exception as e:
             siteInfoDict['Synopsis'] = ' '
@@ -2614,7 +2623,7 @@ def getSiteInfoGayEmpire(AGENTDICT, FILMDICT, **kwargs):
             htmldurations = html.xpath('//div[@class="col-sm-6 m-b-1"]/span[contains(text(), " min")]/text()[normalize-space()]')
             htmldurations = ['{0}:00'.format(x.split()[0]) for x in htmldurations]   # extract time strings - format MM convert to MM:SS
 
-            # sum up the scenes' length: Gay DVD Empire uses Min format but htmlduration converted to MM:SS
+            # sum up the scenes' length: Gay Empire uses Min format but htmlduration converted to MM:SS
             scenesDelta = timedelta()
             for htmlduration in htmldurations:
                 (mm, ss) = htmlduration.split(':')
@@ -2646,7 +2655,7 @@ def getSiteInfoGayEmpire(AGENTDICT, FILMDICT, **kwargs):
                     log('UTILS :: {0:<29} {1}'.format('Review Source', '{0} - {1}'.format(mySource, reviewSource) if reviewSource else 'None Recorded'))
 
                     # Review Author - default to website name
-                    reviewAuthor = 'Gay DVD Empire'
+                    reviewAuthor = 'Gay Empire'
                     log('UTILS :: {0:<29} {1}'.format('Review Author', reviewAuthor))
 
                     # Review Text
@@ -2715,7 +2724,7 @@ def getSiteInfoGayHotMovies(AGENTDICT, FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         try:
             htmlsynopsis = html.xpath('//article//text()')
-            htmlsynopsis = ' '.join(htmlsynopsis)
+            htmlsynopsis = '\n'.join(htmlsynopsis)
             htmlsynopsis = re.sub('<[^<]+?>', '', htmlsynopsis).strip()
 
             regex = r'The movie you are enjoying was created by consenting adults.*'
@@ -4293,7 +4302,7 @@ def getSiteInfoHomoActive(AGENTDICT, FILMDICT, **kwargs):
         log(LOG_SUBLINE)
         try:
             htmlsynopsis = html.xpath('//div[@class="description"]/div[@class="std"]/text()')
-            synopsis = " ".join(htmlsynopsis).strip()
+            synopsis = "\n".join(htmlsynopsis).strip()
             siteInfoDict['Synopsis'] = synopsis
             WrapText('Synopsis', synopsis)
 
@@ -5548,9 +5557,9 @@ def makeASCII(myString):
     matched = re.search(pattern, myString)                  # match against whole string
     if matched:
         myString = re.sub(pattern, '-', myString)
-        myString = ' '.join(myString.split())               # remove continous white space
 
     myString = unidecode(myString)                          # strip all accents, umlauts etc and replace with ASCII equivalent
+    myString = ' '.join(myString.split())                   # remove continous white space
 
     return myString
 
@@ -6208,6 +6217,7 @@ def matchFilename(AGENTDICT, media):
     filmVars['CompareTitle'] = set()
     filmVars['Title'] = groups['fnTITLE']
     squares = [i for i, char in enumerate(filmVars['Title']) if char == u'²']                   # check for mathematical square character in string
+    halves = [i for i, char in enumerate(filmVars['Title']) if char == u'½']                    # check for half character in string
     filmVars['Title'] = filmVars['Title'].replace('~', '/').replace('¬','?')                    # ~ invalid character marker in filename
     tempTitle = filmVars['Title']
     filmVars['Title'] = makeASCII(filmVars['Title'])
@@ -6216,6 +6226,13 @@ def matchFilename(AGENTDICT, media):
         newTitle = []
         for idx, char in enumerate(tempTitle):
             newTitle.append(u'²' if idx in squares else char)
+        filmVars['Title'] = ''.join(newTitle)
+
+    # make ascii casts u'½' as 2 messing up searches
+    if halves:
+        newTitle = []
+        for idx, char in enumerate(tempTitle):
+            newTitle.append(u'½' if idx in halves else char)
         filmVars['Title'] = ''.join(newTitle)
 
     filmVars['NormaliseTitle'] = Normalise(filmVars['Title'])
@@ -6307,10 +6324,15 @@ def matchFilename(AGENTDICT, media):
     filmVars['CompareIAFDStudio'] = Normalise(filmVars['IAFDStudio']) if 'IAFDStudio' in filmVars and filmVars['IAFDStudio'] else ''
 
     #       IAFD Title - IAFD uses standard Latin Alphabet Characters for its entries.
-    #                  - deal with ² in title - replace with the word Squared
+    #                  - deal with ² and ½ in title - replace with the word Squared
     pattern = u'²'
     matched = re.search(pattern, groups['fnTITLE'])  # match against whole string
     groups['fnTITLE'] = re.sub(pattern, ' Squared', groups['fnTITLE']) if matched else groups['fnTITLE']
+
+    pattern = u' +½'
+    matched = re.search(pattern, groups['fnTITLE'])  # match against whole string
+    groups['fnTITLE'] = re.sub(pattern, '.5', groups['fnTITLE']) if matched else groups['fnTITLE']
+
     filmVars['IAFDTitle'] = makeASCII(groups['fnTITLE']).replace(' - ', ': ').replace('- ', ': ')       # iafd needs colons in place to search correctly
     filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace('!', ' ').replace('*', ' ')                   # remove !, *
     filmVars['IAFDTitle'] = ' '.join(filmVars['IAFDTitle'].split())                                     # replace multi-spaces with space
@@ -6377,7 +6399,7 @@ def matchFilename(AGENTDICT, media):
     # delete unneeded dictionary keys
     del filmVars['NormaliseIAFDTitle']
     del filmVars['NormaliseTitle']
-    del filmVars['ShortTitle']
+    #del filmVars['ShortTitle']
 
     # print out dictionary values / normalise unicode
     log('UTILS :: {0:<29} {1}'.format('FilmVars Dictionary:', ''))
@@ -6523,6 +6545,7 @@ def Normalise(myString):
             myArabic = '{0}'.format(myArabic)
             myString = re.sub(pattern, myArabic, myString)
 
+    halves = True if '½' in myString else False
     # convert to lower case and trim
     myString = myString.strip().lower()
 
@@ -6537,6 +6560,7 @@ def Normalise(myString):
 
     # change string to ASCII
     myString = makeASCII(myString)
+    myString = myString if halves is False else myString.replace('1/2', '½')
 
     # strip domain suffixes, vol., volume, Pt, Part from string, standalone '1's' then strip all non alphanumeric characters
     # pattern = r'[.]([a-z]{2,3}co[.][a-z]{2})|Vol[.]|Vols[.]|Nr[.]|\bVolume\b|\bVolumes\b|Pt |\bPart\b[^A-Za-z0-9]+'
@@ -6963,6 +6987,7 @@ def updateMetadata(metadata, media, lang, force=True):
 
                     log('UTILS :: {0:<29} {1}'.format('Country' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
                     metadata.countries.add(item)
+
                     # Process Countries
                     if AGENTDICT['prefCOLCOUNTRY']:
                         entry = '{0} {1}'.format(AGENTDICT['prefCOLCOUNTRY'], item)
@@ -6977,21 +7002,24 @@ def updateMetadata(metadata, media, lang, force=True):
         # There is no working way to reset Posters
         if FILMDICT['Status'] is True:
             log(LOG_SUBLINE)
-            try:
-                for key in metadata.posters.keys():
-                    del metadata.posters[key]
-                    metadata.posters.validate_keys([])
+            for key in metadata.posters.keys():
+                del metadata.posters[key]
+                metadata.posters.validate_keys([])
 
-                poster = myAgentDict['Poster']
-                log('UTILS :: {0:<29} {1}'.format('2h. Poster Images', poster if poster else 'None Found'))
-                image = ''
-                imageContent = ''
-                for idx, item in enumerate(poster, start=1):
+            poster = myAgentDict['Poster']
+            log('UTILS :: {0:<29} {1}'.format('2h. Poster Images', poster if poster else 'None Found'))
+            image = ''
+            imageContent = ''
+            for idx, item in enumerate(poster, start=1):
+                try:
                     image, imageContent = getFilmImages(imageType='Poster', imageLocation=item, whRatio=1.5, sceneAgent=FILMDICT['SceneAgent'], thumborAddress=AGENTDICT['pgmaTHUMBOR'], rotation=FILMDICT['Rotation']) 
                     log('UTILS :: {0:<29} {1}'.format('Poster' if idx == 1 else '', '{0:>2} - {1}'.format(idx, image)))
                     metadata.posters[image] = Proxy.Media(imageContent, sort_order=idx)
+                except Exception as e:
+                    log('UTILS :: Warning: Setting Poster: {0}'.format(e))         # do not fail scrape if poster can not be set
 
-                # save poster to disk
+            # save poster to disk
+            try:
                 if poster and 'Yes' in AGENTDICT['prefPOSTERSOURCEDOWNLOAD']:
                     idx = 0 if 'Local' in AGENTDICT['prefPOSTERSOURCEDOWNLOAD'] else -1
                     item = poster[idx]
@@ -6999,35 +7027,31 @@ def updateMetadata(metadata, media, lang, force=True):
                     filename = os.path.splitext(media.items[0].parts[0].file)[0]
                     downloadPoster = '{0}.{1}'.format(filename, extension)
                     PlexSaveFile(downloadPoster, imageContent)
-
             except Exception as e:
-                log('UTILS :: Error: setting Poster: {0}'.format(e))         # do not fail scrape if poster can not be set
-                FILMDICT['Status'] = False
+                log('UTILS :: Warning: Saving Poster to Disk: {0}'.format(e))         # do not fail scrape if poster can not be set
 
         # 2i.   Art - Back Cover of DVD : Determined by user preference
         # There is no working way to reset Art
         if FILMDICT['Status'] is True:
             log(LOG_SUBLINE)
-            try:
-                if AGENTDICT['prefUSEBACKGROUNDART'] is True:
-                    for key in metadata.art.keys():
-                        del metadata.art[key]
-                        metadata.art.validate_keys([])
+            if AGENTDICT['prefUSEBACKGROUNDART'] is True:
+                for key in metadata.art.keys():
+                    del metadata.art[key]
+                    metadata.art.validate_keys([])
 
-                    art = myAgentDict['Art']
-                    log('UTILS :: {0:<29} {1}'.format('2i. Art Images', art if art else 'None Found'))
-                    image = ''
-                    imageContent = ''
-                    for idx, item in enumerate(art, start=1):
+                art = myAgentDict['Art']
+                log('UTILS :: {0:<29} {1}'.format('2i. Art Images', art if art else 'None Found'))
+                image = ''
+                imageContent = ''
+                for idx, item in enumerate(art, start=1):
+                    try:
                         image, imageContent = getFilmImages(imageType='Art', imageLocation=item, whRatio=1.5, sceneAgent=FILMDICT['SceneAgent'], thumborAddress=AGENTDICT['pgmaTHUMBOR'], rotation=FILMDICT['Rotation']) 
                         log('UTILS :: {0:<29} {1}'.format('Art' if idx == 1 else '', '{0:>2} - {1}'.format(idx, image)))
                         metadata.art[image] = Proxy.Media(imageContent, sort_order=idx)
-                else:
-                    log('UTILS :: {0:<29} {1}'.format('Art Image', 'Not Set By Preference'))
-
-            except Exception as e:
-                log('UTILS :: Error: setting Art: {0}'.format(e))          # do not fail scrape if art can not be set
-                FILMDICT['Status'] = False
+                    except Exception as e:
+                        log('UTILS :: Warning: Setting Art: {0}'.format(e))          # do not fail scrape if art can not be set
+            else:
+                log('UTILS :: {0:<29} {1}'.format('Art Image', 'Not Set By Preference'))
 
         # 2j.   Reviews - Put all Scene information as default unless there are none and website has actual reviews
         if FILMDICT['Status'] is True:
@@ -7221,11 +7245,18 @@ def updateMetadata(metadata, media, lang, force=True):
 
                     # create collection title - depending on type of collection i.e. Cast, Director, Studio, Series - replace standard spaces with alternate spaces
                     try:
-                        pattern2 = NOBREAK_SPACE if AGENTDICT['prefCOLDIRECTOR'] in collectionsKey else EN_SPACE if AGENTDICT['prefCOLSTUDIO'] in collectionsKey or AGENTDICT['prefCOLSERIES'] in collectionsKey else ' '
-                        pattern1 = '\s\[d\]|\|\d\|\s|\|\d.\d\|\s'     # remove | number | pattern and death markers
-                        title = re.sub(pattern1, '', collectionsKey).strip()
-                        title = re.sub(' ', pattern2, title).strip()
-                        title = '{0}{1}'.format(title, pattern2).strip()
+                        spaceType = ' '
+                        if AGENTDICT['prefCOLDIRECTOR'] and AGENTDICT['prefCOLDIRECTOR'] in collectionsKey:
+                            spaceType = NOBREAK_SPACE
+                        elif AGENTDICT['prefCOLSTUDIO'] and AGENTDICT['prefCOLSTUDIO'] in collectionsKey:
+                            spaceType = EN_SPACE
+                        elif AGENTDICT['prefCOLSERIES'] and AGENTDICT['prefCOLSERIES'] in collectionsKey:
+                            spaceType = EN_SPACE
+
+                        pattern = '\s\[d\]|\|\d\|\s|\|\d.\d\|\s'     # remove | number | pattern and death markers
+                        title = re.sub(pattern, '', collectionsKey)
+                        title = title.replace(' ', spaceType) + spaceType
+                        title = title.strip()
                         log('UTILS :: {0:<29} {1}'.format('Collection Title', title))
                         metadata.collections.add(title)
 
@@ -7290,8 +7321,11 @@ def updateMetadata(metadata, media, lang, force=True):
 
                         except Exception as e:
                             log('UTILS :: Error: setting Collection Poster: {0}'.format(e))
-                            FILMDICT['Status'] = False
-                            break
+                            if '403' in e:
+                                FILMDICT['IAFD403Err'].add('Collection')
+                            else:       # break for all other errors
+                                FILMDICT['Status'] = False
+                                break
 
                     #   Set Collection Art
                     if FILMDICT['Status'] is True:
@@ -7304,8 +7338,11 @@ def updateMetadata(metadata, media, lang, force=True):
 
                         except Exception as e:
                             log('UTILS :: Error: setting Collection Art: {0}'.format(e))
-                            FILMDICT['Status'] = False
-                            break
+                            if '403' in e:
+                                FILMDICT['IAFD403Err'].add('Collection')
+                            else:       # break for all other errors
+                                FILMDICT['Status'] = False
+                                break
 
                     #   Set Collection Summary: None set for Genres
                     if FILMDICT['Status'] is True:
@@ -7517,7 +7554,7 @@ def setupAgentVariables(media):
         log('UTILS :: 6.\tPrepare Dictionary of Genres and Symbols')
         pgmaGENRESDICT = {}
         try:
-            genreFiles = ['Genres.txt', 'UserGenres.txt']
+            genreFiles = ['GayGenres.txt', 'UserGayGenres.txt'] if AGENT_TYPE == '⚣' else ['StraightGenres.txt', 'UserStraightGenres.txt']
             genres_txt = ''
             log('UTILS :: {0:<29} {1}'.format('\tTidy Files', genreFiles))
             for genreFile in genreFiles:
@@ -7592,7 +7629,7 @@ def setupAgentVariables(media):
                     elif value == 'x':
                         tidiedNullSet.add('{0} : {1}'.format(keyValue[0], value))
                     else:
-                        log('UTILS :: {0:<29} {1}'.format('\t\t{0}: Not Found in Genres.txt'.format(tidy), 'Row {0} - {1}'.format(idx, row)))
+                        log('UTILS :: {0:<29} {1}'.format('\t\t{0}: Not Found in {1}Genres.txt'.format(tidy, 'Gay' if AGENT_TYPE == '⚣' else 'Straight'), 'Row {0} - {1}'.format(idx, row)))
                         tidiedErrorSet.add('{0} : {1}'.format(keyValue[0], value))
 
             log('UTILS :: {0:<29} {1}'.format('\tOriginal Categories', '{0:>4} - {1}'.format(len(pgmaTIDYDICT), sorted(pgmaTIDYDICT.keys()))))
@@ -7700,6 +7737,17 @@ def setupAgentVariables(media):
             pgmaLIBRARYID = ''
             pgmaLIBRARYTITLE = ''
             log('UTILS :: Error: Getting Library ID & Title: {0}'.format(e))
+            json = e.message
+            jsonArray = json.replace('" ', '"_').split('_')
+            for item in jsonArray:
+                if 'librarySectionID' in item:
+                    pgmaLIBRARYID = item.split('=')[1].replace('"', '')
+                if 'librarySectionTitle' in item:
+                    pgmaLIBRARYTITLE = item.split('=')[1].replace('"', '')
+            log('UTILS :: Getting Library ID & Title from Error Message')
+            log('UTILS :: {0:<29} {1}'.format('\tLibrary ID', pgmaLIBRARYID))
+            log('UTILS :: {0:<29} {1}'.format('\tLibrary Title', pgmaLIBRARYTITLE))
+
 
         continueSetup = True if pgmaMACHINEID and pgmaSSN and pgmaLIBRARYID and pgmaLIBRARYTITLE else False
 
@@ -7956,7 +8004,6 @@ def TranslateString(myString, siteLanguage, plexLibLanguageCode, detectLanguage)
     return myString
 # ----------------------------------------------------------------------------------------------------------------------------------
 def WrapText(myHeading, myString):
-    myString = myString.replace('\n', '')
     textList = wrap(myString, 100)
     for idx, textLine in enumerate(textList):
         log('UTILS :: {0:<29} {1}'.format(myHeading if idx == 0 else '', textLine.strip()))

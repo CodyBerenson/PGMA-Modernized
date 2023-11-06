@@ -13,13 +13,14 @@
     04 Dec 2022     2020.05.21.15   Renamed to AEBN
     10 Jul 2023     2020.05.21.16   Updated to use new utils.py
     01 Aug 2023     2020.05.21.17   Improved matching with IAFD
+    15 Aug 2023     2020.05.21.18   Updated utils.matchduration call to use AGENTDICT
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.05.21.17'
+VERSION_NO = '2020.05.21.18'
 AGENT = 'AEBN'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -246,7 +247,7 @@ class AEBN(Agent.Movies):
                         fhtmlDuration = '1970-01-01 {0}'.format(':'.join(fhtmlDuration))                              # prefix with 1970-01-01 to conform to timestamp
                         duration = datetime.strptime(fhtmlDuration, '%Y-%m-%d %H:%M:%S')                                 # turn to date time object
                         try:
-                            utils.matchDuration(duration, FILMDICT)
+                            utils.matchDuration(duration, AGENTDICT, FILMDICT)
                             matchedDuration = True
                             vDuration = duration
                         except Exception as e:

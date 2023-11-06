@@ -24,13 +24,15 @@
     07 Jul 2023     2019.12.25.46   GEVI Website Design Change - implement new xpath
     14 Jul 2023     2019.12.25.47   films to failing to match release dates wer not been assigned the default filename date
     01 Aug 2023     2019.12.25.48   Improved matching with IAFD
+    15 Aug 2023     2019.12.25.49   Updated utils.matchduration call to use AGENTDICT
+    08 Oct 2023     2019.12.25.50   Fixed presence of ½ in title, preventing retrieval of search results
 -----------------------------------------------------------------------------------------------------------------------------------
 '''
 import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.12.25.48'
+VERSION_NO = '2019.12.25.50'
 AGENT = 'GEVI'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -99,10 +101,10 @@ class GEVI(Agent.Movies):
 
         # remove continuous spaces in string
         myString = ' '.join(myString.split())
-        fraction = True if '½' in myString else False
+        halves = True if '½' in myString else False
 
-        myString = String.StripDiacritics(myString) 
-        myString = myString if not fraction else myString.replace('12', '½')
+        myString = String.StripDiacritics(myString)
+        myString = myString if halves is False else myString.replace('12', '½')
         myString = String.URLEncode(myString.strip())
 
         # sort out double encoding: & html code %26 for example is encoded as %2526; on MAC OS '*' sometimes appear in the encoded string
