@@ -111,6 +111,9 @@ General Functions found in all agents
                     add collection error to IAFD403 List and stop scrape fail if retrieval of director/cast picture fails
     27 Aug 2023     Change to code to ease adaptation of agents to straight versions...
     10 Oct 2023     fixed reintroduced error... u'½' could not be searched for including IAFD
+    09 Nov 2023     Thumbor url update
+                    replace os.path.exists with os.path.isfile
+                    simplified country art/poster processing
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, copy, inspect, json, os, platform, plistlib, random, re, requests, subprocess, sys, time
@@ -122,7 +125,7 @@ from textwrap import wrap
 from unidecode import unidecode
 
 # Variables
-UTILS_UPDATE = '10 Oct 2023'
+UTILS_UPDATE = '09 Nov 2023'
 IAFD_BASE = 'https://www.iafd.com'
 IAFD_SEARCH_URL = IAFD_BASE + '/ramesearch.asp?searchtype=comprehensive&searchstring={0}'
 IAFD_FILTER = '&FirstYear={0}&LastYear={1}&Submit=Filter'
@@ -6662,7 +6665,7 @@ def updateMetadata(metadata, media, lang, force=True):
         prefix = '{0}{1}'.format(AGENT_TYPE, THIN_SPACE) if AGENTDICT['prefPREFIXGENRE'] is True else ''      # add prefix to genres and genre collections if preferenced
         deathRegex = r'Date of Death|Year of Death|would be'.replace(' ', NOBREAK_SPACE)
         errorCountryArt = os.path.join(AGENTDICT['pgmaCOUNTRYART'], '_Error.png')
-        errorCountryPosterFlag = os.path.join(AGENTDICT['pgmaCOUNTRYPOSTERFLAGS'], '_Error.png')
+        errorCountryPoster = os.path.join(AGENTDICT['pgmaCOUNTRYPOSTERFLAGS'], '_Error.png')
 
         '''
         The following bits of metadata need to be established and used to update the movie on plex
@@ -6892,7 +6895,7 @@ def updateMetadata(metadata, media, lang, force=True):
                             nationalities.add(myNationality)
 
                         myFlag = os.path.join(AGENTDICT['pgmaCOUNTRYART'], '{0}.png'.format(myNationality)) if myNationality else ''
-                        art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else errorCountryArt
+                        art =  myFlag if os.path.isfile(myFlag) else '' if not myFlag else errorCountryArt
                         collectionsDict[entry] = {'Poster': castValue['Photo'], 'Art': art, 'Summary': summary}
 
             except Exception as e:
@@ -6949,7 +6952,7 @@ def updateMetadata(metadata, media, lang, force=True):
                             nationalities.add(myNationality)
 
                         myFlag = os.path.join(AGENTDICT['pgmaCOUNTRYART'], '{0}.png'.format(myNationality)) if myNationality else ''
-                        art =  myFlag if os.path.exists(myFlag) else '' if not myFlag else errorCountryArt
+                        art =  myFlag if os.path.isfile(myFlag) else '' if not myFlag else errorCountryArt
                         collectionsDict[entry] = {'Poster': directorValue['Photo'], 'Art': art, 'Summary': summary}
 
             except Exception as e:
@@ -6973,23 +6976,17 @@ def updateMetadata(metadata, media, lang, force=True):
                 listCountries.sort(key = lambda x: x.lower())
                 log('UTILS :: {0:<29} {1}'.format('2g. Countries', '{0:>2} - {1}'.format(len(listCountries), listCountries)))
                 for idx, item in enumerate(listCountries, start=1):
-                    countryArt = os.path.join(AGENTDICT['pgmaCOUNTRYART'], '{0}.png'.format(item))
-                    countryArt = countryArt if os.path.exists(countryArt) else errorCountryArt
-
-                    # use map as country posters, if missing use vertical flag of country or error flag if that is also missing
-                    flagPoster = os.path.join(AGENTDICT['pgmaCOUNTRYPOSTERFLAGS'], '{0}.png'.format(item))
-                    if AGENTDICT['prefCOUNTRYPOSTERTYPE'] == 'Map':
-                        mapPoster = os.path.join(AGENTDICT['pgmaCOUNTRYPOSTERMAPS'], '{0}.jpg'.format(item))
-                        countryPoster = mapPoster if os.path.exists(mapPoster) else flagPoster if os.path.exists(flagPoster) else errorCountryPosterFlag
-                    else:
-                        # use vertical flag as poster or error flag if missing
-                        countryPoster = flagPoster if os.path.exists(flagPoster) else errorCountryPosterFlag
-
                     log('UTILS :: {0:<29} {1}'.format('Country' if idx == 1 else '', '{0:>2} - {1}'.format(idx, item)))
                     metadata.countries.add(item)
 
-                    # Process Countries
+                    # Process Countries - posters can either be maps or flags - error united nation emblem
                     if AGENTDICT['prefCOLCOUNTRY']:
+                        countryArt = os.path.join(AGENTDICT['pgmaCOUNTRYART'], '{0}.png'.format(item))
+                        countryArt = countryArt if os.path.isfile(countryArt) else errorCountryArt
+
+                        countryPoster = os.path.join(AGENTDICT['pgmaCOUNTRYPOSTERMAPS'], '{0}.jpg'.format(item)) if AGENTDICT['prefCOUNTRYPOSTERTYPE'] == 'Map' else os.path.join(AGENTDICT['pgmaCOUNTRYPOSTERFLAGS'], '{0}.png'.format(item))
+                        countryPoster = countryPoster if os.path.isfile(countryPoster) else errorCountryPoster
+
                         entry = '{0} {1}'.format(AGENTDICT['prefCOLCOUNTRY'], item)
                         collectionsDict[entry] = {'Poster': countryPoster, 'Art': countryArt, 'Summary': ''}
 
@@ -7756,31 +7753,31 @@ def setupAgentVariables(media):
         log(LOG_SUBLINE)
         log('UTILS :: 11.\tRetrieve Agent and Default Posters')
         pgmaAGENTPOSTER = os.path.join(pgmaSYSTEMFOLDER, '{0}.png'.format(AGENT))
-        pgmaAGENTPOSTER = pgmaAGENTPOSTER if os.path.exists(pgmaAGENTPOSTER) else ''
+        pgmaAGENTPOSTER = pgmaAGENTPOSTER if os.path.isfile(pgmaAGENTPOSTER) else ''
 
         pgmaCOMPILATIONSPOSTER = os.path.join(pgmaSYSTEMFOLDER, 'Compilations.png')
-        pgmaCOMPILATIONSPOSTER = pgmaCOMPILATIONSPOSTER if os.path.exists(pgmaCOMPILATIONSPOSTER) else ''
+        pgmaCOMPILATIONSPOSTER = pgmaCOMPILATIONSPOSTER if os.path.isfile(pgmaCOMPILATIONSPOSTER) else ''
         
         pgmaIAFD403POSTER = os.path.join(pgmaSYSTEMFOLDER, 'IAFD-403.png')
-        pgmaIAFD403POSTER = pgmaIAFD403POSTER if os.path.exists(pgmaIAFD403POSTER) else ''
+        pgmaIAFD403POSTER = pgmaIAFD403POSTER if os.path.isfile(pgmaIAFD403POSTER) else ''
         
         pgmaIAFDFOUNDPOSTER = os.path.join(pgmaSYSTEMFOLDER, 'IAFD-Found.png')
-        pgmaIAFDFOUNDPOSTER = pgmaIAFDFOUNDPOSTER if os.path.exists(pgmaIAFDFOUNDPOSTER) else ''
+        pgmaIAFDFOUNDPOSTER = pgmaIAFDFOUNDPOSTER if os.path.isfile(pgmaIAFDFOUNDPOSTER) else ''
         
         pgmaIAFDNOTFOUNDPOSTER = os.path.join(pgmaSYSTEMFOLDER, 'IAFD-NotFound.png')
-        pgmaIAFDNOTFOUNDPOSTER = pgmaIAFDNOTFOUNDPOSTER if os.path.exists(pgmaIAFDNOTFOUNDPOSTER) else ''
+        pgmaIAFDNOTFOUNDPOSTER = pgmaIAFDNOTFOUNDPOSTER if os.path.isfile(pgmaIAFDNOTFOUNDPOSTER) else ''
         
         pgmaSTACKEDPOSTER = os.path.join(pgmaSYSTEMFOLDER, 'Stacked-Yes.png')
-        pgmaSTACKEDPOSTER = pgmaSTACKEDPOSTER if os.path.exists(pgmaSTACKEDPOSTER) else ''
+        pgmaSTACKEDPOSTER = pgmaSTACKEDPOSTER if os.path.isfile(pgmaSTACKEDPOSTER) else ''
         
         pgmaNOTSTACKEDPOSTER = os.path.join(pgmaSYSTEMFOLDER, 'Stacked-No.png')
-        pgmaNOTSTACKEDPOSTER = pgmaNOTSTACKEDPOSTER if os.path.exists(pgmaNOTSTACKEDPOSTER) else ''
+        pgmaNOTSTACKEDPOSTER = pgmaNOTSTACKEDPOSTER if os.path.isfile(pgmaNOTSTACKEDPOSTER) else ''
         
         pgmaNOCASTPOSTER = os.path.join(pgmaSYSTEMFOLDER, 'NoCastPhoto.png')
-        pgmaNOCASTPOSTER = pgmaNOCASTPOSTER if os.path.exists(pgmaNOCASTPOSTER) else ''
+        pgmaNOCASTPOSTER = pgmaNOCASTPOSTER if os.path.isfile(pgmaNOCASTPOSTER) else ''
         
         pgmaNODIRECTORPOSTER = os.path.join(pgmaSYSTEMFOLDER, 'NoDirectorPhoto.png')
-        pgmaNODIRECTORPOSTER = pgmaNODIRECTORPOSTER if os.path.exists(pgmaNODIRECTORPOSTER) else ''
+        pgmaNODIRECTORPOSTER = pgmaNODIRECTORPOSTER if os.path.isfile(pgmaNODIRECTORPOSTER) else ''
         
         pgmaWATERMARK = String.URLEncode('https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png')
         log('UTILS :: {0:<29} {1}'.format('\tAgent Poster', pgmaAGENTPOSTER if pgmaAGENTPOSTER else WRONG_TICK))

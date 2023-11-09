@@ -97,12 +97,12 @@
         "id": "directorcollection",
         "label": "Create Film Director Collections",
         "type": "bool",
-        "default": "true"
+        "default": "false"
     },
     {
         "id": "castcollection",
         "label": "Create Film Cast Collection",
         "type": "bool",
-        "default": "true"
+        "default": "false"
     }
 ]
