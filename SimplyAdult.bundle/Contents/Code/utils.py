@@ -114,10 +114,11 @@ General Functions found in all agents
     09 Nov 2023     Thumbor url update
                     replace os.path.exists with os.path.isfile
                     simplified country art/poster processing
+    23 Nov 2023     Cater for Degree symbol in Title
+    05 Feb 2024     Changes to AEBN to remove commas from sex acts - as this was causing failures in genre tidying
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, copy, inspect, json, os, platform, plistlib, random, re, requests, subprocess, sys, time
-#from bs4 import BeautifulSoup
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from PIL import Image
@@ -125,7 +126,7 @@ from textwrap import wrap
 from unidecode import unidecode
 
 # Variables
-UTILS_UPDATE = '09 Nov 2023'
+UTILS_UPDATE = '05 Feb 2024'
 IAFD_BASE = 'https://www.iafd.com'
 IAFD_SEARCH_URL = IAFD_BASE + '/ramesearch.asp?searchtype=comprehensive&searchstring={0}'
 IAFD_FILTER = '&FirstYear={0}&LastYear={1}&Submit=Filter'
@@ -1404,6 +1405,7 @@ def getSiteInfoAEBN(AGENTDICT, FILMDICT, **kwargs):
 
             try:
                 htmlsexacts = html.xpath('//a[contains(@href,"sexActFilters")]/text()') # use sex acts as genres
+                htmlsexacts = [x.replace(",", "") for x in htmlsexacts if x.strip()]
                 htmlsexacts.sort(key = lambda x: x.lower())
                 log('UTILS :: {0:<29} {1}'.format('Sex Acts', '{0:>2} - {1}'.format(len(htmlsexacts), htmlsexacts)))
 
@@ -6221,9 +6223,12 @@ def matchFilename(AGENTDICT, media):
     filmVars['Title'] = groups['fnTITLE']
     squares = [i for i, char in enumerate(filmVars['Title']) if char == u'²']                   # check for mathematical square character in string
     halves = [i for i, char in enumerate(filmVars['Title']) if char == u'½']                    # check for half character in string
+    degrees = [i for i, char in enumerate(filmVars['Title']) if char == u'°']                    # check for degree character in string
+
     filmVars['Title'] = filmVars['Title'].replace('~', '/').replace('¬','?')                    # ~ invalid character marker in filename
     tempTitle = filmVars['Title']
     filmVars['Title'] = makeASCII(filmVars['Title'])
+
     # make ascii casts u'²' as 2 messing up searches
     if squares:
         newTitle = []
@@ -6231,11 +6236,18 @@ def matchFilename(AGENTDICT, media):
             newTitle.append(u'²' if idx in squares else char)
         filmVars['Title'] = ''.join(newTitle)
 
-    # make ascii casts u'½' as 2 messing up searches
+    # make ascii casts u'½' as 1/2 messing up searches
     if halves:
         newTitle = []
         for idx, char in enumerate(tempTitle):
             newTitle.append(u'½' if idx in halves else char)
+        filmVars['Title'] = ''.join(newTitle)
+
+    # make ascii casts u'°' as 'deg' messing up searches
+    if degrees:
+        newTitle = []
+        for idx, char in enumerate(tempTitle):
+            newTitle.append(u'°' if idx in degrees else char)
         filmVars['Title'] = ''.join(newTitle)
 
     filmVars['NormaliseTitle'] = Normalise(filmVars['Title'])
@@ -6327,7 +6339,7 @@ def matchFilename(AGENTDICT, media):
     filmVars['CompareIAFDStudio'] = Normalise(filmVars['IAFDStudio']) if 'IAFDStudio' in filmVars and filmVars['IAFDStudio'] else ''
 
     #       IAFD Title - IAFD uses standard Latin Alphabet Characters for its entries.
-    #                  - deal with ² and ½ in title - replace with the word Squared
+    #                  - deal with ², ½, ° in title - replace with the word Squared, .5, Degrees
     pattern = u'²'
     matched = re.search(pattern, groups['fnTITLE'])  # match against whole string
     groups['fnTITLE'] = re.sub(pattern, ' Squared', groups['fnTITLE']) if matched else groups['fnTITLE']
@@ -6335,6 +6347,10 @@ def matchFilename(AGENTDICT, media):
     pattern = u' +½'
     matched = re.search(pattern, groups['fnTITLE'])  # match against whole string
     groups['fnTITLE'] = re.sub(pattern, '.5', groups['fnTITLE']) if matched else groups['fnTITLE']
+
+    pattern = u'°'
+    matched = re.search(pattern, groups['fnTITLE'])  # match against whole string
+    groups['fnTITLE'] = re.sub(pattern, ' Degrees', groups['fnTITLE']) if matched else groups['fnTITLE']
 
     filmVars['IAFDTitle'] = makeASCII(groups['fnTITLE']).replace(' - ', ': ').replace('- ', ': ')       # iafd needs colons in place to search correctly
     filmVars['IAFDTitle'] = filmVars['IAFDTitle'].replace('!', ' ').replace('*', ' ')                   # remove !, *
@@ -6548,7 +6564,6 @@ def Normalise(myString):
             myArabic = '{0}'.format(myArabic)
             myString = re.sub(pattern, myArabic, myString)
 
-    halves = True if '½' in myString else False
     # convert to lower case and trim
     myString = myString.strip().lower()
 
@@ -6563,7 +6578,6 @@ def Normalise(myString):
 
     # change string to ASCII
     myString = makeASCII(myString)
-    myString = myString if halves is False else myString.replace('1/2', '½')
 
     # strip domain suffixes, vol., volume, Pt, Part from string, standalone '1's' then strip all non alphanumeric characters
     # pattern = r'[.]([a-z]{2,3}co[.][a-z]{2})|Vol[.]|Vols[.]|Nr[.]|\bVolume\b|\bVolumes\b|Pt |\bPart\b[^A-Za-z0-9]+'
@@ -6571,6 +6585,7 @@ def Normalise(myString):
     myString = re.sub(pattern, '', myString, flags=re.IGNORECASE)
     myString = filter(str.isalnum, myString)
     myString = ''.join(myString)
+
     return myString
 
 # ----------------------------------------------------------------------------------------------------------------------------------

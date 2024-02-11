@@ -10,3 +10,4 @@ Plex metadata agent for fetching metadata from GayEmpire material and IAFD
             all matching is based on the exact filename of the movie. 
             The filename must conform to this format (Studio) - Title (Year).ext
 20221204 - Renamed to GayEmpire, works with Company Collection Poster
+20232512 - Adapted GayEmpire to get Bisexual Films by reading AdultDVDEmpire too
