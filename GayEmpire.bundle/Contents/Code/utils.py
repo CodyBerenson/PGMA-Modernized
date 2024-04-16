@@ -116,6 +116,8 @@ General Functions found in all agents
                     simplified country art/poster processing
     23 Nov 2023     Cater for Degree symbol in Title
     05 Feb 2024     Changes to AEBN to remove commas from sex acts - as this was causing failures in genre tidying
+    04 Mar 2024     Correction to code to search for full titles previous code removed series numbers causing mismatches
+                    in Double series titles like Brazil Underground 4 - Gangbang Palooza 2
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, copy, inspect, json, os, platform, plistlib, random, re, requests, subprocess, sys, time
@@ -126,7 +128,7 @@ from textwrap import wrap
 from unidecode import unidecode
 
 # Variables
-UTILS_UPDATE = '05 Feb 2024'
+UTILS_UPDATE = '04 Mar 2024'
 IAFD_BASE = 'https://www.iafd.com'
 IAFD_SEARCH_URL = IAFD_BASE + '/ramesearch.asp?searchtype=comprehensive&searchstring={0}'
 IAFD_FILTER = '&FirstYear={0}&LastYear={1}&Submit=Filter'
@@ -6272,7 +6274,8 @@ def matchFilename(AGENTDICT, media):
     episodes = []
     pattern = r'(?<![-.])\b[0-9]+\b(?!\.[0-9])$'                                        # series matching = whole separate number at end of string
     splitFilmTitle = filmVars['Title'].split(' - ')
-    splitFilmTitle = [x.strip() for x in splitFilmTitle]
+    splitFilmTitle = [x.strip() for x in splitFilmTitle if x.strip()]
+    fullSearchTitle = ' '.join(splitFilmTitle)
     splitCount = len(splitFilmTitle) - 1
     for index, partTitle in enumerate(splitFilmTitle):
         matchedSeries = re.subn(pattern, '', partTitle)
@@ -6322,9 +6325,8 @@ def matchFilename(AGENTDICT, media):
     pattern = ur' 1$'
     filmVars['ShortTitle'] = re.sub(pattern, '', filmVars['ShortTitle'], flags=re.IGNORECASE).strip()
 
-    #   insert short title and whole whole title as first and second search titles and remove any duplicates
+    #   Add short title and insert whole title as first and last search titles then remove duplicates
     searchTitlesTemp.append(shortTitle)
-    fullSearchTitle = ' '.join(searchTitlesTemp)
     searchTitlesTemp.insert(0, fullSearchTitle)
     searchTitles = []
     [searchTitles.append(i) for i in searchTitlesTemp if not i in searchTitles]
