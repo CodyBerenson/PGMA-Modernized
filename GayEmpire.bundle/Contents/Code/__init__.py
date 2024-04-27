@@ -16,6 +16,7 @@
     10 Jul 2023     2019.08.12.22   Updated to use new utils.py
     15 Aug 2023     2019.08.12.23   Updated utils.matchduration call to use AGENTDICT
     05 Feb 2024     2019.08.12.24   Extended Agent to search straight site to get Bi Movies
+    22 Apr 2024     2019.08.12.25   Changes to list result html
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -23,7 +24,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.24'
+VERSION_NO = '2019.08.12.25'
 AGENT = 'GayEmpire'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -137,7 +138,7 @@ class GayEmpire(Agent.Movies):
 
                 try:
                     html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=utils.delay())
-                    filmsList = html.xpath('.//div[contains(@class,"row list-view-item")]')
+                    filmsList = html.xpath('.//div[@class="row list-view-item"]')
                     if not filmsList:
                         msg = '< No Film Titles: {0} >'.format(BASE_URL)
                         raise Exception(msg)   # out of WHILE loop
@@ -164,7 +165,7 @@ class GayEmpire(Agent.Movies):
 
                     # siteTitle = The text in the 'title' - Gay DVDEmpire - displays its titles in SORT order
                     try:
-                        filmTitle = film.xpath('./div/h3/a[@category and @label="Title"]/@title')[0].strip()
+                        filmTitle = film.xpath('.//a[@category and @label="Title"]/text()')[0]
                         # convert sort order version to normal version i.e "Best of Zak Spears, The -> The Best of Zak Spears"
                         pattern = u', (The|An|A)$'
                         matched = re.search(pattern, filmTitle, re.IGNORECASE)  # match against string
@@ -191,7 +192,7 @@ class GayEmpire(Agent.Movies):
                     # Site Title URL
                     utils.log(LOG_BIGLINE)
                     try:
-                        filmURL = film.xpath('./div/h3/a[@label="Title"]/@href')[0]
+                        filmURL = film.xpath('.//a[@category and @label="Title"]/@href')[0]
                         filmURL = ('' if BASE_URL in filmURL else BASE_URL) + filmURL
                         FILMDICT['FilmURL'] = filmURL
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site Title URL', filmURL))
@@ -203,7 +204,7 @@ class GayEmpire(Agent.Movies):
                     # Studio Name
                     utils.log(LOG_BIGLINE)
                     try:
-                        filmStudio = film.xpath('./div/ul/li/a/small[text()="studio"]/following-sibling::text()')[0].strip()
+                        filmStudio = film.xpath('.//a[@category and @label="Studio Link"]/@title')[0].strip()
                         utils.matchStudio(filmStudio, FILMDICT)
                     except Exception as e:
                         utils.log('SEARCH:: Error getting Site Studio: {0}'.format(e))
@@ -216,8 +217,9 @@ class GayEmpire(Agent.Movies):
                     releaseDateMatch = False
                     releaseDates = set()
                     try:
-                        filmProductionYear = film.xpath('.//small[contains(., "(")]/text()')[0].replace('(', '').replace(')', '').strip()
-                        utils.log('SEARCH:: {0:<29} {1}'.format('Site Production Year', filmProductionYear))
+                        filmProductionYear = film.xpath('.//a[@category and @label="Title"]/parent::*/text()')
+                        filmProductionYear = ''.join([x.strip() for x in filmProductionYear if x.strip()]).replace('(', '').replace(')', '')
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Site Production Year====', filmProductionYear))
                         # add 31st december to production year
                         filmReleaseDate = '12/31/{0}'.format(filmProductionYear)
                         # add to set
@@ -228,7 +230,7 @@ class GayEmpire(Agent.Movies):
 
                     # Release Date - On GayEmpire - this date pertains to the day it was added to the site
                     try:
-                        filmReleaseDate = film.xpath('.//small[text()="released"]/following-sibling::text()')[0].strip()
+                        filmReleaseDate = film.xpath('.//small[text()="Released:"]/following-sibling::text()')[0].strip()
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site Release Date', filmReleaseDate))
                         # add to set
                         releaseDates.add(filmReleaseDate)
