@@ -24,6 +24,7 @@
     20 Jun 2023     2019.01.18.39   Formatting for error messages updated
     25 Jun 2023     2019.01.18.40   Updated to use new utils.py - AGENTDICT
     01 Jul 2023     2019.01.18.41   Updated to use new utils.py
+    30 Apr 2024     2019.01.18.42   Removed search string length restrictions
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -31,7 +32,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.41'
+VERSION_NO = '2020.01.18.42'
 AGENT = 'Fagalicious'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -108,10 +109,6 @@ class Fagalicious(Agent.Movies):
         # string can not be longer than 20 characters
         myString = ' '.join(myString.split())   # remove continous white space
         utils.log('AGENT :: {0:<29} {1}'.format('Search Query', myString))
-        if len(myString) > 19:
-            lastSpace = myString[:20].rfind(' ')
-            myString = myString[:lastSpace]
-            utils.log('AGENT :: {0:<29} {1}'.format('Shortened Search Query [Length]', '{0}: "{1} <= 20"'.format(myString[:lastSpace], lastSpace)))
 
         myString = String.StripDiacritics(myString)
         myString = String.URLEncode(myString.strip())
