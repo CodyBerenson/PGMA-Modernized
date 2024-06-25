@@ -124,7 +124,7 @@ class GEVI(Agent.Movies):
             utils.log(LOG_ASTLINE)
             return
 
-        #clear-cache directive
+        # clear-cache directive
         if media.name == "clear-cache":
             HTTP.ClearCache()
             results.Append(MetadataSearchResult(id='clear-cache', name='Plex web cache cleared', year=media.year, lang=lang, score=0))

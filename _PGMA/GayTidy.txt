@@ -342,7 +342,7 @@ Canary Islands::Spain
 Candle Wax::BDSM
 Cape Verdean::Cape Verde
 Car::Cruising
-"Car, Bus, Van, RV"::Cruising
+Car, Bus, Van, RV::Cruising
 Cars & Motorcycles::Cruising
 Casting::Showcase
 Casting Couch / Auditions::Showcase

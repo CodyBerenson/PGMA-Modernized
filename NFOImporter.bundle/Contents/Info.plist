@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>CFBundleDevelopmentRegion</key>
+        <string>English</string>
+        <key>CFBundleExecutable</key>
+        <string>NFOImporter</string>
+        <key>CFBundleIdentifier</key>
+        <string>com.plexapp.agents.NFOImporter</string>
+        <key>CFBundleInfoDictionaryVersion</key>
+        <string>6.0</string>
+        <key>CFBundleShortVersionString</key>
+        <string>1.0</string>
+        <key>CFBundleVersion</key>
+        <string>1.0</string>
+        <key>PlexFrameworkVersion</key>
+        <string>2</string>
+        <key>PlexPluginClass</key>
+        <string>Agent</string>
+        <key>PlexPluginMode</key>
+        <string>AlwaysOn</string>
+        <key>PlexPluginCodePolicy</key>
+        <string>Elevated</string>
+        <key>PlexAgentAttributionText</key>
+        <string>
+            <![CDATA[
+            NFO Importer (v2024-06-10)<br/>
+            This agent imports metadata stored in an NFO file<br/>
+			It then retrieves Directors and Cast Images from the Internet Adult Film Database (IAFD)
+            ]]>
+        </string>
+    </dict>
+</plist>

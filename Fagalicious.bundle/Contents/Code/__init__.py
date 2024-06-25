@@ -25,6 +25,7 @@
     25 Jun 2023     2019.01.18.40   Updated to use new utils.py - AGENTDICT
     01 Jul 2023     2019.01.18.41   Updated to use new utils.py
     30 Apr 2024     2019.01.18.42   Removed search string length restrictions
+    08 Jun 2024     2019.01.18.43   Removed curly apostophes and possesives from search string
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -32,7 +33,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.42'
+VERSION_NO = '2020.01.18.43'
 AGENT = 'Fagalicious'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -99,8 +100,9 @@ class Fagalicious(Agent.Movies):
             myString = re.sub(pattern, ' ', myString)
             utils.log('AGENT :: {0:<29} {1}'.format('Search Query', '{0}: {1} - {2}'.format('Removed Pattern', pattern, myString)))
 
-        # remove possesives - 's
-        pattern = r"'s"
+        # remove possesives - 's,' and curly apostrophes
+
+        pattern = "|".join(["’s", "’", "”", "“", "'", "'s", '"'])
         matched = re.search(pattern, myString)  # match against whole string
         if matched:
             myString = re.sub(pattern, ' ', myString)

@@ -60,20 +60,19 @@ PERCENT_RATINGS = {
     'flixster',
 }
 
-NFO_TEXT_REGEX_1 = re.compile(
-    r'&(?![A-Za-z]+[0-9]*;|#[0-9]+;|#x[0-9a-fA-F]+;)'
-)
+NFO_TEXT_REGEX_1 = re.compile(r'&(?![A-Za-z]+[0-9]*;|#[0-9]+;|#x[0-9a-fA-F]+;)')
 NFO_TEXT_REGEX_2 = re.compile(r'^\s*<.*/>[\r\n]+', flags=re.MULTILINE)
-RATING_REGEX_1 = re.compile(
-    r'(?:Rated\s)?(?P<mpaa>[A-z0-9-+/.]+(?:\s[0-9]+[A-z]?)?)?'
-)
+RATING_REGEX_1 = re.compile(r'(?:Rated\s)?(?P<mpaa>[A-z0-9-+/.]+(?:\s[0-9]+[A-z]?)?)?')
 RATING_REGEX_2 = re.compile(r'\s*\(.*?\)')
 
+# ----------------------------------------------------------------------------------------------------------------------------------
 def first(iterable, default=None):
     for item in iterable:
         return item
     return default
 
+# ----------------------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------------
 class NFOReader:
     def __init__(self, nfo_xml):
         self.nfo_xml = nfo_xml
@@ -90,39 +89,27 @@ class NFOReader:
         return set_list
 
 
-class GANFO(PlexAgent):
+class NFOImporter(PlexAgent):
     """
     A Plex Metadata Agent for Movies.
 
     Uses XBMC nfo files as the metadata source for Plex Movies.
     """
-    name = 'Gay Adult NFO Importer'
+    name = 'NFO Importer'
     ver = '1.1-119-g5106699-225'
     primary_provider = False
     languages = [Locale.Language.NoLanguage]
-    accepts_from = [
-        'com.plexapp.agents.localmedia',
-    ]
+    accepts_from = ['com.plexapp.agents.localmedia']
+    contributes_to = ['com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultFilms', 'com.plexapp.agents.GayAdultScenes']
 
-    contributes_to = [
-        'com.plexapp.agents.GayAdult', 'com.plexapp.agents.GayAdultFilms', 'com.plexapp.agents.GayAdultScenes'
-    ]
-
-# ##### search function #####
+    # ----------------------------------------------------------------------------------------------------------------------------------
     def search(self, results, media, lang):
         log.debug('++++++++++++++++++++++++')
         log.debug('Entering search function')
         log.debug('++++++++++++++++++++++++')
 
-        log.info('{plugin} Version: {number}'.format(
-            plugin=self.name, number=self.ver))
-        log.debug('Plex Server Version: {number}'.format(
-            number=Platform.ServerVersion))
-
-        if preferences['debug']:
-            log.info ('Agents debug logging is enabled!')
-        else:
-            log.info ('Agents debug logging is disabled!')
+        log.info('{plugin} Version: {number}'.format(plugin=self.name, number=self.ver))
+        log.debug('Plex Server Version: {number}'.format(number=Platform.ServerVersion))
 
         path1 = media.items[0].parts[0].file
         log.debug('media file: {name}'.format(name=path1))
@@ -225,22 +212,14 @@ class GANFO(PlexAgent):
                 log.info('ERROR: No <movie> tag in {nfo}. Aborting!'.format(
                     nfo=nfo_file))
 
-# ##### update Function #####
-
+    # ----------------------------------------------------------------------------------------------------------------------------------
     def update(self, metadata, media, lang):
         log.debug('++++++++++++++++++++++++')
         log.debug('Entering update function')
         log.debug('++++++++++++++++++++++++')
 
-        log.info('{plugin} Version: {number}'.format(
-            plugin=self.name, number=self.ver))
-        log.debug('Plex Server Version: {number}'.format(
-            number=Platform.ServerVersion))
-
-        if preferences['debug']:
-            log.info ('Agents debug logging is enabled!')
-        else:
-            log.info ('Agents debug logging is disabled!')
+        log.info('{plugin} Version: {number}'.format(plugin=self.name, number=self.ver))
+        log.debug('Plex Server Version: {number}'.format(number=Platform.ServerVersion))
 
         poster_data = None
         poster_filename = None
@@ -942,10 +921,11 @@ class GANFO(PlexAgent):
                          ' Aborting!'.format(nfo=nfo_file))
             return metadata
 
-ganfo = GANFO
+nfoimporter = NFOImporter
 
-# -- LOG ADAPTER -------------------------------------------------------------
-
+# ----------------------------------------------------------------------------------------------------------------------------------
+# -------------------------------------------------------- LOG ADAPTER -------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------------
 class PlexLogAdapter(object):
     """
     Adapts Plex Log class to standard python logging style.
@@ -961,6 +941,8 @@ class PlexLogAdapter(object):
     exception = Log.Exception
 
 
+# ----------------------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------------
 class XBMCLogAdapter(PlexLogAdapter):
     """
     Plex Log adapter that only emits debug statements based on preferences.
@@ -970,17 +952,16 @@ class XBMCLogAdapter(PlexLogAdapter):
         """
         Selective logging of debug message based on preference.
         """
-        if preferences['debug']:
-            Log.Debug(*args, **kwargs)
+        Log.Debug(*args, **kwargs)
 
 log = XBMCLogAdapter
 
 
-# -- HELPER FUNCTIONS --------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------------
+# -------------------------------------------------------- HELPER FUNCTIONS --------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------------
 
-VIDEO_FILE_BASE_REGEX = re.compile(
-    r'(?is)\s*-\s*(cd|dvd|disc|disk|part|pt|d)\s*[0-9]$'
-)
+VIDEO_FILE_BASE_REGEX = re.compile(r'(?is)\s*-\s*(cd|dvd|disc|disk|part|pt|d)\s*[0-9]$')
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def getIAFDActorImage(myString, FilmYear):
@@ -1005,17 +986,17 @@ def getIAFDActorImage(myString, FilmYear):
     for count, url in enumerate(urlList, start=1):
         photourl = ''
         try:
-            log.info('SELF:: %s. IAFD Actor search string [ %s ] for a movie released in %s', count, url, FilmYear)
+            log.info('IAFD:: %s. IAFD Actor search string [ %s ] for a movie released in %s', count, url, FilmYear)
             html = HTML.ElementFromURL(url)
             if 'gender=' in url:
                 career = html.xpath('//p[.="Years Active"]/following-sibling::p[1]/text()[normalize-space()]')[0]
                 try:
                     startCareer = career.split('-')[0]
-                    log.info('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
+                    log.info('IAFD:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
                     if FilmYear is None or int(startCareer) <= int(FilmYear):
                         photourl = html.xpath('//*[@id="headshot"]/img/@src')[0]
                         photourl = 'nophoto' if 'nophoto' in photourl else photourl
-                        log.info('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
+                        log.info('IAFD:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
                         break
                 except:
                     continue
@@ -1026,30 +1007,30 @@ def getIAFDActorImage(myString, FilmYear):
                     try:
                         photourl = actorList[0].xpath('./td[1]/a/img/@src')[0]
                         photourl = 'nophoto' if photourl == 'https://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
-                        log.info('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
+                        log.info('IAFD:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
                         break
                     except:
                         continue
                 for actor in actorList:
                     try:
                         startCareer = actor.xpath('./td[4]/text()[normalize-space()]')[0]
-                        log.info('SELF:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
+                        log.info('IAFD:: Actor: %s  Start of Career: [ %s ]', actorname, startCareer)
                         if int(startCareer) <= int(FilmYear):
                             photourl = actor.xpath('./td[1]/a/img/@src')[0]
                             photourl = 'nophoto' if photourl == 'https://www.iafd.com/graphics/headshots/thumbs/th_iafd_ad.gif' else photourl
-                            log.info('SELF:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
+                            log.info('IAFD:: Search %s Result: IAFD Photo URL [ %s ]', count, photourl)
                             break
                     except:
                         continue
                 break
         except Exception as e:
             photourl = ''
-            log.info('SELF:: Error: Search %s Result: Could not retrieve IAFD Actor Page, %s', count, e)
+            log.info('IAFD:: Error: Search %s Result: Could not retrieve IAFD Actor Page, %s', count, e)
             continue
 
     return photourl
 
-
+# ----------------------------------------------------------------------------------------------------------------------------------
 def get_base_file(video_file):
     """
     Get a Movie's base filename.
@@ -1069,7 +1050,7 @@ def get_base_file(video_file):
     base = VIDEO_FILE_BASE_REGEX.sub('', base)
     return base
 
-
+# ----------------------------------------------------------------------------------------------------------------------------------
 def get_related_file(video_file, file_extension):
     """
     Get a file related to the Video with a different extension.
@@ -1087,7 +1068,7 @@ RELATED_DIRS = {
     '/nfo/',
 }
 
-
+# ----------------------------------------------------------------------------------------------------------------------------------
 def get_related_files(video_file, file_extension):
     """
     Get a file related to the Video with a different extension.
@@ -1107,6 +1088,7 @@ def get_related_files(video_file, file_extension):
 
 MOVIE_NAME_REGEX = re.compile(r' \(.*\)')
 
+# ----------------------------------------------------------------------------------------------------------------------------------
 def path_split_all(path):
     allparts = []
     while 1:
@@ -1122,6 +1104,7 @@ def path_split_all(path):
             allparts.insert(0, parts[1])
     return allparts
 
+# ----------------------------------------------------------------------------------------------------------------------------------
 def get_movie_name_from_folder(folder_path, with_year):
     """
     Get the name of the movie from the folder.
@@ -1152,7 +1135,7 @@ def get_movie_name_from_folder(folder_path, with_year):
     ))
     return movie_name
 
-
+# ----------------------------------------------------------------------------------------------------------------------------------
 def check_file_paths(file_names, file_type=None):
     """
     CHeck a list of file names and return the first one found.
@@ -1174,7 +1157,7 @@ def check_file_paths(file_names, file_type=None):
             type=file_type if file_type else 'valid'
         ))
 
-
+# ----------------------------------------------------------------------------------------------------------------------------------
 def remove_empty_tags(document):
     """
     Removes empty XML tags.
@@ -1194,10 +1177,9 @@ def remove_empty_tags(document):
     ))
     return document
 
-
 UNESCAPE_REGEX = re.compile('&#?\w+;')
 
-
+# ----------------------------------------------------------------------------------------------------------------------------------
 def unescape(markup):
     """
     Removes HTML or XML character references and entities from a text.
@@ -1207,6 +1189,7 @@ def unescape(markup):
     :return: The plain text, as a Unicode string, if necessary.
     """
 
+    # ----------------------------------------------------------------------------------------------------------------------------------
     def fix_up(match):
         """
         Convert a match from a character reference or named entity to unicode.
@@ -1229,4 +1212,3 @@ def unescape(markup):
         return element  # leave as is
 
     return UNESCAPE_REGEX.sub(fix_up, markup)
-

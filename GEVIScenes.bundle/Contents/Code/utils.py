@@ -118,6 +118,9 @@ General Functions found in all agents
     05 Feb 2024     Changes to AEBN to remove commas from sex acts - as this was causing failures in genre tidying
     04 Mar 2024     Correction to code to search for full titles previous code removed series numbers causing mismatches
                     in Double series titles like Brazil Underground 4 - Gangbang Palooza 2
+    24 May 2024     Error in Code - QueerClick/Fagalicious, tags with special characters were not been removed. These need to be striped to get the cast
+                    as Cast Names would not have characters such as these: ?, ;, : etc
+    21 Jun 2024     Added Plex Server Version to Log Header Text
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cloudscraper, copy, inspect, json, os, platform, plistlib, random, re, requests, subprocess, sys, time
@@ -128,7 +131,7 @@ from textwrap import wrap
 from unidecode import unidecode
 
 # Variables
-UTILS_UPDATE = '04 Mar 2024'
+UTILS_UPDATE = '21 June 2024'
 IAFD_BASE = 'https://www.iafd.com'
 IAFD_SEARCH_URL = IAFD_BASE + '/ramesearch.asp?searchtype=comprehensive&searchstring={0}'
 IAFD_FILTER = '&FirstYear={0}&LastYear={1}&Submit=Filter'
@@ -852,15 +855,10 @@ def getIAFDArtist(AGENTDICT, artistURL, artistHTML=''):
             ahtmlFilms = ahtml.xpath(xpath)
             for artistFilm in ahtmlFilms:
                 artistFilmLine = artistFilm.xpath('./td//text()')
-                if artistType == 'Director':
-                    artistFilmStudio = re.sub('.com|.net|.org|.tv|\(\s*\)', '', artistFilmLine[2], re.IGNORECASE).strip()       # remove internet domains and bracketed information
-                    artistFilmTitle = artistFilmLine[0]
-                    artistFilmYear = artistFilmLine[3]
-                else:
-                    artistFilmStudio = re.sub('.com|.net|.org|.tv|\(\s*\)', '', artistFilmLine[2], re.IGNORECASE).strip()       # remove internet domains and bracketed information
-                    artistFilmStudio = artistFilmStudio.split('(')[-1].replace(')', '')
-                    artistFilmTitle = artistFilmLine[0]
-                    artistFilmYear = artistFilmLine[1]
+                artistFilmStudio = re.sub('.com|.net|.org|.tv|\(\s*\)', '', artistFilmLine[2], re.IGNORECASE).strip()       # remove internet domains and bracketed information
+                artistFilmStudio = artistFilmStudio.split('(')[-1].replace(')', '')
+                artistFilmTitle = artistFilmLine[0]
+                artistFilmYear = artistFilmLine[3] if artistType == 'Director' else artistFilmLine[1]
 
                 film = '({0}) - {1} ({2})'.format(artistFilmStudio, artistFilmTitle, artistFilmYear)
                 film = re.sub(r'\s+', NOBREAK_SPACE, film).replace('-', NOBREAK_HYPHEN)
@@ -2321,7 +2319,17 @@ def getSiteInfoFagalicious(AGENTDICT, FILMDICT, **kwargs):
         testStudio = [FILMDICT['Studio'].lower().replace(' ', ''), FILMDICT['CompareStudio']]
         try:
             htmltags = html.xpath('//ul/a[contains(@href, "https://fagalicious.com/tag/")]/text()')
+
+            # remove all tags with non name characters such as colons
+            characters = ['!', ';', ':', '"', ',', '#', '$', '%', '^', '&', '*', '_', '~', '+', '?']
+            for idx, htmltag in enumerate(htmltags):
+                for char in characters:
+                    if char in htmltag:
+                        htmltags[idx] = ''
+                        break
+
             htmltags = [x.strip() for x in htmltags if x.strip()]
+            htmltags = [x for x in htmltags if not x in characters]
             htmltags = [x for x in htmltags if not 'compilation' in x.lower()]
             htmltags = [x for x in htmltags if not 'movie' in x.lower()]
             htmltags = [x for x in htmltags if not 'series' in x.lower()]
@@ -2329,12 +2337,6 @@ def getSiteInfoFagalicious(AGENTDICT, FILMDICT, **kwargs):
             htmltags = [x for x in htmltags if not '.com' in x.lower()]
             htmltags = [x for x in htmltags if not '.net' in x.lower()]
             htmltags = [x for x in htmltags if not x.lower().replace(' ', '') in testStudio]
-
-            # remove all tags with non name characters such as colons
-            htmltags = [makeASCII(x) for x in htmltags]
-            punctuation = ['!', ';', ':', '"', ',', '#', '$', '%', '^', '&', '*', '_', '~', '+', '?']
-            pattern = re.escape(u'({0})'.format('|'.join(punctuation)))
-            htmltags = [x for x in htmltags if not re.search(pattern, x)]
             htmltags = [x for x in htmltags if not x + ':' in FILMDICT['Title']]
             htmltags = [x for x in htmltags if not x.replace(' ', '').lower() in FILMDICT['CompareSiteStudio']]
             htmltags = [x for x in htmltags if not (len(x.split()) > 2 and not '.' in x)]       # most actors have forename/surname ignore if more than this and no initials in name
@@ -4739,8 +4741,8 @@ def getSiteInfoQueerClick(AGENTDICT, FILMDICT, **kwargs):
 
             # remove all tags with non name characters such as colons
             htmltags = [makeASCII(x) for x in htmltags]
-            punctuation = ['!', ';', ':', '"', ',', '#', '$', '%', '^', '&', '*', '_', '~', '+', '?']
-            pattern = re.escape(u'({0})'.format('|'.join(punctuation)))
+            characters = '!;:",#$%^&*_~+?'
+            htmltags = [x for x in htmltags if not x in characters]
             htmltags = [x for x in htmltags if not re.search(pattern, x)]
             htmltags = [x for x in htmltags if not ':' in x]
             htmltags = [x for x in htmltags if not x + ':' in FILMDICT['Title']]
@@ -5025,6 +5027,15 @@ def getSiteInfoWayBig(AGENTDICT, FILMDICT, **kwargs):
         testStudio = [FILMDICT['Studio'].lower().replace(' ', ''), FILMDICT['CompareStudio']]
         try:
             htmltags = html.xpath('//a[contains(@href,"https://www.waybig.com/blog/tag/")]/text()')
+
+            # remove all tags with non name characters such as colons
+            characters = ['!', ';', ':', '"', ',', '#', '$', '%', '^', '&', '*', '_', '~', '+', '?']
+            for idx, htmltag in enumerate(htmltags):
+                for char in characters:
+                    if char in htmltag:
+                        htmltags[idx] = ''
+                        break
+
             htmltags = [x.strip() for x in htmltags if x.strip()]
             htmltags = [x for x in htmltags if not 'compilation' in x.lower()]
             htmltags = [x for x in htmltags if not 'movie' in x.lower()]
@@ -5033,12 +5044,6 @@ def getSiteInfoWayBig(AGENTDICT, FILMDICT, **kwargs):
             htmltags = [x for x in htmltags if not '.com' in x.lower()]
             htmltags = [x for x in htmltags if not '.net' in x.lower()]
             htmltags = [x for x in htmltags if not x.lower().replace(' ', '') in testStudio]
-
-            # remove all tags with non name characters such as colons
-            htmltags = [makeASCII(x) for x in htmltags]
-            punctuation = ['!', ';', ':', '"', ',', '#', '$', '%', '^', '&', '*', '_', '~', '+', '?']
-            pattern = re.escape(u'({0})'.format('|'.join(punctuation)))
-            htmltags = [x for x in htmltags if not re.search(pattern, x)]
             htmltags = [x for x in htmltags if not x + ':' in FILMDICT['Title']]
             htmltags = [x for x in htmltags if not x.replace(' ', '').lower() in FILMDICT['CompareSiteStudio']]
             htmltags = [x for x in htmltags if not (len(x.split()) > 2 and not '.' in x)]       # most actors have forename/surname ignore if more than this and no initials in name
@@ -5499,11 +5504,13 @@ def log(message, *args):
 def logHeader(myFunc, AGENTDICT, media, lang):
     ''' log header for search and update functions '''
     log(LOG_ASTLINE)
-    log(LOG_ASTLINE)
-    log('{0}:: Version:                         v.{1}'.format(myFunc, VERSION_NO))
-    log('{0}:: Utility Update Date:             {1}'.format(myFunc, UTILS_UPDATE))
-    log('{0}:: Python:                          {1} ({2}): {3}'.format(myFunc, platform.python_version(), platform.architecture()[0], platform.python_build()))
+    log('{0}:: Agent:'.format(myFunc))
+    log('{0}::   > Name:                        {1}'.format(myFunc, AGENT))
+    log('{0}::   > Version:                     v.{1}'.format(myFunc, VERSION_NO))
+    log('{0}::   > Utility Update Date:         {1}'.format(myFunc, UTILS_UPDATE))
     log('{0}:: Platform:'.format(myFunc))
+    log('{0}::   > Plex Server Version:         v.{1}'.format(myFunc, Platform.ServerVersion))
+    log('{0}::   > Python:                      {1} ({2}): {3}'.format(myFunc, platform.python_version(), platform.architecture()[0], platform.python_build()))
     log('{0}::   > Operating System:            {1}'.format(myFunc, platform.system()))
     log('{0}::   > Release:                     {1}'.format(myFunc, platform.release()))
     log('{0}:: Preferences:'.format(myFunc))
@@ -5526,7 +5533,6 @@ def logHeader(myFunc, AGENTDICT, media, lang):
     log('{0}::   > Library:                     {1}'.format(myFunc, AGENTDICT['pgmaLIBRARYTITLE']))
     log('{0}::   > Title:                       {1}'.format(myFunc, media.title))
     log('{0}::   > File Path:                   {1}'.format(myFunc, media.items[0].parts[0].file))
-    log(LOG_ASTLINE)
     log(LOG_ASTLINE)
 
 # -------------------------------------------------------------------------------------------------------------------------------

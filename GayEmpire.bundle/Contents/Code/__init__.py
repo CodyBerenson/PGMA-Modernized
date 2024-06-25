@@ -17,6 +17,8 @@
     15 Aug 2023     2019.08.12.23   Updated utils.matchduration call to use AGENTDICT
     05 Feb 2024     2019.08.12.24   Extended Agent to search straight site to get Bi Movies
     22 Apr 2024     2019.08.12.25   Changes to list result html
+    06 Jun 2024     2019.08.12.26   Changes to Release Date Processing
+    21 Jun 2024     2019.08.12.27   Changes to search results detection
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -24,7 +26,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.25'
+VERSION_NO = '2019.08.12.27'
 AGENT = 'GayEmpire'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -128,7 +130,7 @@ class GayEmpire(Agent.Movies):
             searchQuery = BASE_SEARCH_URL.format(BASE_URL, searchTitle, pageNumber)
 
             morePages = True
-            while morePages:
+            while morePages and FILMDICT['Status'] == False:
                 utils.log('SEARCH:: {0:<29} {1}'.format('Search Query', searchQuery))
                 pageNumber += 1
                 if pageNumber > 10:
@@ -138,10 +140,14 @@ class GayEmpire(Agent.Movies):
 
                 try:
                     html = HTML.ElementFromURL(searchQuery, timeout=90, errors='ignore', sleep=utils.delay())
-                    filmsList = html.xpath('.//div[@class="row list-view-item"]')
+                    filmsList = html.xpath('.//div[@class="item-list"]/div[@class="row list-view-item"]')
+                    filmsList = html.xpath('.//div[contains(@id, "_Item")]')
                     if not filmsList:
                         msg = '< No Film Titles: {0} >'.format(BASE_URL)
                         raise Exception(msg)   # out of WHILE loop
+
+                    filmsFound = len(filmsList)
+                    utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
 
                     # if there is a list of films - check if there are further pages returned
                     try:
@@ -155,8 +161,6 @@ class GayEmpire(Agent.Movies):
                     utils.log('SEARCH:: Error: Search Query did not pull any results: {0}'.format(e))
                     break
 
-                filmsFound = len(filmsList)
-                utils.log('SEARCH:: {0:<29} {1}'.format('Titles Found', '{0} Processing Results Page: {1:>2}'.format(filmsFound, pageNumber)))
                 utils.log(LOG_BIGLINE)
                 myYear = '({0})'.format(FILMDICT['Year']) if FILMDICT['Year'] else ''
                 for idx, film in enumerate(filmsList, start=1):
@@ -165,7 +169,7 @@ class GayEmpire(Agent.Movies):
 
                     # siteTitle = The text in the 'title' - Gay DVDEmpire - displays its titles in SORT order
                     try:
-                        filmTitle = film.xpath('.//a[@category and @label="Title"]/text()')[0]
+                        filmTitle = film.xpath('.//a[@category and @label="Title"]/text()')[0].strip()
                         # convert sort order version to normal version i.e "Best of Zak Spears, The -> The Best of Zak Spears"
                         pattern = u', (The|An|A)$'
                         matched = re.search(pattern, filmTitle, re.IGNORECASE)  # match against string
@@ -217,26 +221,26 @@ class GayEmpire(Agent.Movies):
                     releaseDateMatch = False
                     releaseDates = set()
                     try:
-                        filmProductionYear = film.xpath('.//a[@category and @label="Title"]/parent::*/text()')
-                        filmProductionYear = ''.join([x.strip() for x in filmProductionYear if x.strip()]).replace('(', '').replace(')', '')
-                        utils.log('SEARCH:: {0:<29} {1}'.format('Site Production Year====', filmProductionYear))
-                        # add 31st december to production year
-                        filmReleaseDate = '12/31/{0}'.format(filmProductionYear)
-                        # add to set
-                        releaseDates.add(filmReleaseDate)
+                        filmProductionYear = film.xpath('.//a[@category and @label="Title"]/following-sibling::text()')[0].replace('(', '').replace(')', '').strip()
+                        utils.log('SEARCH:: {0:<29} {1}'.format('Site Production Year', filmProductionYear))
 
                     except Exception as e:
+                        filmProductionYear = ''
                         utils.log('SEARCH:: Error getting Site Production Year: {0}'.format(e))
 
-                    # Release Date - On GayEmpire - this date pertains to the day it was added to the site
+                    # Release Date - On GayEmpire - this date sometimes pertains to the day it was added to the site
                     try:
-                        filmReleaseDate = film.xpath('.//small[text()="Released:"]/following-sibling::text()')[0].strip()
+                        filmReleaseDate = film.xpath('.//small[text()="released"]/following-sibling::text()')[0].strip()
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site Release Date', filmReleaseDate))
-                        # add to set
-                        releaseDates.add(filmReleaseDate)
+                        releaseDates.add(filmReleaseDate)                                                           # add to set
 
                     except Exception as e:
-                        utils.log('SEARCH:: Error getting Site URL Release Date: {0}'.format(e))
+                        utils.log('SEARCH:: Error getting Site Release Date: {0}'.format(e))
+
+                    # if production year and release date are in the same year - use the release date only saved above to set
+                    if filmProductionYear and filmProductionYear not in filmReleaseDate:
+                        filmProductionYearDate = '12/31/{0}'.format(filmProductionYear)                             # add 31st december to production year
+                        releaseDates.add(filmProductionYearDate)                                                    # add to set
 
                     for item in releaseDates:
                         try:
@@ -254,14 +258,14 @@ class GayEmpire(Agent.Movies):
                             utils.log(LOG_SUBLINE)
                             continue
                         else:
-                            utils.log('SEARCH:: Error getting Site URL Release Date: Default to Filename Date')
+                            utils.log('SEARCH:: Error getting Site Release Date: Default to Filename Date')
 
                     # Site Film Duration
                     utils.log(LOG_BIGLINE)
                     matchedDuration = False
                     vDuration = FILMDICT['Duration']
                     try:
-                        filmDuration = film.xpath('.//small[text()="length"]/following-sibling::text()')[0].strip()
+                        filmDuration = film.xpath('.//small[text()="length" or text()="run time"]/following-sibling::text()')[0].strip()
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site Film Duration', filmDuration))
                         # convert to seconds format = 999 mins.
                         duration = filmDuration.split()[0]
@@ -280,7 +284,7 @@ class GayEmpire(Agent.Movies):
                         utils.log(LOG_SUBLINE)
                         continue
 
-                    # Access Site URL for Studio and Release Date information
+                    # Access Site URL
                     utils.log(LOG_BIGLINE)
                     try:
                         utils.log('SEARCH:: {0:<29} {1}'.format('Reading Site URL page', filmURL))
@@ -302,9 +306,6 @@ class GayEmpire(Agent.Movies):
                     # Film Scraped Sucessfully - update status and break out!
                     FILMDICT['Status'] = True
                     break       # stop processing
-
-                if FILMDICT['Status'] is True:      # if search and process sucessful stop processing
-                    break
 
         # End Search Routine
         utils.logFooter('SEARCH', FILMDICT)

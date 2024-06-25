@@ -1,11 +1,4 @@
-
 [
-  {
-    "id":"debug",
-    "label":"Enable debug logging",
-    "type":"bool",
-    "default":"false"
-  },
   {
     "id":"dayfirst",
     "label":"Enable day first in ambiguous dates",
