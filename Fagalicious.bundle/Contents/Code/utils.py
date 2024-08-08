@@ -8,7 +8,7 @@ General Functions found in all agents
     27 Mar 2021     Added curly single quotes to string normalisation in addition to `, all quotes single quotes are now replaced by straight quotes
     03 May 2021     Issue #96 - Series Titles matching...
                     Added duration matching between filename duration and iafd duration
-    08 May 2021     Merged GenFunctions.py with py created by codeanator to deal with cloudscraper protection issues in IAFD
+    08 May 2021     Merged GenFunctions.py with py created by codeanator to deal with cfscrape protection issues in IAFD
     05 Jul 2021     Merged iafd.py with Utils
                     Improvements to name matching, Levenshtein and Soundex and translation
                     Changes to matching films against IAFD
@@ -121,9 +121,11 @@ General Functions found in all agents
     24 May 2024     Error in Code - QueerClick/Fagalicious, tags with special characters were not been removed. These need to be striped to get the cast
                     as Cast Names would not have characters such as these: ?, ;, : etc
     21 Jun 2024     Added Plex Server Version to Log Header Text
+    27 Jun 2024     Code to avoid duplicate genres being classed as flawed
+    07 Aug 2024     Cleanup on code to sort cloudflare issues: as sites like fagalicious will not accept search requests as these are blocked
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
-import cloudscraper, copy, inspect, json, os, platform, plistlib, random, re, requests, subprocess, sys, time
+import cfscrape, copy, inspect, json, os, platform, plistlib, random, re, requests, subprocess, sys, time
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from PIL import Image
@@ -131,7 +133,7 @@ from textwrap import wrap
 from unidecode import unidecode
 
 # Variables
-UTILS_UPDATE = '21 June 2024'
+UTILS_UPDATE = '07 August 2024'
 IAFD_BASE = 'https://www.iafd.com'
 IAFD_SEARCH_URL = IAFD_BASE + '/ramesearch.asp?searchtype=comprehensive&searchstring={0}'
 IAFD_FILTER = '&FirstYear={0}&LastYear={1}&Submit=Filter'
@@ -653,7 +655,7 @@ def getFilmOnIAFD(AGENTDICT, FILMDICT):
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def getHTTPRequest(url, **kwargs):
-    ''' Use CloudScraper utility to read url and return valid HTML'''
+    ''' Use cfscrape utility to read url and return valid HTML'''
     headers = kwargs.pop('headers', {})
     cookies = kwargs.pop('cookies', {})
     timeout = kwargs.pop('timeout', 30)
@@ -667,45 +669,27 @@ def getHTTPRequest(url, **kwargs):
         HTTPRequest = HTML.ElementFromURL(url, timeout=timeout, sleep=sleep)
 
     except Exception as e:
-        log('UTILS :: {0:<29} {1}'.format('Plex Request Failed', e))
+        log('UTILS :: Error:: Plex Request Failed, {0}'.format(e))
         try:
-            headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7'
-            headers['Accept-Language'] = 'gzip, deflate, br'
-            headers['Accept-Encoding'] = 'en-GB,en;q=0.9,en-US;q=0.8'
             headers['User-Agent'] = getUserAgent()
+            log('UTILS :: {0:<29} {1}'.format('CFScrape Request', url))
+            log('UTILS :: {0:<29} {1}'.format('CFScrape User Agent', headers['User-Agent']))
 
-            log('UTILS :: {0:<29} {1}'.format('CloudScraper Request', url))
-            log('UTILS :: {0:<29} {1}'.format('CloudScraper User Agent', headers['User-Agent']))
-
-            scraper = cloudscraper.CloudScraper()
+            scraper = cfscrape.create_scraper(delay=10)
             scraper.headers.update(headers)
             scraper.cookies.update(cookies)
             time.sleep(sleep)
-            HTTPRequest = scraper.request('GET', url, timeout=timeout, proxies=proxies)
-            if not HTTPRequest.ok:
-                msg = 'CloudScraper Status Code: {0}'.format(HTTPRequest.status_code)
+            response = scraper.get(url)
+            log('UTILS :: {0:<29} {1}'.format('CFScrape Status Code:', response.status_code))
+            # Set Function result
+            HTTPRequest = None if response.status_code != 200 else HTML.ElementFromString(response.text)
 
         except Exception as e:
-            msg = 'CloudScraper Request Failed: {0}'.format(e)
+            msg = 'CFScrape Request Failed: {0}'.format(e)
     
     finally:
         if msg:
             raise Exception(msg)
-
-    # determine whether the url is an image or not
-    # Parse Output and repair any invalid html code - use lxml parser - https://stackoverflow.com/questions/73867545/validate-html-with-beautifulsoup
-    # log('UTILS :: {0:<29} {1}'.format('Content Type', HTTPRequest.headers['Content-Type']))
-    # if 'image' not in HTTPRequest.headers['Content-Type'].lower():
-    #pattern = r'.jpeg|.jpg|.png|.webp'
-    #matched = re.search(pattern, url, re.IGNORECASE)  # match against whole string
-    #if not matched:
-    #    try:
-    #        soup = BeautifulSoup(HTTPRequest.text, "lxml")
-    #        HTTPRequest = HTML.ElementFromString(str(soup))
-
-    #    except Exception as e:
-    #        msg = 'HTML Parsing Failed: {0}'.format(e)
-    #        raise Exception(msg)
 
     return HTTPRequest
 
@@ -2331,6 +2315,7 @@ def getSiteInfoFagalicious(AGENTDICT, FILMDICT, **kwargs):
             htmltags = [x.strip() for x in htmltags if x.strip()]
             htmltags = [x for x in htmltags if not x in characters]
             htmltags = [x for x in htmltags if not 'compilation' in x.lower()]
+            htmltags = [x for x in htmltags if not 'ns originals' in x.lower()]
             htmltags = [x for x in htmltags if not 'movie' in x.lower()]
             htmltags = [x for x in htmltags if not 'series' in x.lower()]
             htmltags = [x for x in htmltags if not '.tv' in x.lower()]
@@ -6637,7 +6622,7 @@ def updateMetadata(metadata, media, lang, force=True):
         log(LOG_BIGLINE)
         log('UTILS :: Access Site URL Link')
         try:
-            fhtml = HTML.ElementFromURL(FILMDICT['FilmURL'], sleep=delay())
+            fhtml = getHTTPRequest(FILMDICT['FilmURL'], timeout=30)            
             FILMDICT['FilmHTML'] = fhtml
             if FILMDICT.get('vDuration') is None:
                 FILMDICT['vDuration'] = FILMDICT['Duration']
@@ -7637,18 +7622,20 @@ def setupAgentVariables(media):
                     keyValue = [x.strip() for x in keyValue]
                     key = keyValue[0].lower()
                     value = keyValue[1]
-                    if key in pgmaTIDYDICT:
+                    duplicateKey = True if key in pgmaTIDYDICT else False
+                    if duplicateKey:
                         log('UTILS :: {0:<29} {1}'.format('\t\t{0}: Duplicate Row - Replace Setting'.format(tidy), 'Row {0} - {1}'.format(idx, row)))
 
                     pgmaTIDYDICT[key] = value if value != 'x' else None
-                    # The value must either be related to a Country, Genre or skipped otherwise its an error which is logged
+
+                    # The value must either be related to a Country, a Genre, a Skippy or a duplicate, otherwise its an error which is logged and will stop scraping
                     if value in pgmaCOUNTRYSET:
                         tidiedCountriesSet.add('{0} : {1}'.format(keyValue[0], value))
                     elif value.lower() in pgmaGENRESDICT:
                         tidiedGenresSet.add('{0} : {1}'.format(keyValue[0], value))
                     elif value == 'x':
                         tidiedNullSet.add('{0} : {1}'.format(keyValue[0], value))
-                    else:
+                    elif not duplicateKey:
                         log('UTILS :: {0:<29} {1}'.format('\t\t{0}: Not Found in {1}Genres.txt'.format(tidy, 'Gay' if AGENT_TYPE == '⚣' else 'Straight'), 'Row {0} - {1}'.format(idx, row)))
                         tidiedErrorSet.add('{0} : {1}'.format(keyValue[0], value))
 
