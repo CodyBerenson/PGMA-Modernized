@@ -19,6 +19,7 @@
     22 Apr 2024     2019.08.12.25   Changes to list result html
     06 Jun 2024     2019.08.12.26   Changes to Release Date Processing
     21 Jun 2024     2019.08.12.27   Changes to search results detection
+    04 Jul 2024     2019.08.12.28   Film Release Date error - variable used before declaration
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -26,7 +27,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2019.08.12.27'
+VERSION_NO = '2019.08.12.28'
 AGENT = 'GayEmpire'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -223,6 +224,7 @@ class GayEmpire(Agent.Movies):
                     try:
                         filmProductionYear = film.xpath('.//a[@category and @label="Title"]/following-sibling::text()')[0].replace('(', '').replace(')', '').strip()
                         utils.log('SEARCH:: {0:<29} {1}'.format('Site Production Year', filmProductionYear))
+                        releaseDateMatch = True
 
                     except Exception as e:
                         filmProductionYear = ''
@@ -235,6 +237,7 @@ class GayEmpire(Agent.Movies):
                         releaseDates.add(filmReleaseDate)                                                           # add to set
 
                     except Exception as e:
+                        filmReleaseDate = ''
                         utils.log('SEARCH:: Error getting Site Release Date: {0}'.format(e))
 
                     # if production year and release date are in the same year - use the release date only saved above to set

@@ -122,7 +122,9 @@ General Functions found in all agents
                     as Cast Names would not have characters such as these: ?, ;, : etc
     21 Jun 2024     Added Plex Server Version to Log Header Text
     27 Jun 2024     Code to avoid duplicate genres being classed as flawed
-    07 Aug 2024     Cleanup on code to sort cloudflare issues: as sites like fagalicious will not accept search requests as these are blocked
+    07 Aug 2024     Implemented cfscrape library to sort cloud flare issues: as sites like fagalicious will not accept search requests as these are blocked.
+                    Tidied up logs
+                    corrected errors in relation to user defined gay genres 
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cfscrape, copy, inspect, json, os, platform, plistlib, random, re, requests, subprocess, sys, time
@@ -176,7 +178,7 @@ def delay():
 # ----------------------------------------------------------------------------------------------------------------------------------
 def findTidy(AGENTDICT, myItem):
     try:
-        myItem = makeASCII(myItem.lower())
+        myItem = makeASCII(myItem)
         pgmaTidyDict = AGENTDICT['pgmaTIDYDICT']
         myItem = pgmaTidyDict.get(myItem, '')
         myItem = None if myItem == 'x' else myItem
@@ -281,88 +283,89 @@ def getDirectors(agntDirectorList, AGENTDICT, FILMDICT):
 # -------------------------------------------------------------------------------------------------------------------------------
 def getFilmImages(imageType, imageLocation, whRatio, sceneAgent, thumborAddress, rotation):
     ''' Only for Scene Agents: get Film images - posters/background art and crop if necessary '''
-    imageContent = ''
-    if AGENT == 'GEVIScenes' and imageType == 'Poster':
-        try:
-            originalLocation = imageLocation
-            imageContent = HTTP.Request(imageLocation).content
-
-            envVar = os.environ
-            TempFolder = envVar['TEMP']
-            imageLocation = os.path.join(TempFolder, imageLocation.split("/")[-1])
-            PlexSaveFile(imageLocation, imageContent)
-            psScript = os.path.join(PlexSupportPath, 'Plug-ins', '_PGMA', 'Scripts', 'Rotate.ps1')
-            cmd = r'powershell.exe -executionPolicy bypass -file "{0}" "{1}" {2}'.format(psScript, imageLocation, rotation)
-            log('UTILS ::')
-            log('UTILS :: {0:<29} {1}'.format('Script - Rotate Image 270{0}'.format(DEGREE), imageLocation))
-            log('UTILS :: {0:<29} {1}'.format('Command Line', cmd))
-            myProcess = subprocess.call(cmd)
-            del myProcess
-            time.sleep(2)
-            imageContent = PlexLoadFile(imageLocation)
-
-        except Exception as e:
-            log('UTILS :: Error: Script Failed to Rotate Image: {0}'.format(e))
-
-    else:
-        Thumbor = thumborAddress + "/0x0:{0}x{1}/{2}"
+    try:
         imageContent = HTTP.Request(imageLocation).content
-        myImage = Image.open(BytesIO(imageContent))
-        width, height = myImage.size
-        dispWidth = '{:,d}'.format(width)       # thousands separator
-        dispHeight = '{:,d}'.format(height)     # thousands separator
+    except Exception as e:
+        try:
+            log('UTILS :: Error: Failed to get Film Image: {0}'.format(e))
+            log('UTILS :: Try getHTTPRequest')
+            imageContent = getHTTPRequest(imageLocation, need='content')
+        except Exception as e:
+            imageContent = None
 
-        log('UTILS :: {0:<29} {1}'.format('{0} Found'.format(imageType),'Actual Size: (w {0} x h {1}); URL: {2}'.format(dispWidth, dispHeight, imageLocation)))
+    if imageContent is not None:
+        if AGENT == 'GEVIScenes' and imageType == 'Poster':
+            try:
+                envVar = os.environ
+                TempFolder = envVar['TEMP']
+                imageLocation = os.path.join(TempFolder, imageLocation.split("/")[-1])
+                PlexSaveFile(imageLocation, imageContent)
+                psScript = os.path.join(PlexSupportPath, 'Plug-ins', '_PGMA', 'Scripts', 'Rotate.ps1')
+                cmd = r'powershell.exe -executionPolicy bypass -file "{0}" "{1}" {2}'.format(psScript, imageLocation, rotation)
+                log('UTILS ::')
+                log('UTILS :: {0:<29} {1}'.format('Script - Rotate Image 270{0}'.format(DEGREE), imageLocation))
+                log('UTILS :: {0:<29} {1}'.format('Command Line', cmd))
+                myProcess = subprocess.call(cmd)
+                del myProcess
+                time.sleep(2)
+                imageContent = PlexLoadFile(imageLocation)
 
-        # Cropping only done on Scene Agents
-        if sceneAgent is True:
-            maxHeight = float(width * whRatio)      # Maximum allowable height
+            except Exception as e:
+                log('UTILS :: Error: Script Failed to Rotate Image: {0}'.format(e))
 
-            cropHeight = float(maxHeight if maxHeight <= height else height)
-            cropWidth = float(cropHeight / whRatio)
+        else:
+            myImage = Image.open(BytesIO(imageContent))
 
-            DxHeight = 0.0 if cropHeight == height else (abs(cropHeight - height) / height) * 100.0
-            DxWidth = 0.0 if cropWidth == width else (abs(cropWidth - width) / width) * 100.0
+            # Cropping only done on Scene Agents
+            if sceneAgent is True:
+                Thumbor = thumborAddress + "/0x0:{0}x{1}/{2}"
+                width, height = myImage.size
+                dispWidth = '{:,d}'.format(width)       # thousands separator
+                dispHeight = '{:,d}'.format(height)     # thousands separator
+                log('UTILS :: {0:<29} {1}'.format('{0} Found'.format(imageType),'Actual Size: (w {0} x h {1}); URL: {2}'.format(dispWidth, dispHeight, imageLocation)))
 
-            cropRequired = True if DxWidth >= 15 or DxHeight >=15 else False
-            cropWidth = int(cropWidth)
-            cropHeight = int(cropHeight)
-            desiredWidth = '{0:,d}'.format(cropWidth)     # thousands separator
-            desiredHeight = '{0:,d}'.format(cropHeight)   # thousands separator
-            DxWidth = '{0:>2}'.format(DxWidth)    # percent format
-            DxHeight = '{0:>2}'.format(DxHeight)  # percent format
-            log('UTILS :: {0:<29} {1}'.format('Crop {0}'.format("Required" if cropRequired else "Not Required"), 'Desired Size: (w {0} x h {1}); Dx: w[{2}%] x h[{3}%]'.format(desiredWidth, desiredHeight, DxWidth, DxHeight)))
-            if cropRequired:
-                try:
-                    width = cropWidth
-                    height = cropHeight
-                    imageLocation = Thumbor.format(width, height, imageLocation)
-                    log('UTILS :: {0:<29} {1}'.format('Thumbor - Crop Image', imageLocation))
-                    log('UTILS :: {0:<29} {1}'.format('  Desired Dimensions', '{0} x {1}'.format(desiredWidth, desiredHeight)))
-                    imageContent = HTTP.Request(imageLocation).content
+                maxHeight = float(width * whRatio)      # Maximum allowable height
+                cropHeight = float(maxHeight if maxHeight <= height else height)
+                cropWidth = float(cropHeight / whRatio)
+                DxHeight = 0.0 if cropHeight == height else (abs(cropHeight - height) / height) * 100.0
+                DxWidth = 0.0 if cropWidth == width else (abs(cropWidth - width) / width) * 100.0
 
-                except Exception as e:
-                    log('UTILS :: Error: Thumbor Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, imageLocation, e))
-                    if os.name == 'nt':
-                        try:
-                            envVar = os.environ
-                            TempFolder = envVar['TEMP']
-                            imageLocation = os.path.join(TempFolder, imageLocation.split("/")[-1])
-                            PlexSaveFile(imageLocation, imageContent)
-                            vbScript = os.path.join(PlexSupportPath, 'Plug-ins', '_PGMA', 'Scripts', 'Cropper.vbs')
-                            cmd = r'CScript.exe "{0}" "{1}" "{2}" "{3}"'.format(vbScript, imageLocation, cropWidth, cropHeight)
-                            log('UTILS ::')
-                            log('UTILS :: {0:<29} {1}'.format('Script - Crop Image', imageLocation))
-                            log('UTILS :: {0:<29} {1}'.format('Command Line', cmd))
-                            log('UTILS :: {0:<29} {1}'.format('Desired Dimensions', '{0} x {1}'.format(desiredWidth, desiredHeight)))
-                            myProcess = subprocess.call(cmd)
-                            del myProcess
-                            time.sleep(2)
-                            imageContent = PlexLoadFile(imageLocation)
-                        except Exception as e:
-                            log('UTILS :: Error: Script Failed to Crop Image to: {0} x {1}: {2} - {3}'.format(desiredWidth, desiredHeight, imageLocation, e))
+                cropRequired = True if DxWidth >= 15 or DxHeight >=15 else False
+                log('UTILS :: {0:<29} {1}'.format('Crop', "Required" if cropRequired else "Not Required"))
+                if cropRequired:
+                    cropWidth = int(cropWidth)
+                    cropHeight = int(cropHeight)
+                    desiredWidth = '{0:,d}'.format(cropWidth)     # thousands separator
+                    desiredHeight = '{0:,d}'.format(cropHeight)   # thousands separator
+                    DxWidth = '{0:>2}'.format(DxWidth)    # percent format
+                    DxHeight = '{0:>2}'.format(DxHeight)  # percent format
+                    log('UTILS :: {0:<29} {1}'.format('Desired Size', 'w {0} x h {1}); Dx: w[{2}%] x h[{3}%]'.format(desiredWidth, desiredHeight, DxWidth, DxHeight)))
+                    try:
+                        log('UTILS :: {0:<29} {1}'.format('Thumbor - Crop Image', imageLocation))
+                        imageLocation = Thumbor.format(cropWidth, cropHeight, imageLocation)
+                        imageContent = HTTP.Request(imageLocation).content
+                        #imageContent = getHTTPRequest(imageLocation, need='content')
 
-    return imageLocation, imageContent
+                    except Exception as e:
+                        log('UTILS :: Error: Thumbor Failed to Crop Image: {0}'.format(e))
+                        if os.name == 'nt':
+                            try:
+                                envVar = os.environ
+                                TempFolder = envVar['TEMP']
+                                imageLocation = os.path.join(TempFolder, imageLocation.split("/")[-1])
+                                PlexSaveFile(imageLocation, imageContent)
+                                vbScript = os.path.join(PlexSupportPath, 'Plug-ins', '_PGMA', 'Scripts', 'Cropper.vbs')
+                                cmd = r'CScript.exe "{0}" "{1}" "{2}" "{3}"'.format(vbScript, imageLocation, cropWidth, cropHeight)
+                                log('UTILS :: {0:<29} {1}'.format('Script - Crop Image', imageLocation))
+                                log('UTILS :: {0:<29} {1}'.format('Command Line', cmd))
+                                myProcess = subprocess.call(cmd)
+                                del myProcess
+                                time.sleep(2)
+                                imageContent = PlexLoadFile(imageLocation)
+
+                            except Exception as e:
+                                log('UTILS :: Error: Script Failed to Crop Image: {0}'.format(e))
+    return imageContent
 
 # -------------------------------------------------------------------------------------------------------------------------------
 def getFilmOnIAFD(AGENTDICT, FILMDICT):
@@ -655,41 +658,31 @@ def getFilmOnIAFD(AGENTDICT, FILMDICT):
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 def getHTTPRequest(url, **kwargs):
-    ''' Use cfscrape utility to read url and return valid HTML'''
+    ''' if the plex request fails, use cfscrape utility to read url and return valid HTML by default or the content for images'''
     headers = kwargs.pop('headers', {})
     cookies = kwargs.pop('cookies', {})
     timeout = kwargs.pop('timeout', 30)
-    sleep = delay()
     proxies = {}
-
+    need = kwargs.pop('need', 'text')
+    sleep = 10 + delay()
     HTTPRequest = None
-    msg = ''
+    log('UTILS :: {0:<29} {1}'.format('Request URL', url))
     try:
-        log('UTILS :: {0:<29} {1}'.format('Plex Request', url))
-        HTTPRequest = HTML.ElementFromURL(url, timeout=timeout, sleep=sleep)
+        HTTPRequest = HTML.ElementFromURL(url, timeout=timeout, sleep=sleep) if need == 'text' else HTTP.Request(imageLocation).content
 
     except Exception as e:
-        log('UTILS :: Error:: Plex Request Failed, {0}'.format(e))
+        log('UTILS :: {0:<29} {1}'.format('Request Failed', 'Try CFScrape'))
         try:
             headers['User-Agent'] = getUserAgent()
-            log('UTILS :: {0:<29} {1}'.format('CFScrape Request', url))
-            log('UTILS :: {0:<29} {1}'.format('CFScrape User Agent', headers['User-Agent']))
-
-            scraper = cfscrape.create_scraper(delay=10)
+            scraper = cfscrape.create_scraper(delay=sleep)
+            scraper.proxies = proxies
             scraper.headers.update(headers)
             scraper.cookies.update(cookies)
-            time.sleep(sleep)
             response = scraper.get(url)
-            log('UTILS :: {0:<29} {1}'.format('CFScrape Status Code:', response.status_code))
-            # Set Function result
-            HTTPRequest = None if response.status_code != 200 else HTML.ElementFromString(response.text)
+            HTTPRequest = None if response.status_code != 200 else HTML.ElementFromString(response.text) if need == 'text' else response.content
 
-        except Exception as e:
-            msg = 'CFScrape Request Failed: {0}'.format(e)
-    
-    finally:
-        if msg:
-            raise Exception(msg)
+        except Exception as e2:
+            log('UTILS :: {0:<29} Plex - {1} CFScrape - {2}'.format('Error:: Request URL Failure:', e, e2))
 
     return HTTPRequest
 
@@ -868,68 +861,77 @@ def getImageContent(imageLocation, picType, entry, AGENTDICT):
     imageContent = None
     fileOnDisk = False if 'http' in imageLocation else True
     log('UTILS :: {0:<29} {1}'.format('Location', 'On Disk' if fileOnDisk is True else 'On Web'))
-    try:
-        # Countries & System - IAFD, Stacked, Agent are stored on disk, AND posters under _PGMA + Agent.jpg
-        if fileOnDisk is True:
+    if fileOnDisk is True:
+        if AGENTDICT['prefCOLCAST'] in entry:
+            imageContent = PlexLoadFile(AGENTDICT['pgmaNOCASTPOSTER'])
+        elif AGENTDICT['prefCOLDIRECTOR'] in entry:
+            imageContent = PlexLoadFile(AGENTDICT['pgmaNODIRECTORPOSTER'])
+        else:
             imageContent = PlexLoadFile(imageLocation)
 
-        else:
-            imageLocation = imageLocation.replace(' ', '%20').strip()
-            ImageContent = getHTTPRequest(imageLocation).content
-            myImage = Image.open(BytesIO(ImageContent))
+    else:
+        imageContent = None
+        try:
+            imageContent = HTTP.Request(imageLocation).content
+
+        except Exception as e:
+            try:
+                log('UTILS :: Error: Failed to get Film Image: {0}'.format(e))
+                log('UTILS :: Try getHTTPRequest')
+                imageContent = getHTTPRequest(imageLocation, need='content')
+            except Exception as e:
+                pass
+        '''
+        if imageContent is not None:
+            myImage = Image.open(BytesIO(imageContent))
             width, height = myImage.size
             width = int(width)
             height = int(width * 1.5)
 
-    except Exception as e:
-        if AGENTDICT['prefCOLCAST'] in entry:
-            fileOnDisk = True
-            imageContent = PlexLoadFile(AGENTDICT['pgmaNOCASTPOSTER'])
-        elif AGENTDICT['prefCOLDIRECTOR'] in entry:
-            fileOnDisk = True
-            imageContent = PlexLoadFile(AGENTDICT['pgmaNODIRECTORPOSTER'])
-        else:
-            msg = '< No Image Content Loaded: {0}! >'.format(e)
-            raise Exception(msg)
-
-    if fileOnDisk is False:
-        # Cast from IAFD
-        if AGENTDICT['prefCOLCAST'] in entry:
-            if '[d]' in entry:
-                imageLocation = r'{0}/{1}x{2}/filters:stretch():grayscale()/{3}'.format(AGENTDICT['pgmaTHUMBOR'], width, height, imageLocation)
-            else:
-                imageLocation = r'{0}/{1}x{2}/filters:stretch()/{3}'.format(AGENTDICT['pgmaTHUMBOR'], width, height, imageLocation)
-
-            log('UTILS :: {0:<29} {1}'.format('{0}Cast {1} Image URL'.format('Deceased ' if '[d]' in entry else '', picType), imageLocation))
-
-        # Directors from IAFD - GrayScale + Watermark if deceased else just Watermark
-        elif AGENTDICT['prefCOLDIRECTOR'] in entry:
-            if '[d]' in entry:
-                imageLocation = r'{0}/{1}x{2}/filters:stretch():grayscale():watermark({3},1,1,0)/{4}'.format(AGENTDICT['pgmaTHUMBOR'], width, height, AGENTDICT['pgmaWATERMARK'], imageLocation)
-            else:
-                imageLocation = r'{0}/{1}x{2}/filters:stretch():watermark({3},1,1,0)/{4}'.format(AGENTDICT['pgmaTHUMBOR'], 128, 192, AGENTDICT['pgmaWATERMARK'], imageLocation)
-
-            log('UTILS :: {0:<29} {1}'.format('{0}Director {1} Image URL'.format('Deceased ' if '[d]' in entry else '', picType), imageLocation))
-
-        # all other internet images need to be ratio wxh = 1x1.5
-        else:
-            imageLocation = r'{0}/fit-in/{1}x{2}/{3}'.format(AGENTDICT['pgmaTHUMBOR'], width, height, imageLocation)
-            log('UTILS :: {0:<29} {1}'.format('{0} Genre Image URL'.format(picType), imageLocation))
-
-        # get Thumborised Image Contemt
-        try:
-            imageContent = getHTTPRequest(imageLocation)
-
-        except Exception as e:
-            log('UTILS :: Error:: Failed to get Image Content: {0} - {1}'.format(e, imageLocation))
+            # Cast from IAFD
             if AGENTDICT['prefCOLCAST'] in entry:
-                imageContent = PlexLoadFile(AGENTDICT['pgmaNOCASTPOSTER'])
-            elif AGENTDICT['prefCOLDIRECTOR'] in entry:
-                imageContent = PlexLoadFile(AGENTDICT['pgmaNODIRECTORPOSTER'])
-            else:
-                msg = '< No Thumbor Image Content Loaded: {0}! >'.format(e)
-                raise Exception(msg)
+                if '[d]' in entry:
+                    imageLocation = r'{0}/{1}x{2}/filters:stretch():grayscale()/{3}'.format(AGENTDICT['pgmaTHUMBOR'], width, height, imageLocation)
+                else:
+                    imageLocation = r'{0}/{1}x{2}/filters:stretch()/{3}'.format(AGENTDICT['pgmaTHUMBOR'], width, height, imageLocation)
 
+                log('UTILS :: {0:<29} {1}'.format('{0}Cast {1} Image URL'.format('Deceased ' if '[d]' in entry else '', picType), imageLocation))
+
+            # Directors from IAFD - GrayScale + Watermark if deceased else just Watermark
+            elif AGENTDICT['prefCOLDIRECTOR'] in entry:
+                if '[d]' in entry:
+                    imageLocation = r'{0}/{1}x{2}/filters:stretch():grayscale():watermark({3},1,1,0)/{4}'.format(AGENTDICT['pgmaTHUMBOR'], width, height, AGENTDICT['pgmaWATERMARK'], imageLocation)
+                else:
+                    imageLocation = r'{0}/{1}x{2}/filters:stretch():watermark({3},1,1,0)/{4}'.format(AGENTDICT['pgmaTHUMBOR'], 128, 192, AGENTDICT['pgmaWATERMARK'], imageLocation)
+
+                log('UTILS :: {0:<29} {1}'.format('{0}Director {1} Image URL'.format('Deceased ' if '[d]' in entry else '', picType), imageLocation))
+
+            # all other internet images need to be ratio wxh = 1x1.5
+            else:
+                imageLocation = r'{0}/fit-in/{1}x{2}/{3}'.format(AGENTDICT['pgmaTHUMBOR'], width, height, imageLocation)
+                log('UTILS :: {0:<29} {1}'.format('{0} Genre Image URL'.format(picType), imageLocation))
+
+            # get Thumborised Image Contemt
+            try:
+                imageContent = HTTP.Request(imageLocation).content
+
+            except Exception as e:
+                try:
+                    log('UTILS :: Error: Failed to get Film Image: {0}'.format(e))
+                    log('UTILS :: Try getHTTPRequest')
+                    imageContent = getHTTPRequest(imageLocation, need='content')
+
+                except Exception as e:
+                    log('UTILS :: Error:: Failed to get Image Content: {0} - {1}'.format(e, imageLocation))
+                    if AGENTDICT['prefCOLCAST'] in entry:
+                        imageContent = PlexLoadFile(AGENTDICT['pgmaNOCASTPOSTER'])
+                    elif AGENTDICT['prefCOLDIRECTOR'] in entry:
+                        imageContent = PlexLoadFile(AGENTDICT['pgmaNODIRECTORPOSTER'])
+                    else:
+                        imageContent = None
+                        msg = '< No Thumbor Image Content Loaded: {0}! >'.format(e)
+                        raise Exception(msg)
+        '''
     return imageContent
 
 # -------------------------------------------------------------------------------------------------------------------------------
@@ -2335,9 +2337,9 @@ def getSiteInfoFagalicious(AGENTDICT, FILMDICT, **kwargs):
                 if tidyItem is None:                                      # If none skip
                     continue
                 elif tidyItem:                                            # gayTidy returned an item
-                    if tidyItem.lower() in AGENTDICT['pgmaGENRESDICT']:                    # check if genre
+                    if tidyItem in AGENTDICT['pgmaGENRESDICT']:           # check if genre
                         genresSet.add(tidyItem)
-                    elif tidyItem in AGENTDICT['pgmaCOUNTRYSET']:                          # check if country
+                    elif tidyItem in AGENTDICT['pgmaCOUNTRYSET']:         # check if country
                         countriesSet.add(tidyItem)
                     else:
                         log('UTILS :: {0:<29} {1}'.format('Warning', 'Tidied Item is neither Country nor Genre'))
@@ -4743,9 +4745,9 @@ def getSiteInfoQueerClick(AGENTDICT, FILMDICT, **kwargs):
                 if tidyItem is None:                                      # If none skip
                     continue
                 elif tidyItem:                                            # gayTidy returned an item
-                    if tidyItem.lower() in AGENTDICT['pgmaGENRESDICT']:                    # check if genre
+                    if tidyItem in AGENTDICT['pgmaGENRESDICT']:           # check if genre
                         genresSet.add(tidyItem)
-                    elif tidyItem in AGENTDICT['pgmaCOUNTRYSET']:                          # check if country
+                    elif tidyItem in AGENTDICT['pgmaCOUNTRYSET']:         # check if country
                         countriesSet.add(tidyItem)
                     else:
                         log('UTILS :: {0:<29} {1}'.format('Warning', 'Tidied Item is neither Country nor Genre'))
@@ -5042,9 +5044,9 @@ def getSiteInfoWayBig(AGENTDICT, FILMDICT, **kwargs):
                 if tidyItem is None:                                      # If none skip
                     continue
                 elif tidyItem:                                            # gayTidy returned an item
-                    if tidyItem.lower() in AGENTDICT['pgmaGENRESDICT']:                    # check if genre
+                    if tidyItem in AGENTDICT['pgmaGENRESDICT']:           # check if genre
                         genresSet.add(tidyItem)
-                    elif tidyItem in AGENTDICT['pgmaCOUNTRYSET']:                          # check if country
+                    elif tidyItem in AGENTDICT['pgmaCOUNTRYSET']:         # check if country
                         countriesSet.add(tidyItem)
                     else:
                         log('UTILS :: {0:<29} {1}'.format('Warning', 'Tidied Item is neither Country nor Genre'))
@@ -6651,7 +6653,7 @@ def updateMetadata(metadata, media, lang, force=True):
             except: pass
 
     except Exception as e:
-        log('UTILS :: Error: setting up Update Variables: {0}'.format(e))
+        log('UTILS :: Error: Setting up Update Variables: {0}'.format(e))
         FILMDICT['Status'] = False
 
     if FILMDICT['Status'] is True:
@@ -6691,7 +6693,7 @@ def updateMetadata(metadata, media, lang, force=True):
             log('UTILS :: {0:<29} {1}'.format('1a. ID', metadata.id))
 
         except Exception as e:
-            log('UTILS :: Error: setting ID: {0}'.format(e))
+            log('UTILS :: Error: Setting ID: {0}'.format(e))
             metadata.id = ''
             FILMDICT['Status'] = False
 
@@ -6704,7 +6706,7 @@ def updateMetadata(metadata, media, lang, force=True):
 
             except Exception as e:
                 metadata.studio = ''
-                log('UTILS :: Error: setting Studio: {0}'.format(e))
+                log('UTILS :: Error: Setting Studio: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 1c.   Set Title
@@ -6724,11 +6726,11 @@ def updateMetadata(metadata, media, lang, force=True):
                     if matched:
                         item = 'Showcase'
                         entry = '{0} {1}'.format(AGENTDICT['prefCOLGENRE'], item)
-                        collectionsDict[entry] = {'Poster': AGENTDICT['pgmaGENRESDICT'][item.lower()], 'Art': '', 'Summary': ''}
+                        collectionsDict[entry] = {'Poster': AGENTDICT['pgmaGENRESDICT'][item], 'Art': '', 'Summary': ''}
 
             except Exception as e:
                 metadata.title = ''
-                log('UTILS :: Error: setting Title: {0}'.format(e))
+                log('UTILS :: Error: Setting Title: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 1d.   Set Content Rating to Adult
@@ -6740,7 +6742,7 @@ def updateMetadata(metadata, media, lang, force=True):
 
             except Exception as e:
                 metadata.content_rating = ''
-                log('UTILS :: Error: setting Content Rating: {0}'.format(e))
+                log('UTILS :: Error: Setting Content Rating: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 1e.   Set Content Rating Age to 18 years
@@ -6752,7 +6754,7 @@ def updateMetadata(metadata, media, lang, force=True):
 
             except Exception as e:
                 metadata.content_rating_age = 0
-                log('UTILS :: Error: setting Content Rating Age: {0}'.format(e))
+                log('UTILS :: Error: Setting Content Rating Age: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         '''
@@ -6787,7 +6789,7 @@ def updateMetadata(metadata, media, lang, force=True):
 
             except Exception as e:
                 metadata.original_title = ''
-                log('UTILS :: Error: setting Original Title: {0}'.format(e))
+                log('UTILS :: Error: Setting Original Title: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 2b.   Set Tagline
@@ -6801,7 +6803,7 @@ def updateMetadata(metadata, media, lang, force=True):
 
             except Exception as e:
                 metadata.tagline = ''
-                log('UTILS :: Error: setting Tag Line: {0}'.format(e))
+                log('UTILS :: Error: Setting Tag Line: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 2c.   Rating  can be a maximum of 10 - float value
@@ -6813,12 +6815,13 @@ def updateMetadata(metadata, media, lang, force=True):
 
             except Exception as e:
                 metadata.rating = 0.0
-                log('UTILS :: Error: setting Rating: {0}'.format(e))
+                log('UTILS :: Error: Setting Rating: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 2d.   Genres - retrieved from website and in some case from the synopsis
         if FILMDICT['Status'] is True:
             log(LOG_SUBLINE)
+            log('Genres **** {0}'.format(AGENTDICT['pgmaGENRESDICT']))
             try:
                 metadata.genres.clear()
 
@@ -6837,11 +6840,11 @@ def updateMetadata(metadata, media, lang, force=True):
                     entry = '{0} {1}{2}'.format(AGENTDICT['prefCOLSYSTEM'], prefix, item) if 'Compilations' in item and AGENTDICT['prefCOLSYSTEM'] else ''
                     entry = '{0} {1}{2}'.format(AGENTDICT['prefCOLGENRE'], prefix, item) if not entry and AGENTDICT['prefCOLGENRE'] else ''
                     if entry:
-                        collectionsDict[entry] = {'Poster': AGENTDICT['pgmaGENRESDICT'][item.lower()], 'Art': '', 'Summary': ''}
+                        collectionsDict[entry] = {'Poster': AGENTDICT['pgmaGENRESDICT'][item], 'Art': '', 'Summary': ''}
 
             except Exception as e:
                 metadata.genres.clear()
-                log('UTILS :: Error: setting Genres: {0}'.format(e))
+                log('UTILS :: Error: Setting Genres: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 2e.   Cast: thumbnails, roles from IAFD. Use IAFD as main Source if film found on IAFD
@@ -6908,7 +6911,7 @@ def updateMetadata(metadata, media, lang, force=True):
 
             except Exception as e:
                 metadata.roles.clear()
-                log('UTILS :: Error: setting Cast: {0}'.format(e))
+                log('UTILS :: Error: Setting Cast: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 2f.   Directors
@@ -6965,7 +6968,7 @@ def updateMetadata(metadata, media, lang, force=True):
 
             except Exception as e:
                 metadata.directors.clear()
-                log('UTILS :: Error: setting Director(s): {0}'.format(e))
+                log('UTILS :: Error: Setting Director(s): {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 2g.   Countries
@@ -7000,7 +7003,7 @@ def updateMetadata(metadata, media, lang, force=True):
 
             except Exception as e:
                 metadata.countries.clear()
-                log('UTILS :: Error: setting Countries: {0}'.format(e))
+                log('UTILS :: Error: Setting Countries: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 2h.   Posters - Front Cover of DVD
@@ -7017,7 +7020,7 @@ def updateMetadata(metadata, media, lang, force=True):
             imageContent = ''
             for idx, item in enumerate(poster, start=1):
                 try:
-                    image, imageContent = getFilmImages(imageType='Poster', imageLocation=item, whRatio=1.5, sceneAgent=FILMDICT['SceneAgent'], thumborAddress=AGENTDICT['pgmaTHUMBOR'], rotation=FILMDICT['Rotation']) 
+                    imageContent = getFilmImages(imageType='Poster', imageLocation=item, whRatio=1.5, sceneAgent=FILMDICT['SceneAgent'], thumborAddress=AGENTDICT['pgmaTHUMBOR'], rotation=FILMDICT['Rotation']) 
                     log('UTILS :: {0:<29} {1}'.format('Poster' if idx == 1 else '', '{0:>2} - {1}'.format(idx, image)))
                     metadata.posters[image] = Proxy.Media(imageContent, sort_order=idx)
                 except Exception as e:
@@ -7050,7 +7053,7 @@ def updateMetadata(metadata, media, lang, force=True):
                 imageContent = ''
                 for idx, item in enumerate(art, start=1):
                     try:
-                        image, imageContent = getFilmImages(imageType='Art', imageLocation=item, whRatio=1.5, sceneAgent=FILMDICT['SceneAgent'], thumborAddress=AGENTDICT['pgmaTHUMBOR'], rotation=FILMDICT['Rotation']) 
+                        imageContent = getFilmImages(imageType='Art', imageLocation=item, whRatio=1.5, sceneAgent=FILMDICT['SceneAgent'], thumborAddress=AGENTDICT['pgmaTHUMBOR'], rotation=FILMDICT['Rotation']) 
                         log('UTILS :: {0:<29} {1}'.format('Art' if idx == 1 else '', '{0:>2} - {1}'.format(idx, image)))
                         metadata.art[image] = Proxy.Media(imageContent, sort_order=idx)
                     except Exception as e:
@@ -7090,7 +7093,7 @@ def updateMetadata(metadata, media, lang, force=True):
                     log('UTILS :: Warning: Agent Has No Scenes / Reviews Set!')
 
             except Exception as e:
-                log('UTILS :: Error: setting Reviews: {0}'.format(e))
+                log('UTILS :: Error: Setting Reviews: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 2k.   Chapters - Put all Chapter Information here
@@ -7113,7 +7116,7 @@ def updateMetadata(metadata, media, lang, force=True):
                     log('UTILS :: Warning: No Chapters Found!')
 
             except Exception as e:
-                log('UTILS :: Error: setting Chapters: {0}'.format(e))
+                log('UTILS :: Error: Setting Chapters: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 2l.   Summary = Synopsis with IAFD Legend
@@ -7148,7 +7151,7 @@ def updateMetadata(metadata, media, lang, force=True):
 
             except Exception as e:
                 synopsis = ' '
-                log('UTILS :: Error: setting Synopsis: {0}'.format(e))
+                log('UTILS :: Error: Setting Synopsis: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 2m.   Set Collection
@@ -7266,7 +7269,7 @@ def updateMetadata(metadata, media, lang, force=True):
                         metadata.collections.add(title)
 
                     except Exception as e:
-                        log('UTILS :: Error: Creating Collection {0}'.format(e))
+                        log('UTILS :: Error: Creating Collection Title, {0}'.format(e))
                         FILMDICT['Status'] = False
                         break
 
@@ -7304,14 +7307,14 @@ def updateMetadata(metadata, media, lang, force=True):
                     if FILMDICT['Status'] is True:
                         try:
                             titleSort = collectionsKey.replace('[d]', '')                                       # remove death marker
-                            log('UTILS :: {0:<29} {1}'.format('Sort Title:', titleSort))
+                            log('UTILS :: {0:<29} {1}'.format('Collection Sort Title', titleSort))
                             payload = {'type': 18, 'id': ratingKey}
                             payload['titleSort.value'] = titleSort
                             payload['titleSort.locked'] = 1
                             ssn.put('{0}/library/sections/{1}/all'.format(plexBaseURL, AGENTDICT['pgmaLIBRARYID']), params=payload)
 
                         except Exception as e:
-                            log('UTILS :: Error: setting Collection Sort Title: {0}'.format(e))
+                            log('UTILS :: Error: Setting Collection Sort Title: {0}'.format(e))
                             FILMDICT['Status'] = False
                             break
 
@@ -7319,13 +7322,13 @@ def updateMetadata(metadata, media, lang, force=True):
                     if FILMDICT['Status'] is True:
                         try:
                             posterLocation = collectionsValue['Poster']
-                            log('UTILS :: {0:<29} {1}'.format('Poster:', posterLocation if posterLocation else 'No Poster'))
+                            log('UTILS :: {0:<29} {1}'.format('Collection Poster', posterLocation if posterLocation else 'No Poster'))
                             if posterLocation:
-                                data = getImageContent(posterLocation, 'Poster', collectionsKey, AGENTDICT)
-                                ssn.post('{0}/library/collections/{1}/posters'.format(plexBaseURL, ratingKey), data=data, stream=True)
+                                imageContent = getImageContent(posterLocation, 'Poster', collectionsKey, AGENTDICT)
+                                ssn.post('{0}/library/collections/{1}/posters'.format(plexBaseURL, ratingKey), data=imageContent, stream=True)
 
                         except Exception as e:
-                            log('UTILS :: Error: setting Collection Poster: {0}'.format(e))
+                            log('UTILS :: Error: Setting Collection Poster: {0}'.format(e))
                             if '403' in e:
                                 FILMDICT['IAFD403Err'].add('Collection')
                             else:       # break for all other errors
@@ -7336,13 +7339,13 @@ def updateMetadata(metadata, media, lang, force=True):
                     if FILMDICT['Status'] is True:
                         try:
                             artLocation = collectionsValue['Art']
-                            log('UTILS :: {0:<29} {1}'.format('Art:', artLocation if artLocation else 'No Art'))
+                            log('UTILS :: {0:<29} {1}'.format('Collection Art', artLocation if artLocation else 'No Art'))
                             if artLocation:
-                                data = getImageContent(artLocation, 'Art', collectionsKey, AGENTDICT)                 #data = ssn.get(art).content
-                                ssn.post('{0}/library/collections/{1}/arts'.format(plexBaseURL, ratingKey), data=data, stream=True)
+                                imageContent = getImageContent(artLocation, 'Art', collectionsKey, AGENTDICT)                 #data = ssn.get(art).content
+                                ssn.post('{0}/library/collections/{1}/arts'.format(plexBaseURL, ratingKey), data=imageContent, stream=True)
 
                         except Exception as e:
-                            log('UTILS :: Error: setting Collection Art: {0}'.format(e))
+                            log('UTILS :: Error: Setting Collection Art: {0}'.format(e))
                             if '403' in e:
                                 FILMDICT['IAFD403Err'].add('Collection')
                             else:       # break for all other errors
@@ -7360,19 +7363,19 @@ def updateMetadata(metadata, media, lang, force=True):
                                 ssn.put('{0}/library/sections/{1}/all'.format(plexBaseURL, AGENTDICT['pgmaLIBRARYID']), params=payload)
                                 summaryList = [x.strip() for x in summary.split(' ') if x.strip()]
                                 for idx2, summaryLine in enumerate(summaryList, start=1):
-                                    log('UTILS :: {0:<29} {1}'.format('Summary:' if idx2 == 1 else '', summaryLine.encode('utf-8').strip()))
+                                    log('UTILS :: {0:<29} {1}'.format('Collection Summary' if idx2 == 1 else '', summaryLine.encode('utf-8').strip()))
                             else:
-                                log('UTILS :: {0:<29} {1}'.format('Summary:', 'No Summary'))
+                                log('UTILS :: {0:<29} {1}'.format('Collection Summary:', 'No Summary'))
 
                         except Exception as e:
-                            log('UTILS :: Error: setting Collection Summary: {0}'.format(e))
+                            log('UTILS :: Error: Setting Collection Summary: {0}'.format(e))
                             FILMDICT['Status'] = False
                             break
 
                     log(LOG_SUBLINE)
 
             except Exception as e:
-                log('UTILS :: Error: setting Collections: {0}'.format(e))
+                log('UTILS :: Error: Setting Collections: {0}'.format(e))
                 FILMDICT['Status'] = False
 
         # 2o.   Set Originally Available Date - From website's release date if only it is earlier in the same year
@@ -7389,7 +7392,7 @@ def updateMetadata(metadata, media, lang, force=True):
                 log('UTILS :: {0:<29} {1}'.format('Current Year', metadata.year))
 
             except Exception as e:
-                log('UTILS :: Error: setting Originally Available Date: {0}'.format(e))
+                log('UTILS :: Error: Setting Originally Available Date: {0}'.format(e))
                 FILMDICT['Status'] = False
 
     # initialise all metadata if failed
@@ -7411,30 +7414,30 @@ def setupAgentVariables(media):
     log(LOG_ASTLINE)
     #   1.    Plex Support Path and Preferences
     log('UTILS :: 1.\tPlex System')
-    log('UTILS :: {0:<29} {1}'.format('\tAgent', '{0} v.{1}'.format(AGENT, VERSION_NO)))
-    log('UTILS :: {0:<29} {1}'.format('\tUtility Update Date', '{0}'.format(UTILS_UPDATE)))
-    log('UTILS :: {0:<29} {1}'.format('\tPython', '{0} - {1} - {2}'.format(platform.python_version(), platform.architecture()[0], platform.python_build())))
-    log('UTILS :: {0:<29} {1}'.format('\tOperating System', platform.system()))
-    log('UTILS :: {0:<29} {1}'.format('\tRelease:', platform.release()))
-    log('UTILS :: {0:<29} {1}'.format('\tPlex Support Path', PlexSupportPath))
-    log('UTILS :: {0:<29} {1}'.format('\tUser Agent', HTTP.Headers['User-Agent']))
+    log('UTILS :: {0:<29} {1}'.format('\t\tAgent', '{0} v.{1}'.format(AGENT, VERSION_NO)))
+    log('UTILS :: {0:<29} {1}'.format('\t\tUtility Update Date', '{0}'.format(UTILS_UPDATE)))
+    log('UTILS :: {0:<29} {1}'.format('\t\tPython', '{0} - {1} - {2}'.format(platform.python_version(), platform.architecture()[0], platform.python_build())))
+    log('UTILS :: {0:<29} {1}'.format('\t\tOperating System', platform.system()))
+    log('UTILS :: {0:<29} {1}'.format('\t\tRelease:', platform.release()))
+    log('UTILS :: {0:<29} {1}'.format('\t\tPlex Support Path', PlexSupportPath))
+    log('UTILS :: {0:<29} {1}'.format('\t\tUser Agent', HTTP.Headers['User-Agent']))
     continueSetup = os.path.isdir(PlexSupportPath) 
 
     #   2.    Agent Preference Settings
     if continueSetup is True:
         log(LOG_SUBLINE)
         log('UTILS :: 2.\tAgent Preference Settings')
-        log('UTILS :: {0:<29} {1}'.format('\tAgent Type', AGENT_TYPE))
+        log('UTILS :: {0:<29} {1}'.format('\t\tAgent Type', AGENT_TYPE))
         defaultPrefs_json = os.path.join(PlexSupportPath, 'Plug-ins', '{0}.bundle'.format(AGENT), 'Contents', 'DefaultPrefs.json')
-        log('UTILS :: {0:<29} {1}'.format('\tDefault Preferences', defaultPrefs_json))
+        log('UTILS :: {0:<29} {1}'.format('\t\tDefault Preferences', defaultPrefs_json))
         if os.path.isfile(defaultPrefs_json):
             try:
                 json = JSON.ObjectFromString(PlexLoadFile(defaultPrefs_json), encoding=None)  ### Load 'DefaultPrefs.json' to have access to default settings ###
                 if not json:
                     raise Exception('< Could Not Read Default Prefs! >')
 
-                log('UTILS :: {0:<29} {1}'.format('\tLoaded', defaultPrefs_json))
-                log('UTILS :: {0:<29} {1}'.format('\tPreferences:', len(json)))
+                log('UTILS :: {0:<29} {1}'.format('\t\tLoaded', defaultPrefs_json))
+                log('UTILS :: {0:<29} {1}'.format('\t\tPreferences:', len(json)))
                 idx = 0
                 for entry in json:                   #Build Pref_list dict from json file
                     idx += 1
@@ -7447,7 +7450,7 @@ def setupAgentVariables(media):
                     else:
                         setAs = Prefs[prefName]
 
-                    log('UTILS :: {0:<29} {1}'.format('\t{0:>2}. {1}'.format(idx, prefName), 'Default = {0:<15} Set As = {1:<15} {2}'.format(defSet, setAs, WRONG_TICK if setAs is None else RIGHT_TICK)))
+                    log('UTILS :: {0:<29} {1}'.format('\t\t{0:>2}. {1}'.format(idx, prefName), 'Default = {0:<15} Set As = {1:<15} {2}'.format(defSet, setAs, WRONG_TICK if setAs is None else RIGHT_TICK)))
 
                 prefCOLSYSTEM = '|1|' if Prefs['systemcollection'] else ''
                 prefCOLGENRE = '|2|' if Prefs['genrecollection'] != 'No' else ''        # if a colour set is chose - genre collection is on
@@ -7501,17 +7504,17 @@ def setupAgentVariables(media):
         pgmaSCRIPTSFOLDER = pgmaSCRIPTSFOLDER if os.path.isdir(pgmaSCRIPTSFOLDER) else ''
         pgmaSYSTEMFOLDER = pgmaSYSTEMFOLDER if os.path.isdir(pgmaSYSTEMFOLDER) else ''
 
-        log('UTILS :: {0:<29} {1}'.format('\tPGMA Folder Location', pgmaFOLDER if pgmaFOLDER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\t          Cast Faces', pgmaCASTFACEFOLDER if pgmaCASTFACEFOLDER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\t        Cast Posters', pgmaCASTPOSTERFOLDER if pgmaCASTPOSTERFOLDER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\t         Country Art', pgmaCOUNTRYART if pgmaCOUNTRYART else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\tCountry Poster Flags', pgmaCOUNTRYPOSTERFLAGS if pgmaCOUNTRYPOSTERFLAGS else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\t Country Poster Maps', pgmaCOUNTRYPOSTERMAPS if pgmaCOUNTRYPOSTERMAPS else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\t      Director Faces', pgmaDIRECTORFACEFOLDER if pgmaDIRECTORFACEFOLDER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\t    Director Posters', pgmaDIRECTORPOSTERFOLDER if pgmaDIRECTORPOSTERFOLDER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\t              Genres', pgmaGENREFOLDER if pgmaGENREFOLDER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\t             Scripts', pgmaSCRIPTSFOLDER if pgmaSCRIPTSFOLDER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\t              System', pgmaSYSTEMFOLDER if pgmaSYSTEMFOLDER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\tPGMA Folder Location', pgmaFOLDER if pgmaFOLDER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\t          Cast Faces', pgmaCASTFACEFOLDER if pgmaCASTFACEFOLDER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\t        Cast Posters', pgmaCASTPOSTERFOLDER if pgmaCASTPOSTERFOLDER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\t         Country Art', pgmaCOUNTRYART if pgmaCOUNTRYART else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\tCountry Poster Flags', pgmaCOUNTRYPOSTERFLAGS if pgmaCOUNTRYPOSTERFLAGS else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\t Country Poster Maps', pgmaCOUNTRYPOSTERMAPS if pgmaCOUNTRYPOSTERMAPS else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\t      Director Faces', pgmaDIRECTORFACEFOLDER if pgmaDIRECTORFACEFOLDER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\t    Director Posters', pgmaDIRECTORPOSTERFOLDER if pgmaDIRECTORPOSTERFOLDER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\t              Genres', pgmaGENREFOLDER if pgmaGENREFOLDER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\t             Scripts', pgmaSCRIPTSFOLDER if pgmaSCRIPTSFOLDER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\t              System', pgmaSYSTEMFOLDER if pgmaSYSTEMFOLDER else WRONG_TICK))
 
         # only contunue with setup if all folders are present
         continueSetup = (bool(pgmaFOLDER) and bool(pgmaSCRIPTSFOLDER) and bool(pgmaSYSTEMFOLDER) and bool(pgmaCASTFACEFOLDER) and bool(pgmaDIRECTORFACEFOLDER) and bool(pgmaCASTPOSTERFOLDER) and 
@@ -7525,10 +7528,10 @@ def setupAgentVariables(media):
         pgmaDIRECTORDICT = {}
         try:
             pgmaCASTDICT = {x.rsplit('.', 1)[0]:os.path.join(pgmaCASTPOSTERFOLDER, x) for x in os.listdir(pgmaCASTPOSTERFOLDER)}
-            log('UTILS :: {0:<29} {1}'.format('\tCast Collection Posters', '{0:>4} - {1}'.format(len(pgmaCASTDICT), pgmaCASTDICT)))
+            log('UTILS :: {0:<29} {1}'.format('\t\tCast Dictionary', '{0:>2} - {1}'.format(len(pgmaCASTDICT), pgmaCASTDICT)))
 
             pgmaDIRECTORDICT = {x.rsplit('.', 1)[0]:os.path.join(pgmaDIRECTORPOSTERFOLDER, x) for x in os.listdir(pgmaDIRECTORPOSTERFOLDER)}
-            log('UTILS :: {0:<29} {1}'.format('\tDirector Collection Posters', '{0:>4} - {1}'.format(len(pgmaDIRECTORDICT), pgmaDIRECTORDICT)))
+            log('UTILS :: {0:<29} {1}'.format('\t\tDirector Dictionary', '{0:>2} - {1}'.format(len(pgmaDIRECTORDICT), pgmaDIRECTORDICT)))
 
         except Exception as e:
             log('UTILS :: Error: creating Local Cast and Director Collection Poster Dictionaries: {0}'.format(e))
@@ -7546,10 +7549,10 @@ def setupAgentVariables(media):
             for idx, row in enumerate(txtrows, start=1):
                 pgmaCOUNTRYSET.add(row.strip())
 
-            log('UTILS :: {0:<29} {1}'.format('\tCountry Dictionary', '{0:>4} - {1}'.format(len(pgmaCOUNTRYSET), sorted(pgmaCOUNTRYSET))))
+            log('UTILS :: {0:<29} {1}'.format('\t\tCountry Dictionary', '{0:>3} - {1}'.format(len(pgmaCOUNTRYSET), sorted(pgmaCOUNTRYSET))))
 
         except Exception as e:
-            log('UTILS :: Error: creating Country Dictionary: {0}'.format(e))
+            log('UTILS :: Error: Creating Country Dictionary: {0}'.format(e))
             log('UTILS :: Error:: Country Source File: {0}'.format(countries_txt))
             continueSetup = False
 
@@ -7561,7 +7564,7 @@ def setupAgentVariables(media):
         try:
             genreFiles = ['GayGenres.txt', 'UserGayGenres.txt'] if AGENT_TYPE == '⚣' else ['StraightGenres.txt', 'UserStraightGenres.txt']
             genres_txt = ''
-            log('UTILS :: {0:<29} {1}'.format('\tTidy Files', genreFiles))
+            log('UTILS :: {0:<29} {1}'.format('\t\tTidy Files', genreFiles))
             for genreFile in genreFiles:
                 genres_txt = os.path.join(pgmaFOLDER, genreFile)
                 if not os.path.isfile(genres_txt):        # skip files that are missing
@@ -7570,29 +7573,36 @@ def setupAgentVariables(media):
                 txtfile = PlexLoadFile(genres_txt)
                 txtrows = txtfile.split('\n')
                 for idx, row in enumerate(txtrows, start=1):
-                    if '::' not in row:
+                    if row[0] == ';':       # comment row
+                        continue
+                    elif '::' not in row:   # invalid row
                         log('UTILS :: {0:<29} {1}'.format('\tInvalid Format Row', 'Row {0} - {1}'.format(idx, row)))
                         continue
 
                     keyValue = row.split('::')
                     keyValue = [x.strip() for x in keyValue]
-                    key =  keyValue[0].lower()
+                    key = keyValue[0]
+                    value = keyValue[1]
 
-                    if key in pgmaGENRESDICT:
-                        log('UTILS :: {0:<29} {1}'.format('\t\t{0}: Duplicate Row - Replace Setting'.format(genreFile), 'Row {0} - {1}'.format(idx, row)))
+                    duplicateKey = True if key in pgmaGENRESDICT else False
+                    if duplicateKey is True:
+                        log('UTILS :: {0:<29} {1}'.format('Duplicate Genre Found', 'Line No. {0}: Row Data:{1}'.format(idx, row)))
+                        log('UTILS :: {0:<29} {1}'.format('\tCurrent Value: {0} - {1}'.format(key, pgmaGENRESDICT[key])))
+                        log('UTILS :: {0:<29} {1}'.format('\tUser Setting:  {0} - {1}'.format(key, value)))
 
-                    value = os.path.join(pgmaGENREFOLDER, keyValue[1])
+                    value = os.path.join(pgmaGENREFOLDER, value)
                     pgmaGENRESDICT[key] = value
 
-            log('UTILS :: {0:<29} {1}'.format('\tGenres Dictionary', '{0:>4} - {1}'.format(len(pgmaGENRESDICT), sorted(pgmaGENRESDICT))))
+            log('UTILS :: {0:<29} {1}'.format('\t\tGenres Dictionary', '{0:>3} - {1}'.format(len(pgmaGENRESDICT), sorted(pgmaGENRESDICT))))
 
         except Exception as e:
             log('UTILS :: Error: creating Genres Dictionary: {0}'.format(e))
             log('UTILS :: Error:: Genres Source File: {0}'.format(genres_txt))
             continueSetup = False
 
-    #   7.     Tidy Genres: create dictionary containing the tidy genres from genres.txt file located in plugins code directory
-    #                       unless second field is an 'x', it should appear in the pgmaCOUNTRYSET or pgmaGENRESDICT
+    #   7.     Tidy Up: Create pgmaTIDYDICT containing all the rows in [Gay|Straight]Tidy.txt and User Settings files located in plugins code directory
+    #                   Set value of KeyValue to None if it's an 'x'
+    #                   Entries should either appear in the pgmaCOUNTRYSET or pgmaGENRESDICT
     if continueSetup is True:
         log(LOG_SUBLINE)
         log('UTILS :: 7.\tPrepare Tidied Dictionary of Genres and Countries')
@@ -7605,45 +7615,48 @@ def setupAgentVariables(media):
             # Main Tidy has to be first in list as user can make changes
             tidyFiles = ['GayTidy.txt', 'UserGayTidy.txt'] if AGENT_TYPE == '⚣' else ['StraightTidy.txt', 'UserStraightTidy.txt']
             tidy_txt = ''
-            log('UTILS :: {0:<29} {1}'.format('\tTidy Files', tidyFiles))
-            for tidy in tidyFiles:
-                tidy_txt = os.path.join(pgmaFOLDER, tidy)
+            log('UTILS :: {0:<29} {1}'.format('\t\tTidy Files', tidyFiles))
+            for tidyFile in tidyFiles:
+                tidy_txt = os.path.join(pgmaFOLDER, tidyFile)
                 if not os.path.isfile(tidy_txt):        # skip files that are missing
                     continue
 
                 txtfile = PlexLoadFile(tidy_txt)
                 txtrows = txtfile.split('\n')
                 for idx, row in enumerate(txtrows, start=1):
-                    if '::' not in row:
-                        log('UTILS :: {0:<29} {1}'.format('\t\t{0}: Invalid Format Row'.format(tidy), 'Row {0} - {1}'.format(idx, row)))
+                    if row[0] == ';':       # comment row
+                        continue
+                    elif '::' not in row:   # invalid row
+                        log('UTILS :: {0:<29} {1}'.format('\tInvalid Format Row', 'Row {0} - {1}'.format(idx, row)))
                         continue
 
                     keyValue = row.split('::')
                     keyValue = [x.strip() for x in keyValue]
-                    key = keyValue[0].lower()
+                    key = keyValue[0]
                     value = keyValue[1]
-                    duplicateKey = True if key in pgmaTIDYDICT else False
-                    if duplicateKey:
-                        log('UTILS :: {0:<29} {1}'.format('\t\t{0}: Duplicate Row - Replace Setting'.format(tidy), 'Row {0} - {1}'.format(idx, row)))
+
+                    if key in pgmaTIDYDICT:
+                        log('UTILS :: {0:<29} {1}'.format('\t\tDuplicate Key',       '{0} ; Line {1} - {2}'.format(tidyFile, idx, row)))
+                        log('UTILS :: {0:<29} {1}'.format('\t\tCurrently Key:Value', '{0} : {1}'.format(key, pgmaTIDYDICT[key])))
+                        log('UTILS :: {0:<29} {1}'.format('\t\tChange To Key:Value', '{0} : {1}'.format(key, value)))
 
                     pgmaTIDYDICT[key] = value if value != 'x' else None
-
-                    # The value must either be related to a Country, a Genre, a Skippy or a duplicate, otherwise its an error which is logged and will stop scraping
-                    if value in pgmaCOUNTRYSET:
-                        tidiedCountriesSet.add('{0} : {1}'.format(keyValue[0], value))
-                    elif value.lower() in pgmaGENRESDICT:
-                        tidiedGenresSet.add('{0} : {1}'.format(keyValue[0], value))
+                    # The value must either be related to a Country, Genre or skipped otherwise its an error which is logged
+                    if value in pgmaGENRESDICT:
+                        tidiedGenresSet.add('{0} : {1}'.format(key, value))
+                    elif value in pgmaCOUNTRYSET:
+                        tidiedCountriesSet.add('{0} : {1}'.format(key, value))
                     elif value == 'x':
-                        tidiedNullSet.add('{0} : {1}'.format(keyValue[0], value))
-                    elif not duplicateKey:
-                        log('UTILS :: {0:<29} {1}'.format('\t\t{0}: Not Found in {1}Genres.txt'.format(tidy, 'Gay' if AGENT_TYPE == '⚣' else 'Straight'), 'Row {0} - {1}'.format(idx, row)))
-                        tidiedErrorSet.add('{0} : {1}'.format(keyValue[0], value))
+                        tidiedNullSet.add('{0} : {1}'.format(key, value))
+                    else:
+                        log('UTILS :: {0:<29} {1}'.format('\t\tValue: {0} Not Found in {1}'.format(key, tidyFile), 'Row {0} - {1}'.format(idx, row)))
+                        tidiedErrorSet.add('{0} : {1}'.format(key, value))
 
-            log('UTILS :: {0:<29} {1}'.format('\tOriginal Categories', '{0:>4} - {1}'.format(len(pgmaTIDYDICT), sorted(pgmaTIDYDICT.keys()))))
-            log('UTILS :: {0:<29} {1}'.format('\tTidied Countries', '{0:>4} - {1}'.format(len(tidiedCountriesSet), sorted(tidiedCountriesSet))))
-            log('UTILS :: {0:<29} {1}'.format('\tTidied Genres', '{0:>4} - {1}'.format(len(tidiedGenresSet), sorted(tidiedGenresSet))))
-            log('UTILS :: {0:<29} {1}'.format('\tEmpty Categories', '{0:>4} - {1}'.format(len(tidiedNullSet), sorted(tidiedNullSet))))
-            log('UTILS :: {0:<29} {1}'.format('\tFlawed Categories', '{0:>4} - {1}'.format(len(tidiedErrorSet), sorted(tidiedErrorSet))))
+            log('UTILS :: {0:<29} {1}'.format('\t\tOriginal Categories', '{0:>4} - {1}'.format(len(pgmaTIDYDICT), sorted(pgmaTIDYDICT.keys()))))
+            log('UTILS :: {0:<29} {1}'.format('\t\tTidied Countries', '{0:>4} - {1}'.format(len(tidiedCountriesSet), sorted(tidiedCountriesSet))))
+            log('UTILS :: {0:<29} {1}'.format('\t\tTidied Genres', '{0:>4} - {1}'.format(len(tidiedGenresSet), sorted(tidiedGenresSet))))
+            log('UTILS :: {0:<29} {1}'.format('\t\tEmpty Categories', '{0:>4} - {1}'.format(len(tidiedNullSet), sorted(tidiedNullSet))))
+            log('UTILS :: {0:<29} {1}'.format('\t\tFlawed Categories', '{0:>4} - {1}'.format(len(tidiedErrorSet), sorted(tidiedErrorSet))))
             continueSetup = True if not tidiedErrorSet else False
 
         except Exception as e:
@@ -7658,9 +7671,9 @@ def setupAgentVariables(media):
         try:
             # Main Tidy has to be first in list as user can make changes
             thumbor_txt = os.path.join(pgmaFOLDER, 'Thumbor.txt')
-            log('UTILS :: {0:<29} {1}'.format('\tThumbor File', thumbor_txt))
+            log('UTILS :: {0:<29} {1}'.format('\t\tThumbor File', thumbor_txt))
             pgmaTHUMBOR = PlexLoadFile(thumbor_txt).strip()
-            log('UTILS :: {0:<29} {1}'.format('\tThumbor Address', pgmaTHUMBOR))
+            log('UTILS :: {0:<29} {1}'.format('\t\tThumbor Address', pgmaTHUMBOR))
             continueSetup = True if pgmaTHUMBOR else False
 
         except Exception as e:
@@ -7724,7 +7737,7 @@ def setupAgentVariables(media):
             pgmaSSN.params.update({'X-Plex-Token': prefPLEXTOKEN})
             pgmaMACHINEID = pgmaSSN.get('{0}/'.format(plexBaseURL))
             pgmaMACHINEID = pgmaMACHINEID.json()['MediaContainer']['machineIdentifier']
-            log('UTILS :: {0:<29} {1}'.format('\tMachine ID', pgmaMACHINEID))
+            log('UTILS :: {0:<29} {1}'.format('\t\tMachine ID', pgmaMACHINEID))
 
         except Exception as e:
             pgmaMACHINEID = ''
@@ -7737,8 +7750,8 @@ def setupAgentVariables(media):
             JSon = JSON.ObjectFromURL(metadataURL, timeout=20, sleep=delay())
             pgmaLIBRARYID = JSon.get('MediaContainer').get('librarySectionID')
             pgmaLIBRARYTITLE = JSon.get('MediaContainer').get('librarySectionTitle')
-            log('UTILS :: {0:<29} {1}'.format('\tLibrary ID', pgmaLIBRARYID))
-            log('UTILS :: {0:<29} {1}'.format('\tLibrary Title', pgmaLIBRARYTITLE))
+            log('UTILS :: {0:<29} {1}'.format('\t\tLibrary ID', pgmaLIBRARYID))
+            log('UTILS :: {0:<29} {1}'.format('\t\tLibrary Title', pgmaLIBRARYTITLE))
 
         except Exception as e:
             pgmaLIBRARYID = ''
@@ -7752,8 +7765,8 @@ def setupAgentVariables(media):
                 if 'librarySectionTitle' in item:
                     pgmaLIBRARYTITLE = item.split('=')[1].replace('"', '')
             log('UTILS :: Getting Library ID & Title from Error Message')
-            log('UTILS :: {0:<29} {1}'.format('\tLibrary ID', pgmaLIBRARYID))
-            log('UTILS :: {0:<29} {1}'.format('\tLibrary Title', pgmaLIBRARYTITLE))
+            log('UTILS :: {0:<29} {1}'.format('\t\tLibrary ID', pgmaLIBRARYID))
+            log('UTILS :: {0:<29} {1}'.format('\t\tLibrary Title', pgmaLIBRARYTITLE))
 
 
         continueSetup = True if pgmaMACHINEID and pgmaSSN and pgmaLIBRARYID and pgmaLIBRARYTITLE else False
@@ -7790,15 +7803,15 @@ def setupAgentVariables(media):
         pgmaNODIRECTORPOSTER = pgmaNODIRECTORPOSTER if os.path.isfile(pgmaNODIRECTORPOSTER) else ''
         
         pgmaWATERMARK = String.URLEncode('https://cdn0.iconfinder.com/data/icons/mobile-device/512/lowcase-letter-d-latin-alphabet-keyboard-2-32.png')
-        log('UTILS :: {0:<29} {1}'.format('\tAgent Poster', pgmaAGENTPOSTER if pgmaAGENTPOSTER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\tCompilations Poster', pgmaCOMPILATIONSPOSTER if pgmaCOMPILATIONSPOSTER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\tIAFD Poster', pgmaIAFDFOUNDPOSTER if pgmaIAFDFOUNDPOSTER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\tNot IAFD Poster', pgmaIAFDNOTFOUNDPOSTER if pgmaIAFDNOTFOUNDPOSTER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\tStacked Poster', pgmaSTACKEDPOSTER if pgmaSTACKEDPOSTER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\tNot Stacked Poster', pgmaNOTSTACKEDPOSTER if pgmaNOTSTACKEDPOSTER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\tNo Cast Poster', pgmaNOCASTPOSTER if pgmaNOCASTPOSTER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\tNo Director Poster', pgmaNODIRECTORPOSTER if pgmaNODIRECTORPOSTER else WRONG_TICK))
-        log('UTILS :: {0:<29} {1}'.format('\tWatermark', pgmaWATERMARK if pgmaWATERMARK else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\tAgent Poster', pgmaAGENTPOSTER if pgmaAGENTPOSTER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\tCompilations Poster', pgmaCOMPILATIONSPOSTER if pgmaCOMPILATIONSPOSTER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\tIAFD Poster', pgmaIAFDFOUNDPOSTER if pgmaIAFDFOUNDPOSTER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\tNot IAFD Poster', pgmaIAFDNOTFOUNDPOSTER if pgmaIAFDNOTFOUNDPOSTER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\tStacked Poster', pgmaSTACKEDPOSTER if pgmaSTACKEDPOSTER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\tNot Stacked Poster', pgmaNOTSTACKEDPOSTER if pgmaNOTSTACKEDPOSTER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\tNo Cast Poster', pgmaNOCASTPOSTER if pgmaNOCASTPOSTER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\tNo Director Poster', pgmaNODIRECTORPOSTER if pgmaNODIRECTORPOSTER else WRONG_TICK))
+        log('UTILS :: {0:<29} {1}'.format('\t\tWatermark', pgmaWATERMARK if pgmaWATERMARK else WRONG_TICK))
 
         # if any of the posters do not resolve we have to stop the Search Process: set GLOBAL variable and use later
         continueSetup = True if not tidiedErrorSet and pgmaAGENTPOSTER != '' and pgmaCOMPILATIONSPOSTER != '' and pgmaIAFDFOUNDPOSTER != '' and pgmaIAFDNOTFOUNDPOSTER != '' and pgmaSTACKEDPOSTER != '' and pgmaNOTSTACKEDPOSTER != '' and pgmaNOCASTPOSTER != '' and pgmaNODIRECTORPOSTER != '' and pgmaWATERMARK != '' else False
@@ -7857,7 +7870,7 @@ def setupAgentVariables(media):
 
         # print out dictionary values / normalise unicode
         log('UTILS :: {0:<29} {1}'.format('AgentVars Dictionary:', ''))
-        printDictionary(AgentVars, spacesCount=0, subkeyPrintCount=20, prefixCount='')
+        printDictionary(AgentVars, spacesCount=0, subkeyPrintCount=5, prefixCount='')
 
     #   Finish: Tidy Up - free up memory
     tidiedCountriesSet = None

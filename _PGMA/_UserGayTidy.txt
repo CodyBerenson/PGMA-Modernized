@@ -1,2 +1,9 @@
+; Key;;Value pairs
+; Key - a category from the website representing a genre, country, nationality, film awards or resolution
+; Value - User Value to replace the current category with, please note 'x' means that the category
+;         will not be recorded against the film, and thus ignored
+;
 L.A.::United States
 Macs Baths::United States
+Foot::Socks
+Feet::Socks
