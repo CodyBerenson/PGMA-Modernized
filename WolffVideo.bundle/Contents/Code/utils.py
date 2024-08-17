@@ -125,6 +125,7 @@ General Functions found in all agents
     07 Aug 2024     Implemented cfscrape library to sort cloud flare issues: as sites like fagalicious will not accept search requests as these are blocked.
                     Tidied up logs
                     corrected errors in relation to user defined gay genres 
+    15 Aug 2025     Error in getHTTPRequest - undeclared variable - imagelocation
     '''
 # ----------------------------------------------------------------------------------------------------------------------------------
 import cfscrape, copy, inspect, json, os, platform, plistlib, random, re, requests, subprocess, sys, time
@@ -135,7 +136,7 @@ from textwrap import wrap
 from unidecode import unidecode
 
 # Variables
-UTILS_UPDATE = '07 August 2024'
+UTILS_UPDATE = '15 August 2024'
 IAFD_BASE = 'https://www.iafd.com'
 IAFD_SEARCH_URL = IAFD_BASE + '/ramesearch.asp?searchtype=comprehensive&searchstring={0}'
 IAFD_FILTER = '&FirstYear={0}&LastYear={1}&Submit=Filter'
@@ -668,7 +669,7 @@ def getHTTPRequest(url, **kwargs):
     HTTPRequest = None
     log('UTILS :: {0:<29} {1}'.format('Request URL', url))
     try:
-        HTTPRequest = HTML.ElementFromURL(url, timeout=timeout, sleep=sleep) if need == 'text' else HTTP.Request(imageLocation).content
+        HTTPRequest = HTML.ElementFromURL(url, timeout=timeout, sleep=sleep) if need == 'text' else HTTP.Request(url).content
 
     except Exception as e:
         log('UTILS :: {0:<29} {1}'.format('Request Failed', 'Try CFScrape'))
