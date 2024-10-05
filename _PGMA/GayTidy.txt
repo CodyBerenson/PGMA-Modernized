@@ -1,3 +1,12 @@
+; Key;;Value pairs
+; Key - a category from the website representing a genre, country, nationality, film awards or resolution
+; Value - will contain what you will replace the current category with, please note 'x' means that the category
+;         will not be recorded against the film, and thus ignored
+;
+; To Change the default value, take a row from below and place it in your UserGayTidy.txt and replace the value after the ;;
+; if you are creating a new country ensure you have a corresponding .png file in the _PGMA\Country folders
+; if a key does not exist in this list - raise an issue and let us know what website you found it.
+;
 18+ Schoolgirls::x
 18+ Teen Trans::x
 18+ Teens::x
@@ -1497,7 +1506,7 @@ Sissification / Feminization::x
 SK::Canada
 Skateboarding::Fit Guys
 Skull Fuck::Oral Sex
-"Sloppy Seconds, Anal"::Anal Sex
+Sloppy Seconds, Anal::Anal Sex
 Slovak::Slovakia
 Slovakian::Slovakia
 Slovene::Slovenia
@@ -1512,7 +1521,7 @@ Smothering::BDSM
 Sneakers::Feet
 Snow Balling::Cum
 Snow Sports::x
-"Snow Sports, Skiing & Snowboarding"::Fit Guys
+Snow Sports, Skiing & Snowboarding::Fit Guys
 Soccer::Fit Guys
 Socks::Feet
 Soft & Hardcore Versions::x

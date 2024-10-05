@@ -26,6 +26,7 @@
     01 Jul 2023     2019.01.18.41   Updated to use new utils.py
     30 Apr 2024     2019.01.18.42   Removed search string length restrictions
     08 Jun 2024     2019.01.18.43   Removed curly apostophes and possesives from search string
+    07 Aug 2024     2019.01.18.44   Updated as Fagalicious blocks search requests via cloudflare
 
 ---------------------------------------------------------------------------------------------------------------
 '''
@@ -33,7 +34,7 @@ import copy, json, re
 from datetime import datetime
 
 # Version / Log Title
-VERSION_NO = '2020.01.18.43'
+VERSION_NO = '2020.01.18.44'
 AGENT = 'Fagalicious'
 AGENT_TYPE = '⚣'   # '⚤' if straight agent
 
@@ -180,7 +181,7 @@ class Fagalicious(Agent.Movies):
                 continue
 
             try:
-                html = HTML.ElementFromURL(searchQuery, cacheTime=4, timeout=30, sleep=utils.delay())
+                html = utils.getHTTPRequest(searchQuery, timeout=30)
                 filmsList = html.xpath('//header[@class="entry-header"]')
                 if not filmsList:
                     raise Exception('< No Scene Titles >')
